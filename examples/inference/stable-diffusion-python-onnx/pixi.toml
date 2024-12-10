@@ -10,7 +10,6 @@ platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 python = ">=3.9,<3.13"
 max = "*"
 transformers = ">=4.44.0"
-diffusers = "==0.27.2"
 huggingface_hub = ">=0.24.6,<0.25"
 pillow = "==10.3.0"
 numpy = "<2.0"
@@ -19,9 +18,12 @@ numpy = "<2.0"
 # The linux ARM package doesn't exist there, so prefer PyPi instead. 
 [target.linux-64.dependencies]
 pytorch = {version = "==2.4.1", channel = "pytorch"}
+diffusers = "==0.27.2"
 [target.osx-arm64.dependencies]
 pytorch = {version = "==2.4.1", channel = "pytorch"}
+diffusers = "==0.27.2"
 [target.linux-aarch64.pypi-dependencies]
 torch = "==2.4.1"
+diffusers = "==0.27.2"
 [pypi-options]
 extra-index-urls = ["https://download.pytorch.org/whl/cpu"]
