@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 from enum import Enum
+from typing import Union
 
 import numpy as np
 from max.dtype import DType
@@ -21,6 +22,8 @@ from max.graph import TensorType, TensorValue, TensorValueLike, ops
 from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheCollection,
     KVCacheParams,
+    KVCacheStrategy,
+    PagedKVCacheCollection,
 )
 
 
@@ -29,7 +32,9 @@ def fused_qkv_ragged_matmul(
     input: TensorValue,
     input_row_offsets: TensorValue,
     wqkv: TensorValue,
-    kv_collection: ContinuousBatchingKVCacheCollection,
+    kv_collection: Union[
+        ContinuousBatchingKVCacheCollection, PagedKVCacheCollection
+    ],
     layer_idx: TensorValue,
     n_heads: int,
 ) -> TensorValue:
@@ -65,7 +70,15 @@ def fused_qkv_ragged_matmul(
         msg = f"expected layer_idx to have dtype uint32, was {layer_idx.dtype}"
         raise ValueError(msg)
 
-    op_name = f"fused_qkv_matmul_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_cont_batch_ragged"
+    if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
+        cache_strategy_str = "cont_batch"
+    elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        cache_strategy_str = "paged"
+    else:
+        msg = f"unsupported cache strategy for fused_qkv_ragged_matmul: {kv_params.cache_strategy}"
+        raise ValueError(msg)
+
+    op_name = f"fused_qkv_matmul_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_{cache_strategy_str}_ragged"
 
     return ops.inplace_custom(
         op_name,
@@ -110,6 +123,10 @@ def fused_qkv_matmul(
 
     if layer_idx.dtype != DType.uint32:
         msg = f"expected layer_idx to have dtype uint32, was {layer_idx.dtype}"
+        raise ValueError(msg)
+
+    if kv_params.cache_strategy != KVCacheStrategy.CONTINUOUS:
+        msg = f"unsupported cache strategy for fused_qkv_matmul: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
     op_name = f"fused_qkv_matmul_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_bshd_continuous_batch"
@@ -163,6 +180,10 @@ def matmul_kv_cache_ragged(
         )
         raise ValueError(msg)
 
+    if kv_params.cache_strategy != KVCacheStrategy.CONTINUOUS:
+        msg = f"unsupported cache strategy for fused_qkv_matmul: {kv_params.cache_strategy}"
+        raise ValueError(msg)
+
     ops.inplace_custom(
         name=f"matmul_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_cont_batch_ragged",
         values=[
@@ -207,7 +228,15 @@ def fused_qk_ragged_rope(
         msg = f"expected layer_idx to have dtype uint32, was {layer_idx.dtype}"
         raise ValueError(msg)
 
-    op_name = f"fused_qk_rope_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_bshd_continuous_batch_ragged"
+    if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
+        cache_strategy_str = "continuous_batch"
+    elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        cache_strategy_str = "paged"
+    else:
+        msg = f"unsupported cache strategy for fused_qk_ragged_rope: {kv_params.cache_strategy}"
+        raise ValueError(msg)
+
+    op_name = f"fused_qk_rope_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_bshd_{cache_strategy_str}_ragged"
 
     return ops.inplace_custom(
         op_name,
@@ -253,6 +282,10 @@ def fused_qk_rope(
 
     if layer_idx.dtype != DType.uint32:
         msg = f"expected uint32 layer_idx but got {layer_idx.dtype}"
+        raise ValueError(msg)
+
+    if kv_params.cache_strategy != KVCacheStrategy.CONTINUOUS:
+        msg = f"unsupported cache strategy for fused_qkv_matmul: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
     op_name = f"fused_qk_rope_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_bshd_continuous_batch"
@@ -303,6 +336,10 @@ def flash_attention(
 
     if valid_lengths.dtype != DType.uint32:
         msg = f"expected uint32 valid_lengths but got {valid_lengths.dtype}"
+        raise ValueError(msg)
+
+    if kv_params.cache_strategy != KVCacheStrategy.CONTINUOUS:
+        msg = f"unsupported cache strategy for flash_attention: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
     op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_bshd_continuous_batch"
@@ -358,6 +395,11 @@ def flash_attention_with_causal_mask(
 
     if valid_lengths.dtype != DType.uint32:
         msg = f"expected uint32 valid_lengths but got {valid_lengths.dtype}"
+        raise ValueError(msg)
+
+    op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_causal_mask_continuous_batch"
+    if kv_params.cache_strategy != KVCacheStrategy.CONTINUOUS:
+        msg = f"unsupported cache strategy for flash_attention: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
     op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_causal_mask_continuous_batch"
@@ -417,12 +459,25 @@ def flash_attention_ragged_with_causal_mask(
         raise ValueError(msg)
 
     if mask_variant == MaskVariant.CAUSAL_MASK:
-        op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_cont_batch_ragged"
+        mask_variant_str = ""
     elif mask_variant == MaskVariant.ALIBI_MASK:
-        op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_alibi_mask_cont_batch_ragged"
+        mask_variant_str = "alibi_mask"
     else:
         msg = f"mask_variant '{mask_variant}' not supported."
         raise ValueError(msg)
+
+    if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
+        cache_strategy_str = "cont_batch"
+    elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        cache_strategy_str = "paged"
+    else:
+        msg = f"unsupported cache strategy for fused_qk_ragged_rope: {kv_params.cache_strategy}"
+        raise ValueError(msg)
+
+    if mask_variant_str:
+        mask_variant_str += "_"
+
+    op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_{mask_variant_str}{cache_strategy_str}_ragged"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
