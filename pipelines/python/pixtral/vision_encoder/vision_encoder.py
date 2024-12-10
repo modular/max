@@ -80,6 +80,7 @@ class VisionEncoder(Layer):
             patch_embeds, position_ids
         )
 
+        # Generate attention mask for patches in images.
         # p.shape = batch_size, patches_per_height, patches_per_width, hidden_size
         attention_mask = causal_attention_mask_2d(
             [p.shape[1] * p.shape[2] for p in patch_embeds_list],

@@ -1,0 +1,263 @@
+# ===----------------------------------------------------------------------=== #
+#
+# This file is Modular Inc proprietary.
+#
+# ===----------------------------------------------------------------------=== #
+"""Generalized Token Generation Pipeline"""
+
+from __future__ import annotations
+
+import warnings
+from typing import Any, Optional
+
+import numpy as np
+import torch
+from max.driver import Tensor
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BatchEncoding,
+)
+
+from .config import PipelineConfig
+from .context import TextContext
+from .interfaces import TokenGenerator
+from .kv_cache import ContinuousHFStaticCache
+from .response import TextResponse
+
+
+class HFTextGenerationPipeline(TokenGenerator[TextContext]):
+    """HuggingFace text token generator pipeline."""
+
+    def __init__(
+        self,
+        pipeline_config: PipelineConfig,
+        torch_device_type: str,
+    ):
+        self._pipeline_config = pipeline_config
+        self._torch_device = torch.device(torch_device_type)
+
+        self._model = AutoModelForCausalLM.from_pretrained(
+            pipeline_config.huggingface_repo_id,
+            trust_remote_code=pipeline_config.trust_remote_code,
+        ).to(self._torch_device)
+        self._dtype = self._model.dtype
+
+        if self._model.config.model_type == "gemma2":
+            raise RuntimeError(
+                "Gemma2 architecture is currently not supported."
+            )
+
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            pipeline_config.huggingface_repo_id
+        )
+        self._eos_token_id = self._tokenizer.eos_token_id
+
+        if self._tokenizer.pad_token is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+
+        self._cache = ContinuousHFStaticCache(
+            config=self._model.config,
+            max_batch_size=pipeline_config.max_cache_batch_size,
+            max_seq_len=pipeline_config.max_length,
+            dtype=self._dtype,
+            device=self._torch_device,
+        )
+
+        # TODO(deep): Implement sampling and remove this warning
+        if self._pipeline_config.top_k and self._pipeline_config.top_k > 0:
+            warnings.warn(
+                "Only argmax sampling is currently implemented, and the top_k config will be ignored",
+            )
+
+    def next_token(
+        self, batch: dict[str, TextContext], num_steps: int = 1
+    ) -> list[dict[str, TextResponse]]:
+        """Provided a batch, process batch inputs, execute the graph for num_steps in a multi-step scenario,
+        then decode the tokens holistically and return the list of decoded tokens.
+        """
+
+        context_batch = list(batch.values())
+        new_sequences = False
+
+        # Claim cache slots for new sequences
+        for ctx in context_batch:
+            seq_id = ctx.cache_seq_id
+            if seq_id in self._cache.available_slots:
+                self._cache.external_claim([seq_id])
+                self._cache.tokens[seq_id] = ctx.next_tokens
+                new_sequences = True
+
+        cache_seq_ids = [ctx.cache_seq_id for ctx in context_batch]
+        self._cache.set_active_slots(cache_seq_ids)
+
+        # Initial inputs preparation
+        input_ids, attention_mask, cache_position = (
+            self._prepare_initial_token_inputs(
+                cache_seq_ids, context_batch, new_sequences
+            )
+        )
+
+        # Pre-allocate tensor for generated tokens
+        generated_tokens = torch.zeros(
+            (len(context_batch), num_steps),
+            dtype=torch.long,
+            device=self._torch_device,
+        )
+
+        # Generate tokens
+        with torch.no_grad():
+            for step in range(num_steps):
+                outputs = self._model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    past_key_values=self._cache,
+                    use_cache=True,
+                    cache_position=cache_position,
+                )
+
+                next_token = outputs.logits[:, -1, :].argmax(dim=-1)
+                generated_tokens[:, step] = next_token
+
+                # if last step, no need to prepare next batch input
+                if step == num_steps - 1:
+                    break
+
+                # Next inputs preparation
+                input_ids, attention_mask, cache_position = (
+                    self._prepare_next_token_inputs(
+                        cache_seq_ids,
+                        next_tokens=next_token.unsqueeze(-1),
+                    )
+                )
+
+        # Move generated tokens to CPU for processing
+        generated_tokens = generated_tokens.cpu()
+
+        # Prepare the response, pruning away completed requests as we go.
+        res: list[dict[str, Any]] = []
+        is_done = {r: False for r in batch.keys()}
+        for step in range(num_steps):
+            step_res = {}
+            for batch_idx, (request_id, context) in enumerate(batch.items()):
+                if is_done[request_id]:
+                    continue
+
+                next_token_id = generated_tokens[batch_idx, step].item()
+
+                # Update context
+                next_tokens = np.array([next_token_id])
+                context.update(next_token_id)
+                self._cache.tokens[context.cache_seq_id] = np.append(
+                    self._cache.tokens[context.cache_seq_id], next_tokens
+                )
+
+                if not context.is_done(self._eos_token_id):
+                    step_res[request_id] = TextResponse(
+                        next_token=int(next_token_id)
+                    )
+                else:
+                    is_done[request_id] = True
+
+            res.append(step_res)
+
+            # If all requests are done, break out early
+            if all(is_done.values()):
+                break
+
+        return res
+
+    def _prepare_initial_token_inputs(
+        self,
+        cache_seq_ids: list[int],
+        context_batch: list[TextContext],
+        new_sequences: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if new_sequences:
+            # Process all tokens for new sequences
+            tokens = [
+                torch.tensor(self._cache.tokens[ctx.cache_seq_id])
+                for ctx in context_batch
+            ]
+            padded = self._tokenizer.pad(
+                BatchEncoding({"input_ids": tokens}),
+                padding=True,
+                return_tensors="pt",
+            )
+
+            input_ids = padded["input_ids"].to(self._torch_device)
+            attention_mask = padded["attention_mask"].to(self._torch_device)
+
+            # Initialize attention patterns
+            for seq_id, mask in zip(cache_seq_ids, attention_mask):
+                self._cache.update_attention_pattern(seq_id, mask)
+        else:
+            # Process only next tokens for the iterative steps
+            tokens = [torch.tensor(ctx.next_tokens) for ctx in context_batch]
+            padded = self._tokenizer.pad(
+                BatchEncoding({"input_ids": tokens}),
+                padding=True,
+                return_tensors="pt",
+            )
+            input_ids = padded["input_ids"].to(self._torch_device)
+
+            # Extend attention patterns by 1
+            ones = torch.ones(1, dtype=torch.long, device=self._torch_device)
+            for seq_id in cache_seq_ids:
+                pattern = self._cache.attention_patterns[seq_id]
+                self._cache.update_attention_pattern(
+                    seq_id,
+                    torch.cat([pattern, ones]),
+                )
+
+        # Get complete attention mask for all sequences
+        attention_mask = self._cache.get_attention_mask(cache_seq_ids)
+
+        # Calculate cache position
+        seq_length = input_ids.size(1)
+        max_length = attention_mask.size(1)
+        cache_position = torch.arange(
+            max_length - seq_length,
+            max_length,
+            device=self._torch_device,
+        )
+
+        return input_ids, attention_mask, cache_position
+
+    def _prepare_next_token_inputs(
+        self,
+        cache_seq_ids: list[int],
+        next_tokens: Optional[Tensor] = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # Process only next tokens for the iterative steps
+        encoded_input = BatchEncoding({"input_ids": next_tokens})
+        padded = self._tokenizer.pad(
+            encoded_input, padding=True, return_tensors="pt"
+        )
+        input_ids = padded["input_ids"].to(self._torch_device)
+
+        # Extend attention patterns by 1
+        ones = torch.ones(1, dtype=torch.long, device=self._torch_device)
+        for seq_id in cache_seq_ids:
+            pattern = self._cache.attention_patterns[seq_id]
+            self._cache.update_attention_pattern(
+                seq_id,
+                torch.cat([pattern, ones]),
+            )
+
+        attention_mask = self._cache.get_attention_mask(cache_seq_ids)
+
+        # Calculate cache position
+        seq_length = input_ids.size(1)
+        max_length = attention_mask.size(1)
+        cache_position = torch.arange(
+            max_length - seq_length,
+            max_length,
+            device=self._torch_device,
+        )
+
+        return input_ids, attention_mask, cache_position
+
+    def release(self, context: TextContext) -> None:
+        if context.cache_seq_id not in self._cache.available_slots:
+            self._cache.release(context.cache_seq_id)

@@ -22,11 +22,19 @@ from max.graph import ops
 def causal_attention_mask_2d_from_imgs(
     imgs: List[np.ndarray], patch_size, batch_size, fill_val=-10000.0
 ):
-    """
-    imgs: list of images of shape = (height, width, num_channels)
+    """Generates a 2D mask to ensure different blocks of patches (images) can only attend
+    to patches within their respective block (image).
 
-    It is list representing the sizes of different blocks of patch embeddings.
-    patch_embeds: embeddings of each patch. tensor shape = [batch_size, num_patches, hidden_size]
+    Args:
+
+        num_patches_list: A list of images (blocks). Each image is of shape
+        (height, width, num_channels).
+
+        patch_embeds: A tensor of shape [batch_size, num_patches, hidden_size] representing the
+        embeddings of patches in a batch of images.
+
+    Returns an ndarray of shape (batch_size, 1, seq_len, seq_len) representing the
+    attention mask for the blocks of patches attended to by the transformer.
     """
     # generate list of (num_patches_in_height * num_patches_in_width) for each image
     num_patches_list = [
@@ -59,11 +67,22 @@ def causal_attention_mask_2d_from_imgs(
 
 
 def causal_attention_mask_2d(num_patches_list, patch_embeds):
+    """Generates a 2D mask to ensure different blocks of patches (images) can only attend
+    to patches within their respective block (image).
+
+    Args:
+
+        num_patches_list: A list of integers, where each entry represents the number of patches
+        in a block (e.g., (num_patches_in_height × num_patches_in_width) patches per image block).
+        It is list representing the sizes of different blocks in terms of patches.
+
+        patch_embeds:A tensor of shape [batch_size, num_patches, hidden_size] representing the
+        embeddings of patches in a batch of images.
+
+    Returns an ndarray of shape (batch_size, 1, seq_len, seq_len) representing the
+    attention mask for the blocks of patches attended to by the transformer.
     """
-    num_patches_list: list of (num_patches_in_height * num_patches_in_width) for each image
-    It is list representing the sizes of different blocks of patch embeddings.
-    patch_embeds: embeddings of each patch. tensor shape = [batch_size, num_patches, hidden_size]
-    """
+    # The total number of patches for all image in the batch.
     seq_len = int(patch_embeds.shape[1])
     mask_shape = (seq_len, seq_len)
 
@@ -73,15 +92,16 @@ def causal_attention_mask_2d(num_patches_list, patch_embeds):
 
     # block_end_idx and block_start_idx are calculated using cumulative sums of
     # patch_embeds_list. These indicate the starting and ending indices of each
-    # block of embeddings.
+    # image (block of embeddings).
     block_end_idx = np.cumsum(num_patches_list)
     block_start_idx = np.cumsum(np.concatenate(([0], num_patches_list[:-1])))
 
-    # TODO(KERN-782): This should be -inf but softmax saturates with NaNs.
+    # For each block, set the diagonal region corresponding to that block to 0.
+    # This allows patches within the same block to attend to each other.
     for start, end in zip(block_start_idx, block_end_idx):
         fill_matrix[int(start) : int(end), int(start) : int(end)] = 0
 
-    # Expand the mask dimensions to match the expected input shape
+    # Expand the mask dimensions to match the expected transformer input shape.
     fill_matrix = np.expand_dims(fill_matrix, axis=(0, 1))  # Add two new axes
     fill_matrix = np.broadcast_to(
         fill_matrix, (int(patch_embeds.shape[0]), 1, seq_len, seq_len)

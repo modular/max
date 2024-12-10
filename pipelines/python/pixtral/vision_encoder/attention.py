@@ -26,7 +26,7 @@ from .attention_utils import rotate_half
 @dataclass
 class Attention(Layer):
     n_heads: int
-    dim: int  # hidden_size
+    dim: int
     head_dim: int  # hidden_size // self.n_heads
 
     dropout: float
@@ -38,17 +38,17 @@ class Attention(Layer):
 
     def apply_rotary_embedding(
         self,
-        xq: TensorValueLike,
-        xk: TensorValueLike,
-        cos: TensorValueLike,
-        sin: TensorValueLike,
+        xq: TensorValue,
+        xk: TensorValue,
+        cos: TensorValue,
+        sin: TensorValue,
         unsqueeze_dim=0,
-    ):
+    ) -> tuple[TensorValue, TensorValue]:
         """Applies Rotary Position Embedding to the query and key tensors.
 
         Args:
             xq (`TensorValueLike`): The query tensor.
-            k (`TensorValueLike`): The key tensor.
+            xk (`TensorValueLike`): The key tensor.
             cos (`TensorValueLike`): The cosine part of the rotary embedding.
             sin (`TensorValueLike`): The sine part of the rotary embedding.
             unsqueeze_dim (`int`, *optional*, defaults to 1):
@@ -63,8 +63,8 @@ class Attention(Layer):
         """
         cos = ops.unsqueeze(cos, unsqueeze_dim)
         sin = ops.unsqueeze(sin, unsqueeze_dim)
-        xq = xq.transpose(1, 2)  # type: ignore
-        xk = xk.transpose(1, 2)  # type: ignore
+        xq = xq.transpose(1, 2)
+        xk = xk.transpose(1, 2)
 
         q_embed = (xq * cos) + (rotate_half(xq) * sin)
         k_embed = (xk * cos) + (rotate_half(xk) * sin)
@@ -72,23 +72,15 @@ class Attention(Layer):
 
     def attention(
         self,
-        xq: TensorValueLike,
-        xk: TensorValueLike,
-        xv: TensorValueLike,
+        xq: TensorValue,
+        xk: TensorValue,
+        xv: TensorValue,
         attn_mask: TensorValueLike,
     ) -> TensorValue:
-        # Broadcast the attention mask across heads.
-        # Do so in the graph so that the broadcast can be fused downstream ops.
-        # batch, seq_len, post_seq_len = attn_mask.shape
-        # attn_mask = attn_mask.reshape(
-        #    (batch, 1, seq_len, post_seq_len)
-        # ).broadcast_to((batch, self.n_heads, seq_len, post_seq_len))
-
-        # xq = xq.transpose(0, 1)
-        # xk = xk.transpose(0, 1)
-        xv = xv.transpose(1, 2)  # type: ignore
+        xv = xv.transpose(1, 2)
 
         scale = math.sqrt(1.0 / self.head_dim)
+        # xk shape = batch_size=1, n_heads=16, head_dim=64, image_seq_len=160
         scores = xq @ ops.transpose(xk, 2, 3)
         # Note, the graph compiler currently requires the order of operands
         # to be `scores * scale` in order to pattern match the fused attention
@@ -104,15 +96,13 @@ class Attention(Layer):
         attention_mask: TensorValueLike,
         position_embeddings: Tuple[TensorValue, TensorValue],
     ) -> TensorValue:
-        """Computes attention on x, reusing the KV cache.
+        """Computes attention on x.
 
         Args:
             x: Activations with shape (batch, seq_len, dim).
-            k_cache: The full keys cache buffer with shape
-                (max_seq_len, n_layers, max_batch, n_heads, head_dim).
-            v_cache: The full values cache buffer with shape
-                (max_seq_len, n_layers, max_batch, n_heads, head_dim).
-            start_pos: Scalar of the current position in the kv_cache.
+            attention_mask: a mask to ensure different blocks of patches (images)
+            can only attend to patches within their respective block (image).
+            position_embeddings:
 
         Returns the result of multi-headed self attention on the input.
         """
@@ -122,7 +112,6 @@ class Attention(Layer):
         xk = self.wk(x)
         xv = self.wv(x)
 
-        # TODO: add transpose here or in apply_rotary_embedding?
         xq = ops.reshape(xq, [batch_size, seq_len, self.n_heads, self.head_dim])
         xk = ops.reshape(xk, [batch_size, seq_len, self.n_heads, self.head_dim])
         xv = ops.reshape(xv, [batch_size, seq_len, self.n_heads, self.head_dim])

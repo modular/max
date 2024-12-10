@@ -30,8 +30,8 @@ metrics.
 To benchmark model performance with the provided scripts, be sure to have the
 following:
 
-- [Install Magic](https://docs.modular.com/magic/#install-magic)
 - Python 3.9.0 - 3.12.0
+- Docker with credentials for pulling container images
 - A local or cloud environment with access to NVIDIA A100 GPUs (the benchmarking
  scripts are also compatible with A10, L4, and L40 GPUs)
 - A Hugging Face account
@@ -45,10 +45,12 @@ git clone -b nightly https://github.com/modularml/max.git
 cd pipelines/benchmarking
 ```
 
-install the dependencies via
+Create a virtual environment and install the provided benchmarking requirements.
 
 ```bash
-magic install
+python3 -m venv serving-benchmarking
+source serving-benchmarking/bin/activate
+pip install -r requirements.txt
 ```
 
 ### Prepare benchmarking dataset
@@ -99,14 +101,8 @@ This repository provides the following script to benchmark MAX Serve:
 
 ### HTTP endpoint benchmarking with `benchmark_serving.py`
 
-First enter the dedicate shell for the project via:
-
-```bash
-magic shell
-```
-
-Then we can benchmark any HTTP endpoint that implements
-OpenAI-compatible APIs as follows:
+This approach allows benchmarking any HTTP endpoint that implements
+OpenAI-compatible APIs:
 
 ```bash
 python benchmark_serving.py \
@@ -117,12 +113,6 @@ python benchmark_serving.py \
     --dataset-path ShareGPT_V3_unfiltered_cleaned_split.json \
     --num-prompts 500
 ```
-
-Notes:
-
- 1. To exit the Magic shell simply run `exit`.
-
- 2. For more details about Magic, please see this [step-by-step guide to Magic](https://docs.modular.com/max/tutorials/magic/).
 
 Key features:
 
@@ -198,10 +188,14 @@ is being executed
   - `--backend`: Choose from `modular` (MAX Serve), `vllm` (vLLM), or`trt-llm`
   (TensorRT-LLM)
   - `--model`: Hugging Face model ID or local path
+  - `--batch-size`: Maximum batch size for inference
+  - `--max-token-length`: Maximum combined length of input and output tokens
+  - `--version`: Container version tag (optional)
 - Load generation:
   - `--num-prompts`: Number of prompts to process (default: `500`)
   - `--request-rate`: Request rate in requests/second (default: `inf`)
-  - `--seed`: The random seed used to sample the dataset (default: `0`)
+- Docker options:
+  - `-rungroup`: Label for grouping related containers (default: `unset`)
 - Serving options
   - `--base-url`: Base URL of the API service
   - `--endpoint`: Specific API endpoint (`/v1/completions` or
@@ -210,19 +204,58 @@ is being executed
   - `--dataset-name`: (default:`sharegpt`) Real-world conversation data in the
   form of variable length prompts and responses. ShareGPT is automatically
   downloaded if not already present.
-- Additional options
-  - `--collect-gpu-stats`: Report GPU utilization and memory consumption.
-  Only works when running `benchmark_serving.py` on the same instance as
-  the server, and only on NVIDIA GPUs.
+
+## Recommended arguments
+
+### Throughput testing
+
+Recommended arguments to measure maximum request processing capacity:
+
+- Batch size: 250 (modular), 512 (vLLM), 2048 (TRT-LLM)
+- Request rate: infinite
+- Number of prompts: 500
+
+### Latency testing
+
+Recommended arguments to measure response times with controlled request rates:
+
+- Batch size: 1
+- Request rate: 10
+- Number of prompts: 100
+
+### Resource utilization
+
+Recommended arguments to monitor GPU memory and usage during extended
+operations:
+
+- Batch size: 80
+- Number of prompts: 500
 
 ## Troubleshooting
+
+### Container start failures
+
+Check the container logs with the following command:
+
+```bash
+docker logs <container_id>
+```
 
 ### Memory issues
 
 - Reduce batch size
 - Check GPU memory availability: `nvidia-smi`
 
+### Network issues
+
+Test the container network with the following command:
+
+```bash
+docker network inspect bridge
+```
+
 ### Permission issues
 
 - Verify `HF_TOKEN` is set correctly
+- Check Docker permissions
 - Ensure model access on Hugging Face

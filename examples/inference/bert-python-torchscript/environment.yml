@@ -1,6 +1,6 @@
 name: max-repo
 channels:
-  - https://conda.modular.com/max/
+  - https://conda.modular.com/max-nightly/
   - conda-forge
 dependencies:
   - python>=3.9,<3.13
