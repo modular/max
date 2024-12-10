@@ -40,6 +40,10 @@ class IdentityPipelineTokenizer(
     def eos(self) -> int:
         return 0
 
+    @property
+    def expects_content_wrapping(self) -> bool:
+        return False
+
     async def encode(self, prompt: str) -> str:
         return prompt
 
@@ -84,6 +88,10 @@ class PreTrainedPipelineTokenizer(
     @property
     def eos(self) -> int:
         return self.delegate.eos_token_id
+
+    @property
+    def expects_content_wrapping(self) -> bool:
+        return False
 
     async def encode(self, prompt: str) -> np.ndarray:
         return np.array(self.delegate.encode(prompt))
@@ -160,6 +168,10 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
     @property
     def eos(self) -> int:
         return self.delegate.eos_token_id
+
+    @property
+    def expects_content_wrapping(self) -> bool:
+        return False
 
     async def encode(self, prompt: str) -> np.ndarray:
         """Transform the provided prompt into a token array."""
@@ -280,13 +292,6 @@ class TextAndVisionTokenizer(
         self, messages: list[TokenGeneratorRequestMessage]
     ) -> str:
         try:
-            # This is replacing image_url with images.
-            for message in messages:
-                if isinstance(message["content"], list):
-                    for i, content in enumerate(message["content"]):
-                        if "image_url" in content.values():
-                            message["content"][i] = {"type": "image"}
-
             templated_message = self.delegate.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
@@ -307,6 +312,10 @@ class TextAndVisionTokenizer(
     @property
     def eos(self) -> int:
         return self.delegate.eos_token_id
+
+    @property
+    def expects_content_wrapping(self) -> bool:
+        return True
 
     async def encode(self, prompt: str) -> np.ndarray:
         """Transform the provided prompt into a token array."""

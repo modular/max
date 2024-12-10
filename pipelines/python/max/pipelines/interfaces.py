@@ -84,7 +84,24 @@ class PipelineTokenizer(
     """Interface for LLM tokenizers."""
 
     @property
-    def eos(self) -> int: ...
+    def eos(self) -> int:
+        """The end of sequence token for this tokenizer."""
+        ...
+
+    @property
+    def expects_content_wrapping(self) -> bool:
+        """If true, this tokenizer expects messages to have a 'content' property.
+        Text messages are formatted as
+        { "type" : "text", "content" : "text content"}
+        instead of, the OpenAI spec.
+        { "type" : "text", "text": "text content" }.
+        NOTE: Multimodal messages omit the content property.
+        Both "image_urls" and "image" content parts are converted to simply
+        { "type" : "image" }
+        Their content is provided as byte arrays and by the top level property on
+        the request object, i.e. "TokenGeneratorRequest.images".
+        """
+        ...
 
     async def new_context(
         self, request: TokenGeneratorRequest
