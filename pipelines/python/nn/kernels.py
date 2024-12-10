@@ -13,6 +13,7 @@
 """Helper functions for wrapping custom kv cache/attention related ops."""
 
 from __future__ import annotations
+from enum import Enum
 
 import numpy as np
 from max.dtype import DType
@@ -374,15 +375,21 @@ def flash_attention_with_causal_mask(
     )[0].tensor
 
 
+class MaskVariant(str, Enum):
+    CAUSAL_MASK = "causal_mask"
+    ALIBI_MASK = "alibi_mask"
+
+
 def flash_attention_ragged_with_causal_mask(
     kv_params: KVCacheParams,
     input: TensorValue,
     input_row_offsets: TensorValue,
     kv_collection: ContinuousBatchingKVCacheCollection,
     layer_idx: TensorValue,
+    mask_variant: MaskVariant,
 ) -> TensorValue:
     """Computes flash attention provided the mo.opaque KV Cache.
-    Notably, materializes the causal mask within the kernel.
+    Notably, materializes the causal mask (dependent on MaskVariant) within the kernel.
 
     `input` and `input_row_offsets` are used together to implement the ragged tensor.
     `input_row_offsets` indicates where each batch starts and ends in `input`
@@ -409,7 +416,13 @@ def flash_attention_ragged_with_causal_mask(
         msg = f"expected uint32 input_row_offsets but got {input_row_offsets.dtype}"
         raise ValueError(msg)
 
-    op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_cont_batch_ragged"
+    if mask_variant == MaskVariant.CAUSAL_MASK:
+        op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_cont_batch_ragged"
+    elif mask_variant == MaskVariant.ALIBI_MASK:
+        op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_alibi_mask_cont_batch_ragged"
+    else:
+        msg = f"mask_variant '{mask_variant}' not supported."
+        raise ValueError(msg)
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))

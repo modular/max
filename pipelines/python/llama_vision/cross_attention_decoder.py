@@ -25,6 +25,7 @@ from max.pipelines.kv_cache import (
 )
 from nn import MLP, RMSNorm
 from nn.kernels import (
+    MaskVariant,
     flash_attention_ragged_with_causal_mask,
     matmul_kv_cache_ragged,
 )
@@ -106,6 +107,7 @@ class CrossSdpaAttention(Layer):
             kv_collection=kv_collection,
             layer_idx=ops.constant(self.layer_idx, DType.uint32),
             input_row_offsets=hidden_input_row_offsets,
+            mask_variant=MaskVariant.CAUSAL_MASK,
         )
 
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])
