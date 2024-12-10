@@ -10,7 +10,7 @@ from typing import List
 
 from max.driver import Device, Tensor
 from max.dtype import DType
-from max.graph import TensorType
+from max.graph import TensorType, Graph, Device as GraphDevice
 from max.engine import InferenceSession
 
 from .cache_params import KVCacheParams
@@ -25,6 +25,7 @@ class KVCacheManager(ABC):
         num_layers: int,
         devices: List[Device],
         session: InferenceSession,
+        is_ragged: bool = False,
     ) -> None:
         self.params = params
         self.max_cache_batch_size = max_cache_batch_size
@@ -46,6 +47,15 @@ class KVCacheManager(ABC):
         self.false_tensor = Tensor.zeros((1,), DType.bool)
         self.false_tensor[0] = False
 
+        self.is_ragged = is_ragged
+        increment_cache_lengths_graph = (
+            self._create_increment_cache_lengths_graph()
+        )
+        self.increment_cache_lengths_model = session.load(
+            increment_cache_lengths_graph
+        )
+
+    @classmethod
     @abstractmethod
     def estimated_memory_size(
         cls,
@@ -60,7 +70,8 @@ class KVCacheManager(ABC):
 
     @abstractmethod
     def fetch(
-        self, seq_ids: list[int]
+        self,
+        seq_ids_and_lengths: dict[int, int],
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]: ...
 
     @abstractmethod
@@ -76,6 +87,7 @@ class KVCacheManager(ABC):
         in the fetch function to return the ContinuousBatchingKVCacheCollection
         for those sequences.
         """
+        # TODO we should remove this interface and just use external_claim.
         seq_ids = []
 
         for _ in range(n):
@@ -117,6 +129,9 @@ class KVCacheManager(ABC):
         self.available.add(seq_id)
         del self.cache_lengths[seq_id]
 
+    def contains(self, seq_id: int) -> bool:
+        return seq_id not in self.slots_remaining
+
     @property
     def slots_remaining(self) -> set[int]:
         """The outstanding cache slots available."""
@@ -127,7 +142,6 @@ class KVCacheManager(ABC):
         """The maximum sequence length in current cache."""
         return max(self.cache_lengths.values())
 
-    @abstractmethod
     def increment_cache_lengths(
         self,
         kv_cache_inputs: List[tuple[Tensor, Tensor, Tensor, Tensor]],
@@ -141,4 +155,138 @@ class KVCacheManager(ABC):
         This should also not update the cache lengths in our manager, this batch is
         still considered in-progress.
         """
-        ...
+
+        if self.is_ragged:
+            return self._increment_cache_lengths_ragged(
+                kv_cache_inputs,
+                prev_model_inputs,
+            )
+
+        return self._increment_cache_lengths_padded(
+            kv_cache_inputs,
+            prev_model_inputs,
+        )
+
+    def _increment_cache_lengths_ragged(
+        self,
+        kv_cache_inputs: List[tuple[Tensor, Tensor, Tensor, Tensor]],
+        prev_model_inputs: tuple[Tensor, ...],
+    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+        """Prepares cache inputs for the next token in multistep execution.
+
+        Updates the cache lengths for the next inference step without requiring device
+        synchronization or memory copies. This is crucial for maintaining performance
+        during multi-token generation.
+
+        Args:
+            kv_cache_inputs: Current cache state tuples (blocks, lengths, lookup, empty flag)
+            prev_model_inputs: Previous model inputs including row offsets
+
+        Returns:
+            Updated cache input tuples with incremented lengths and is_cache_empty=False
+            since only the first step can be context encoding
+        """
+        _, input_row_offsets = prev_model_inputs
+        blocks = [kv_cache_inputs[i][0] for i in range(len(self.devices))]
+        cache_lengths = [
+            kv_cache_inputs[i][1] for i in range(len(self.devices))
+        ]
+        lookup_table = [kv_cache_inputs[i][2] for i in range(len(self.devices))]
+
+        # Update the cache_lengths of our batch by the previous sequence length
+        updated_cache_lengths = self.increment_cache_lengths_model.execute(
+            input_row_offsets, *cache_lengths
+        )
+
+        # Return our updated batch. We hard-code the is_cache_empty flag to
+        # False because only the first step could be context encoding.
+        for i in range(len(self.devices)):
+            kv_cache_inputs[i] = (  # type: ignore
+                blocks[i],
+                updated_cache_lengths[i],
+                lookup_table[i],
+                self.false_tensor,
+            )
+        return kv_cache_inputs
+
+    def _increment_cache_lengths_padded(
+        self,
+        kv_cache_inputs: List[tuple[Tensor, Tensor, Tensor, Tensor]],
+        prev_model_inputs: tuple[Tensor, ...],
+    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+        """
+        Prepare the inputs for a multistep execution, generally by incrementing
+        the cache lengths. This should not require a device synchronization,
+        as this would defeat the purpose of multistep execution.
+
+        This should also not update the cache lengths in our manager, this batch is
+        still considered in-progress.
+        """
+        k_cache, v_cache, start_pos, _ = kv_cache_inputs
+        tokens, _ = prev_model_inputs
+
+        new_start_pos = self.increment_cache_lengths_model(start_pos, tokens)  # type: ignore
+        return [(k_cache, v_cache, new_start_pos, new_start_pos)]  # type: ignore
+
+    def _create_increment_cache_lengths_graph(self) -> Graph:
+        """Constructs a graph to increment the cache_lengths argument during multi-step inference.
+
+        It's imperative that this operation occurs entirely on GPU,
+        otherwise we'll synchronize across devices and incur a latency penalty.
+        """
+        if self.is_ragged:
+            return self._create_ragged_increment_cache_lengths_graph()
+
+        return self._create_padded_increment_cache_lengths_graph()
+
+    def _create_padded_increment_cache_lengths_graph(self) -> Graph:
+        start_pos_type = TensorType(DType.int64, shape=[])
+        tokens_type = TensorType(DType.int64, shape=["batch_size", "seq_len"])
+        with Graph(
+            "update_start_pos", input_types=[start_pos_type, tokens_type]
+        ) as graph:
+            start_pos, tokens = graph.inputs
+            graph.output(start_pos + tokens.shape[1])  # type: ignore
+
+        return graph
+
+    def _create_ragged_increment_cache_lengths_graph(self) -> Graph:
+        cache_lengths_types = [
+            self.input_symbols()[i][1] for i in range(len(self.devices))
+        ]
+
+        input_row_offsets_type = TensorType(
+            DType.uint32,
+            shape=["input_row_offsets_len"],
+            device=GraphDevice(self.devices[0].label, self.devices[0].id),
+        )
+
+        with Graph(
+            "update_cache_lengths",
+            input_types=[input_row_offsets_type, *cache_lengths_types],
+        ) as graph:
+            inp_row_offset, *cache_lengths = graph.inputs
+            # broadcast the inp_row_offset to all devices (naive)
+            # get rid of this if statement after #51465 merges
+            if len(self.devices) > 1:
+                input_row_offsets = [
+                    inp_row_offset.to(GraphDevice(d.label, d.id))  # type: ignore
+                    for d in self.devices
+                ]
+            else:
+                input_row_offsets = [inp_row_offset]
+            outputs = []
+            for i in range(len(self.devices)):
+                right_slice = input_row_offsets[i][1:].rebind(
+                    cache_lengths[i].shape  # type: ignore
+                )
+                left_slice = input_row_offsets[i][
+                    : input_row_offsets[i].shape[0] - 1
+                ].rebind(
+                    cache_lengths[i].shape  # type: ignore
+                )
+                increment_amount = right_slice - left_slice
+                outputs.append(cache_lengths[i] + increment_amount)
+            graph.output(*outputs)
+
+        return graph

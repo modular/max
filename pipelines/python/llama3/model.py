@@ -328,7 +328,7 @@ class Llama3Model(PipelineModel):
         next_token_logits = model_outputs.next_token_logits.to(CPU()).to_numpy()
 
         sampled_tokens = next_tokens.to(CPU()).to_numpy()
-        if self.pipeline_config.cache_strategy == KVCacheStrategy.CONTINUOUS:
+        if self.pipeline_config.cache_strategy.uses_opaque():
             # Handle the ragged inputs
             tokens_tensor, input_row_offsets_tensor = model_inputs
             tokens = tokens_tensor.to(CPU()).to_numpy()

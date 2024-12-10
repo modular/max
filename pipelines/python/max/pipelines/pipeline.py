@@ -256,16 +256,18 @@ class TextGenerationPipeline(TokenGenerator[T]):
         tracer.next("claim_cache_rows")
         # Claim cache rows for our batch.
         for context in context_batch:
-            if (
+            if not self._pipeline_model.kv_manager.contains(
                 context.cache_seq_id
-                in self._pipeline_model.kv_manager.slots_remaining
             ):
                 self._pipeline_model.kv_manager.external_claim(
                     [context.cache_seq_id]
                 )
 
         # Get cache seq ids for batch.
-        cache_seq_ids = [ctx.cache_seq_id for ctx in context_batch]
+        valid_lengths = {
+            ctx.cache_seq_id: ctx.seq_len + num_steps - 1
+            for ctx in context_batch
+        }
 
         tracer.next("prepare_initial_token_inputs")
         # Prepare inputs for the first token in multistep execution.
@@ -273,7 +275,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
             context_batch
         )
         tracer.next("fetch_kv_cache")
-        kv_cache_inputs = self._pipeline_model.kv_manager.fetch(cache_seq_ids)
+        kv_cache_inputs = self._pipeline_model.kv_manager.fetch(valid_lengths)
 
         # Multistep execution loop.
         tracer.next("Tensor.from_numpy")
@@ -338,12 +340,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
         # Actually update the cache lengths in our kv_cache manager
         tracer.next("kv_manager.step")  # pops multistep_execution_loop_steps
-        self._pipeline_model.kv_manager.step(
-            valid_lengths={
-                ctx.cache_seq_id: ctx.seq_len + num_steps - 1
-                for ctx in context_batch
-            }
-        )
+        self._pipeline_model.kv_manager.step(valid_lengths=valid_lengths)
 
         # Do the copy to host for each token generated.
         tracer.next("generated_tokens.to(CPU())")  # pops kv_manager.step

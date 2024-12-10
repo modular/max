@@ -26,6 +26,7 @@ VALID_KV_KERNELS = [
 class KVCacheStrategy(str, Enum):
     NAIVE = "naive"
     CONTINUOUS = "continuous"
+    PAGED = "paged"
 
     def __str__(self) -> str:
         return self.value

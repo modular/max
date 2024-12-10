@@ -19,7 +19,6 @@ from max.graph import (
     Device as GraphDevice,
 )
 from max.graph import (
-    Graph,
     TensorType,
     TensorValue,
     _OpaqueType,
@@ -134,6 +133,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             num_layers=num_layers,
             devices=devices,
             session=session,
+            is_ragged=True,
         )
 
         # Allocate memory for the KV cache blocks.
@@ -146,10 +146,6 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
                     device=self.devices[i],
                 )
             )
-
-        self._increment_cache_lengths_graph = (
-            self._create_increment_cache_lengths_graph(self.session)
-        )
 
     @classmethod
     def estimated_memory_size(
@@ -174,49 +170,8 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         size = cache_size + lengths_size + lookup_table_size
         return size * len(devices)
 
-    def _create_increment_cache_lengths_graph(self, session: InferenceSession):
-        cache_lengths_types = [
-            self.input_symbols()[i][1] for i in range(len(self.devices))
-        ]
-
-        input_row_offsets_type = TensorType(
-            DType.uint32,
-            shape=["input_row_offsets_len"],
-            device=GraphDevice(self.devices[0].label, self.devices[0].id),
-        )
-
-        with Graph(
-            "update_cache_lengths",
-            input_types=[input_row_offsets_type, *cache_lengths_types],
-        ) as graph:
-            inp_row_offset, *cache_lengths = graph.inputs
-            # broadcast the inp_row_offset to all devices (naive)
-            # get rid of this if statement after #51465 merges
-            if len(self.devices) > 1:
-                input_row_offsets = [
-                    inp_row_offset.to(GraphDevice(d.label, d.id))  # type: ignore
-                    for d in self.devices
-                ]
-            else:
-                input_row_offsets = [inp_row_offset]
-            outputs = []
-            for i in range(len(self.devices)):
-                right_slice = input_row_offsets[i][1:].rebind(
-                    cache_lengths[i].shape  # type: ignore
-                )
-                left_slice = input_row_offsets[i][
-                    : input_row_offsets[i].shape[0] - 1
-                ].rebind(
-                    cache_lengths[i].shape  # type: ignore
-                )
-                increment_amount = right_slice - left_slice
-                outputs.append(cache_lengths[i] + increment_amount)
-            graph.output(*outputs)
-
-        return session.load(graph)
-
     def fetch(
-        self, seq_ids: List[int]
+        self, seq_ids_and_lengths: dict[int, int]
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
         """Fetches the KV cache state for the given sequence IDs.
 
@@ -225,8 +180,9 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         previously cached key/value pairs.
 
         Args:
-            seq_ids: List of sequence IDs to fetch cache state for. Each ID must be within
-                    the max_cache_batch_size and must exist in the current cache.
+            seq_ids_and_lengths: Dictionary of sequence IDs to fetch cache state for and the
+                number of new tokens we plan to add to the cache. Each ID must be within
+                the max_cache_batch_size and must exist in the current cache.
 
         Returns:
             List of tuples for each device containing:
@@ -238,13 +194,17 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         Raises:
             ValueError: If any seq_id exceeds max_cache_batch_size or doesn't exist in cache
         """
-        active_batch_size = len(seq_ids)
+        active_batch_size = len(seq_ids_and_lengths)
 
         # Lookup table and seq_ids are redundant identical tensors.
-        lookup_table_tensor = Tensor.from_numpy(np.array(seq_ids, np.uint32))
+        lookup_table_tensor = Tensor.from_numpy(
+            np.array(list(seq_ids_and_lengths.keys()), np.uint32)
+        )
         cache_lengths_np = np.zeros(active_batch_size, np.uint32)
         is_cache_empty = True
-        for i, seq_id in enumerate(seq_ids):
+        for i, (seq_id, num_new_tokens) in enumerate(
+            seq_ids_and_lengths.items()
+        ):
             if seq_id > self.max_cache_batch_size:
                 msg = (
                     f"seq_id: {seq_id}, beyond max_cache_batch_size, you may"
@@ -256,6 +216,11 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
                 raise ValueError(f"seq_id: {seq_id} not currently in cache.")
 
             cache_len = self.cache_lengths[seq_id]
+
+            if num_new_tokens + cache_len > self.max_seq_len:
+                msg = f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} with {num_new_tokens} new tokens. Existing length: {cache_len}"
+                raise ValueError(msg)
+
             cache_lengths_np[i] = cache_len
             if cache_len != 0:
                 is_cache_empty = False
@@ -318,48 +283,6 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             params.n_kv_heads_per_device,
             params.head_dim,
         ]
-
-    def increment_cache_lengths(
-        self,
-        kv_cache_inputs: List[tuple[Tensor, Tensor, Tensor, Tensor]],
-        prev_model_inputs: tuple[Tensor, ...],
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
-        """Prepares cache inputs for the next token in multistep execution.
-
-        Updates the cache lengths for the next inference step without requiring device
-        synchronization or memory copies. This is crucial for maintaining performance
-        during multi-token generation.
-
-        Args:
-            kv_cache_inputs: Current cache state tuples (blocks, lengths, lookup, empty flag)
-            prev_model_inputs: Previous model inputs including row offsets
-
-        Returns:
-            Updated cache input tuples with incremented lengths and is_cache_empty=False
-            since only the first step can be context encoding
-        """
-        _, input_row_offsets = prev_model_inputs
-        blocks = [kv_cache_inputs[i][0] for i in range(len(self.devices))]
-        cache_lengths = [
-            kv_cache_inputs[i][1] for i in range(len(self.devices))
-        ]
-        lookup_table = [kv_cache_inputs[i][2] for i in range(len(self.devices))]
-
-        # Update the cache_lengths of our batch by the previous sequence length
-        updated_cache_lengths = self._increment_cache_lengths_graph.execute(
-            input_row_offsets, *cache_lengths
-        )
-
-        # Return our updated batch. We hard-code the is_cache_empty flag to
-        # False because only the first step could be context encoding.
-        for i in range(len(self.devices)):
-            kv_cache_inputs[i] = (
-                blocks[i],
-                updated_cache_lengths[i],
-                lookup_table[i],
-                self.false_tensor,
-            )
-        return kv_cache_inputs
 
     def input_symbols(
         self,

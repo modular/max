@@ -12,7 +12,7 @@ from typing import List
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
-from max.graph import TensorType, BufferType, Graph
+from max.graph import TensorType, BufferType
 from .manager import KVCacheManager
 from .cache_params import KVCacheParams
 
@@ -38,6 +38,7 @@ class NaiveKVCacheManager(KVCacheManager):
             num_layers=num_layers,
             devices=devices,
             session=session,
+            is_ragged=False,
         )
 
         self.keys = Tensor.zeros(
@@ -50,10 +51,6 @@ class NaiveKVCacheManager(KVCacheManager):
             shape=self.cache_shape,
             dtype=self.params.dtype,
             device=self.devices[0],
-        )
-
-        self._increment_cache_length_graph = (
-            self._create_increment_cache_lengths_graph(self.session)
         )
 
     @classmethod
@@ -100,28 +97,23 @@ class NaiveKVCacheManager(KVCacheManager):
             params.head_dim,
         ]
 
-    def _create_increment_cache_lengths_graph(self, session: InferenceSession):
-        start_pos_type = TensorType(DType.int64, shape=[])
-        tokens_type = TensorType(DType.int64, shape=["batch_size", "seq_len"])
-        with Graph(
-            "update_start_pos", input_types=[start_pos_type, tokens_type]
-        ) as graph:
-            start_pos, tokens = graph.inputs
-            graph.output(start_pos + tokens.shape[1])  # type: ignore
-
-        return session.load(graph)
-
     def fetch(
-        self, seq_ids: list[int]
+        self, seq_ids_and_lengths: dict[int, int]
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
         existing_keys = list(self.cache_lengths.keys())
-        for i, seq_id in enumerate(seq_ids):
+        for i, (seq_id, num_new_tokens) in enumerate(
+            seq_ids_and_lengths.items()
+        ):
             if existing_keys[i] != seq_id:
                 msg = (
                     "seq_ids passed, are different than current inflight"
                     " batch.Naive Caching currently does not support mutating"
                     " inflight batches."
                 )
+                raise ValueError(msg)
+
+            if self.cache_lengths[seq_id] + num_new_tokens > self.max_seq_len:
+                msg = f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} with {num_new_tokens} new tokens. Existing length: {self.cache_lengths[seq_id]}"
                 raise ValueError(msg)
 
         return [
@@ -173,22 +165,3 @@ class NaiveKVCacheManager(KVCacheManager):
                 TensorType(DType.int64, shape=[]),
             )
         ]
-
-    def increment_cache_lengths(
-        self,
-        kv_cache_inputs: List[tuple[Tensor, Tensor, Tensor, Tensor]],
-        prev_model_inputs: tuple[Tensor, ...],
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
-        """
-        Prepare the inputs for a multistep execution, generally by incrementing
-        the cache lengths. This should not require a device synchronization,
-        as this would defeat the purpose of multistep execution.
-
-        This should also not update the cache lengths in our manager, this batch is
-        still considered in-progress.
-        """
-        k_cache, v_cache, start_pos, _ = kv_cache_inputs
-        tokens, _ = prev_model_inputs
-
-        new_start_pos = self._increment_cache_length_graph(start_pos, tokens)
-        return [(k_cache, v_cache, new_start_pos, new_start_pos)]  # type: ignore
