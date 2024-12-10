@@ -78,22 +78,28 @@ class PixtralModel(PipelineModel):
             cache_strategy=self.pipeline_config.cache_strategy,
         )
 
-    def load_kv_manager(self, session: InferenceSession) -> KVCacheManager:
+    def load_kv_manager(
+        self,
+        session: InferenceSession,
+        available_cache_memory: int,
+    ) -> KVCacheManager:
         return load_kv_manager(
             params=self._get_kv_params(),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
             max_seq_len=self.pipeline_config.huggingface_config.image_seq_length,  # TODO: verify this
             num_layers=self.pipeline_config.huggingface_config.text_config.num_hidden_layers,
             devices=[self.pipeline_config.device],
+            available_cache_memory=available_cache_memory,
             session=session,
         )
 
-    def estimate_kv_cache_size(self) -> int:
+    def estimate_kv_cache_size(self, available_cache_memory: int) -> int:
         return estimate_kv_cache_size(
             params=self._get_kv_params(),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
             max_seq_len=self.pipeline_config.huggingface_config.image_seq_length,  # TODO: verify this
             num_layers=self.pipeline_config.huggingface_config.text_config.num_hidden_layers,
+            available_cache_memory=available_cache_memory,
             devices=[self.pipeline_config.device],
         )
 

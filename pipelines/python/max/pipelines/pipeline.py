@@ -22,7 +22,7 @@ from max.profiler import Tracer, traced
 from .config import PipelineConfig
 from .context import InputContext
 from .interfaces import TokenGenerator
-from .kv_cache import KVCacheManager
+from .kv_cache import KVCacheManager, KVCacheStrategy
 from .response import LogProbabilities, TextResponse
 from .sampling import token_sampler
 
@@ -52,11 +52,16 @@ class PipelineModel(ABC):
         self, pipeline_config: PipelineConfig, session: InferenceSession
     ) -> None:
         self.pipeline_config = pipeline_config
-        self.estimate_memory_footprint()
-        self.kv_manager = self.load_kv_manager(session)
+        self.available_cache_memory = self.estimate_memory_footprint()
+        self.kv_manager = self.load_kv_manager(
+            session, self.available_cache_memory
+        )
         self.model = self.load_model(session)
 
-    def estimate_memory_footprint(self):
+    def estimate_memory_footprint(self) -> int:
+        """Calculates the estimated memory consumption of our engine and
+        returns the estimated available space to store the KVCache."""
+
         def to_mib(bytes):
             return round(bytes / 1024 / 1024)
 
@@ -65,14 +70,7 @@ class PipelineModel(ABC):
         if weights_size is not None:
             total_size += weights_size
 
-        model_arch = self.pipeline_config.architecture
-        current_batch_size = self.pipeline_config.max_cache_batch_size
-        current_seq_len = self.pipeline_config.max_length
-        kv_size = self.estimate_kv_cache_size()
-        total_size += kv_size
-
         free_memory = None
-        max_batch_size = None
         try:
             # TODO(AIPIPE-200): change this back to free_memory.
             # Currently, free_memory leads to issues with calculation on
@@ -82,15 +80,32 @@ class PipelineModel(ABC):
             # memory when running this check. Memory likely should be getting
             # cleaned up much earlier.
             free_memory = self.pipeline_config.device.stats["total_memory"]
-            vram_usage_limit_scale = ARCH_SAFE_VRAM_USAGE_LIMIT.get(
-                model_arch or "", 0.75
-            )
-            max_batch_size = int(
+        except:
+            pass
+
+        model_arch = self.pipeline_config.architecture
+        current_batch_size = self.pipeline_config.max_cache_batch_size
+        current_seq_len = self.pipeline_config.max_length
+        vram_usage_limit_scale = ARCH_SAFE_VRAM_USAGE_LIMIT.get(
+            model_arch or "", 0.75
+        )
+
+        available_cache_memory = (
+            (free_memory - weights_size) * vram_usage_limit_scale
+            if free_memory
+            else 0
+        )
+        kv_size = self.estimate_kv_cache_size(available_cache_memory)
+        max_batch_size = (
+            int(
                 (free_memory * vram_usage_limit_scale - weights_size)
                 / (kv_size / current_batch_size)
             )
-        except:
-            pass
+            if free_memory
+            else None
+        )
+
+        total_size += kv_size
 
         weights_str = str(to_mib(weights_size)) if weights_size else "unknown"
         free_memory_str = (
@@ -99,7 +114,7 @@ class PipelineModel(ABC):
         max_batch_size_str = (
             str(max_batch_size) if max_batch_size is not None else "unknown"
         )
-        logging.info(
+        logging_str = (
             "\n"
             f"\n\tEstimated memory consumption:"
             f"\n\t    Weights:                {weights_str} MiB"
@@ -107,8 +122,12 @@ class PipelineModel(ABC):
             f"\n\t    Total estimated:        {to_mib(total_size)} MiB used / {free_memory_str} MiB free\n"
             f"\n\tCurrent batch size: {current_batch_size}"
             f"\n\tCurrent max sequence length: {current_seq_len}"
-            f"\n\tMax recommended batch size for current sequence length: {max_batch_size_str}\n"
         )
+        if self.pipeline_config.cache_strategy != KVCacheStrategy.PAGED:
+            # max batch size is less relevant for paged attention, given that we over-subscribe the
+            # number of in-flight batches to available cache space.
+            logging_str += f"\n\tMax recommended batch size for current sequence length: {max_batch_size_str}\n"
+        logging.info(logging_str)
 
         if isinstance(free_memory, (int, float)):
             if total_size > free_memory:
@@ -119,6 +138,8 @@ class PipelineModel(ABC):
                 logging.warning(
                     "Estimated model and kv cache memory use nears available memory. You may experience errors."
                 )
+
+        return available_cache_memory
 
     @abstractmethod
     def execute(self, *model_inputs: Tensor) -> ModelOutputs:
@@ -155,12 +176,16 @@ class PipelineModel(ABC):
         ...
 
     @abstractmethod
-    def load_kv_manager(self, session: InferenceSession) -> KVCacheManager:
+    def load_kv_manager(
+        self,
+        session: InferenceSession,
+        available_cache_memory: int,
+    ) -> KVCacheManager:
         """Provided a PipelineConfig and InferenceSession, load the kv manager."""
         ...
 
     @abstractmethod
-    def estimate_kv_cache_size(self) -> int:
+    def estimate_kv_cache_size(self, available_cache_memory: int) -> int:
         """Estimates the size of the kv cache in bytes."""
         ...
 

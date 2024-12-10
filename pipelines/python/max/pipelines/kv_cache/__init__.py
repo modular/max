@@ -42,8 +42,8 @@ def load_kv_manager(
     num_layers: int,
     devices: List[Device],
     session: InferenceSession,
+    available_cache_memory: Optional[int] = None,
     page_size: Optional[int] = 512,
-    **kwargs: Dict[str, Any],
 ) -> KVCacheManager:
     if params.cache_strategy == KVCacheStrategy.CONTINUOUS:
         return ContinuousBatchingKVCacheManager(
@@ -53,7 +53,6 @@ def load_kv_manager(
             num_layers=num_layers,
             devices=devices,
             session=session,
-            **kwargs,
         )
     elif params.cache_strategy == KVCacheStrategy.NAIVE:
         return NaiveKVCacheManager(
@@ -63,13 +62,16 @@ def load_kv_manager(
             num_layers=num_layers,
             devices=devices,
             session=session,
-            **kwargs,
         )
     elif params.cache_strategy == KVCacheStrategy.PAGED:
         if page_size is None:
             msg = (
-                "Missing required argument page_size for KVCacheStrategy.paged"
+                "Missing required argument page_size for KVCacheStrategy.PAGED"
             )
+            raise ValueError(msg)
+
+        if available_cache_memory is None:
+            msg = "Missing required argument available_cache_memory for KVCacheStrategy.PAGED"
             raise ValueError(msg)
 
         return PagedKVCacheManager(
@@ -79,8 +81,8 @@ def load_kv_manager(
             num_layers=num_layers,
             devices=devices,
             session=session,
+            cache_memory=available_cache_memory,
             page_size=page_size,
-            **kwargs,
         )
     else:
         msg = f"cache type: {params.cache_strategy} not supported."
@@ -92,6 +94,7 @@ def estimate_kv_cache_size(
     max_cache_batch_size: int,
     max_seq_len: int,
     num_layers: int,
+    available_cache_memory: int,
     devices: List[Device],
 ) -> int:
     if params.cache_strategy not in CACHE_MANAGER_REGISTRY:
@@ -103,6 +106,7 @@ def estimate_kv_cache_size(
         max_cache_batch_size=max_cache_batch_size,
         max_seq_len=max_seq_len,
         num_layers=num_layers,
+        available_cache_memory=available_cache_memory,
         devices=devices,
     )
 

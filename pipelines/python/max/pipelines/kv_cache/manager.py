@@ -63,6 +63,7 @@ class KVCacheManager(ABC):
         max_cache_batch_size: int,
         max_seq_len: int,
         num_layers: int,
+        available_cache_memory: int,
         devices: List[Device],
     ) -> int:
         """Returns the estimated total memory usage of the kv cache."""

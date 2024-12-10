@@ -84,7 +84,11 @@ class MistralModel(PipelineModel):
             cache_strategy=self.pipeline_config.cache_strategy,
         )
 
-    def load_kv_manager(self, session: InferenceSession) -> KVCacheManager:
+    def load_kv_manager(
+        self,
+        session: InferenceSession,
+        available_cache_memory: int,
+    ) -> KVCacheManager:
         assert (
             self.pipeline_config._device
         ), "device must be provided to load kv manager."
@@ -94,10 +98,11 @@ class MistralModel(PipelineModel):
             max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
             devices=[self.pipeline_config._device],
+            available_cache_memory=available_cache_memory,
             session=session,
         )
 
-    def estimate_kv_cache_size(self) -> int:
+    def estimate_kv_cache_size(self, available_cache_memory: int) -> int:
         assert (
             self.pipeline_config._device
         ), "device must be provided to estimate kv cache size."
@@ -106,6 +111,7 @@ class MistralModel(PipelineModel):
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
             max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
+            available_cache_memory=available_cache_memory,
             devices=[self.pipeline_config._device],
         )
 

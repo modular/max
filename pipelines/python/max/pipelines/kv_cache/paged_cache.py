@@ -10,8 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from itertools import chain
 from typing import Dict, Iterator
-from functools import reduce
-from operator import mul
 
 import numpy as np
 
@@ -151,12 +149,19 @@ class PagedKVCacheManager(KVCacheManager):
         num_layers: int,
         devices: list[Device],
         session: InferenceSession,
+        cache_memory: int,
         page_size: int = 512,
     ) -> None:
         self.page_size = page_size
-        self.total_num_blocks = self._compute_total_num_blocks(
-            max_cache_batch_size, max_seq_len, page_size
+        single_page_size_bytes = (
+            2
+            * num_layers
+            * params.n_kv_heads_per_device
+            * params.head_dim
+            * page_size
+            * params.dtype.size_in_bytes
         )
+        self.total_num_blocks = int((cache_memory) // single_page_size_bytes)
 
         super().__init__(
             params=params,
@@ -187,35 +192,16 @@ class PagedKVCacheManager(KVCacheManager):
         self.active_requests: Dict[int, _PagedCacheMetadata] = {}
 
     @classmethod
-    def _compute_total_num_blocks(
-        cls, max_cache_batch_size: int, max_seq_len: int, page_size: int
-    ) -> int:
-        return (max_cache_batch_size * max_seq_len) // page_size
-
-    @classmethod
     def estimated_memory_size(
         cls,
         params: KVCacheParams,
         max_cache_batch_size: int,
         max_seq_len: int,
         num_layers: int,
+        available_cache_memory: int,
         devices: list[Device],
     ) -> int:
-        # page_size and total_num_blocks cancel out, we can set page_size to 1 here and
-        # still get an accurate estimate of how much memory is used
-        page_size = 1
-        total_num_blocks = cls._compute_total_num_blocks(
-            max_cache_batch_size, max_seq_len, page_size
-        )
-        return (
-            reduce(
-                mul,
-                cls._block_shape(
-                    params, total_num_blocks, page_size, num_layers
-                ),
-            )
-            * params.dtype.size_in_bytes
-        )
+        return available_cache_memory
 
     @classmethod
     def _block_shape(
