@@ -17,12 +17,12 @@ import numpy as np
 
 from max.dtype import DType
 from max.graph import (
+    DeviceRef,
     TensorType,
     TensorValue,
     _OpaqueType,
     _OpaqueValue,
     ops,
-    Device as GraphDevice,
 )
 from max.engine import InferenceSession
 from max.driver import Device, Tensor
@@ -344,25 +344,19 @@ class PagedKVCacheManager(KVCacheManager):
                         self.params.n_kv_heads_per_device,
                         self.params.head_dim,
                     ],
-                    device=GraphDevice(
-                        self.devices[i].label, self.devices[i].id
-                    ),
+                    device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
                 # cache_lengths
                 TensorType(
                     DType.uint32,
                     shape=["batch_size"],
-                    device=GraphDevice(
-                        self.devices[i].label, self.devices[i].id
-                    ),
+                    device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
                 # lookup_table
                 TensorType(
                     DType.uint32,
                     shape=["batch_size", "max_num_pages"],
-                    device=GraphDevice(
-                        self.devices[i].label, self.devices[i].id
-                    ),
+                    device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
                 # is_cache_empty
                 TensorType(DType.bool, shape=[1]),

@@ -10,7 +10,7 @@ from typing import List
 
 from max.driver import Device, Tensor
 from max.dtype import DType
-from max.graph import TensorType, Graph, Device as GraphDevice
+from max.graph import TensorType, Graph, DeviceRef
 from max.engine import InferenceSession
 
 from .cache_params import KVCacheParams
@@ -258,7 +258,7 @@ class KVCacheManager(ABC):
         input_row_offsets_type = TensorType(
             DType.uint32,
             shape=["input_row_offsets_len"],
-            device=GraphDevice(self.devices[0].label, self.devices[0].id),
+            device=DeviceRef(self.devices[0].label, self.devices[0].id),
         )
 
         with Graph(
@@ -270,7 +270,7 @@ class KVCacheManager(ABC):
             # get rid of this if statement after #51465 merges
             if len(self.devices) > 1:
                 input_row_offsets = [
-                    inp_row_offset.to(GraphDevice(d.label, d.id))  # type: ignore
+                    inp_row_offset.to(DeviceRef(d.label, d.id))  # type: ignore
                     for d in self.devices
                 ]
             else:

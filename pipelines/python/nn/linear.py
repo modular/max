@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from max.graph import TensorValue, TensorValueLike, Weight, ops, Device
+from max.graph import TensorValue, TensorValueLike, Weight, ops, DeviceRef
 
 from .layer import Layer
 
@@ -65,7 +65,7 @@ class MLP(Layer):
             and self.up_proj.bias is None
             and TensorValue(x).rank == 2
             and TensorValue(x).device is not None
-            and TensorValue(x).device != Device.CPU()
+            and TensorValue(x).device != DeviceRef.CPU()
             and False  # GEX-1476: This causes elaboration errors - disable swish_glu pathway.
         ):
             return self.down_proj(

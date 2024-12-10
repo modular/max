@@ -16,9 +16,7 @@ from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import (
-    Device as GraphDevice,
-)
-from max.graph import (
+    DeviceRef,
     TensorType,
     TensorValue,
     _OpaqueType,
@@ -312,25 +310,19 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
                         "num_kv_heads",
                         "head_dim",
                     ],
-                    device=GraphDevice(
-                        self.devices[i].label, self.devices[i].id
-                    ),
+                    device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
                 # cache_lengths
                 TensorType(
                     DType.uint32,
                     shape=["batch_size"],
-                    device=GraphDevice(
-                        self.devices[i].label, self.devices[i].id
-                    ),
+                    device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
                 # lookup_table
                 TensorType(
                     DType.uint32,
                     shape=["batch_size"],
-                    device=GraphDevice(
-                        self.devices[i].label, self.devices[i].id
-                    ),
+                    device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
                 # is_cache_empty
                 TensorType(DType.bool, shape=[1]),
