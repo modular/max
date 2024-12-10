@@ -4,11 +4,13 @@
 #
 # ===----------------------------------------------------------------------=== #
 
+import heapq
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 TokenId = Any
 BlockId = Any
+SeqId = int
 
 
 def _token_prefix_match_len(
@@ -45,9 +47,17 @@ class TrieNode:
         # Only the root should have empty tokens/blocks
         self.tokens: List[TokenId] = []
         self.blocks: List[BlockId] = []
-        self.last_access_time: float = time.time()
         # Only the root should have a null parent
         self.parent: Optional[TrieNode] = None
+        # Sequences that are using the blocks owned by this trie node
+        # The node can only be evicted if self.active_seqs is empty
+        self.active_seqs: Set[SeqId] = set()
+        # Last access time is used to determine which nodes to evict first
+        self.last_access_time: float = time.time()
+
+    def __lt__(self, other):
+        """Comparison function for use by heapq"""
+        return self.last_access_time < other.last_access_time
 
 
 class RadixTrie:
@@ -96,9 +106,16 @@ class RadixTrie:
         def insert_helper(
             prev: TrieNode, tokens: List[TokenId], blocks: List[BlockId]
         ):
-            prev.last_access_time = time.time()
-
             if len(tokens) == 0:
+                return prev
+
+            if (
+                prev != self.root
+                and len(prev.active_seqs) == 0
+                and len(prev.children) == 0
+            ):
+                prev.tokens.extend(tokens)
+                prev.blocks.extend(tokens)
                 return prev
 
             if tokens[0] not in prev.children:
@@ -160,8 +177,6 @@ class RadixTrie:
         def match_prefix_helper(
             prev: TrieNode, tokens: List[TokenId], blocks: List[BlockId]
         ) -> TrieNode:
-            prev.last_access_time = time.time()
-
             if len(tokens) == 0:
                 return prev
             if tokens[0] not in prev.children:
@@ -219,15 +234,99 @@ class RadixTrie:
         )
 
         parent.parent = child.parent
-        parent.parent.children[parent.tokens[0]] = parent  # type: ignore
+        assert parent.parent is not None
+        parent.parent.children[parent.tokens[0]] = parent
         parent.children = {child.tokens[0]: child}
         child.parent = parent
 
-        parent.last_access_time = time.time()
+        parent.last_access_time = child.last_access_time
+        parent.active_seqs = child.active_seqs.copy()
 
         self._check_node_valid(parent)
         self._check_node_valid(child)
         return (parent, child)
+
+    def mark_in_use_by(self, node: TrieNode, seq_id: SeqId):
+        """Climb up the trie starting from node, marking each node as being
+        in use by this seq."""
+
+        curr = node
+        while curr != self.root:
+            assert curr is not None
+            # optimization: if this node is already marked as using this sequence,
+            # assume that it is already marked for its parents as well
+            if seq_id in curr.active_seqs:
+                break
+            curr.active_seqs.add(seq_id)
+            assert curr.parent is not None
+            curr = curr.parent
+
+    def mark_not_in_use_by(self, node: TrieNode, seq_id: SeqId):
+        """Climb up the trie starting from node, marking each node as no longer
+        in use by this seq. Since nodes without any users may be eligible for
+        eviction, we also update its last_access_time."""
+
+        curr = node
+        while curr != self.root:
+            assert curr is not None
+            assert seq_id in curr.active_seqs, f"{curr.active_seqs}, {seq_id}"
+            curr.last_access_time = time.time()
+            curr.active_seqs.remove(seq_id)
+            assert curr.parent is not None
+            curr = curr.parent
+
+    def evict_blocks(self, desired_num_evicted: int) -> List[BlockId]:
+        """Attempt to evict at most `desired_num_evicted` blocks from trie."""
+
+        def collect_leaves() -> List[TrieNode]:
+            leaves: List[TrieNode] = []
+            stack: List[TrieNode] = [self.root]
+
+            while stack:
+                curr = stack.pop()
+                if len(curr.children) == 0:
+                    leaves.append(curr)
+                else:
+                    stack.extend(curr.children.values())
+            return leaves
+
+        leaves = collect_leaves()
+        heapq.heapify(leaves)
+
+        evicted_blocks: List[BlockId] = []
+
+        while len(evicted_blocks) < desired_num_evicted and len(leaves) > 0:
+            leaf = heapq.heappop(leaves)
+
+            # don't evict the root
+            if leaf == self.root:
+                break
+            # don't evict node if in use by any seq
+            if len(leaf.active_seqs) > 0:
+                continue
+
+            remaining_blocks_to_evict = desired_num_evicted - len(
+                evicted_blocks
+            )
+            blocks_to_evict_from_leaf = min(
+                remaining_blocks_to_evict, len(leaf.tokens)
+            )
+            # evict up to `left_to_evict` blocks from the leaf
+            evicted_blocks.extend(leaf.blocks[-blocks_to_evict_from_leaf:])
+            first_tok = leaf.tokens[0]
+            leaf.tokens = leaf.tokens[:-blocks_to_evict_from_leaf]
+            leaf.blocks = leaf.blocks[:-blocks_to_evict_from_leaf]
+
+            if len(leaf.tokens) == 0:
+                # delete leaf node
+                assert leaf.parent is not None
+                del leaf.parent.children[first_tok]
+
+                # parent of leaf is now potentially a leaf
+                if len(leaf.parent.children) == 0:
+                    heapq.heappush(leaves, leaf.parent)
+
+        return evicted_blocks
 
     def pretty_format(self) -> List[str]:
         """Formats the contents of the trie."""
