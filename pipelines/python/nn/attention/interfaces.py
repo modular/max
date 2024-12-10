@@ -19,7 +19,6 @@ from max.graph import TensorValue, TensorValueLike
 from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheCollection,
     KVCacheParams,
-    KVCacheStrategy,
 )
 
 from ..layer import Layer
@@ -86,7 +85,7 @@ class AttentionImpl(ABC, Layer):
     """A linear layer for the output projection."""
 
     def __post_init__(self) -> None:
-        if self.kv_params.cache_strategy == KVCacheStrategy.NAIVE:
+        if not self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
                 f"{self.kv_params.cache_strategy} cache strategy, not supported"
                 " in Attention layer."
@@ -96,6 +95,7 @@ class AttentionImpl(ABC, Layer):
     def __call__(
         self,
         x: TensorValue,
+        # TODO update type hints
         kv_collection: ContinuousBatchingKVCacheCollection,
         **kwargs,
     ) -> TensorValue: ...
@@ -167,7 +167,7 @@ class AttentionImplQKV(ABC, Layer):
     """A linear layer for the output projection."""
 
     def __post_init__(self) -> None:
-        if self.kv_params.cache_strategy == KVCacheStrategy.NAIVE:
+        if not self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
                 f"{self.kv_params.cache_strategy} cache strategy, not supported"
                 " in Attention layer."
@@ -177,6 +177,7 @@ class AttentionImplQKV(ABC, Layer):
     def __call__(
         self,
         x: TensorValue,
+        # TODO update type hints
         kv_collection: ContinuousBatchingKVCacheCollection,
         **kwargs,
     ) -> TensorValue: ...

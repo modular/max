@@ -21,6 +21,7 @@ from max.graph.weights import Weights
 from max.pipelines import PipelineConfig
 from max.pipelines.kv_cache import (
     FetchContinuousBatchingKVCacheCollection,
+    FetchPagedKVCacheCollection,
     KVCacheParams,
     KVCacheStrategy,
 )
@@ -237,6 +238,8 @@ def _transformer_opaque(
 
         if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
             kv_collection_cls = FetchContinuousBatchingKVCacheCollection
+        elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
+            kv_collection_cls = FetchPagedKVCacheCollection
         else:
             raise ValueError(
                 "Unsupported caching strategy " + str(kv_params.cache_strategy)
@@ -311,7 +314,7 @@ def transformer(
     weights: Weights,
     kv_params: KVCacheParams,
 ):
-    if pipeline_config.cache_strategy == KVCacheStrategy.CONTINUOUS:
+    if pipeline_config.cache_strategy.uses_opaque():
         return _transformer_opaque(graph, pipeline_config, weights, kv_params)
 
     with graph:

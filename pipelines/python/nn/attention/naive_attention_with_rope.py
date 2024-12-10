@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from max.graph import BufferValue, TensorValue, TensorValueLike, ops
 
-from max.pipelines.kv_cache import KVCacheParams, KVCacheStrategy
+from max.pipelines.kv_cache import KVCacheParams
 from ..layer import Layer
 from ..linear import Linear
 from ..rotary_embedding import RotaryEmbedding
@@ -37,7 +37,7 @@ class NaiveAttentionWithRope(Layer):
     rope: RotaryEmbedding
 
     def __post_init__(self) -> None:
-        if self.kv_params.cache_strategy != KVCacheStrategy.NAIVE:
+        if self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
                 f"{self.kv_params.cache_strategy} cache strategy, not supported"
                 " in Attention layer."

@@ -48,7 +48,7 @@ class Llama3Model(PipelineModel):
         model_outputs = self.model.execute(
             *model_inputs,
             copy_inputs_to_device=(
-                self.pipeline_config.cache_strategy == KVCacheStrategy.NAIVE
+                not self.pipeline_config.cache_strategy.uses_opaque()
             ),
         )
 
@@ -60,7 +60,7 @@ class Llama3Model(PipelineModel):
         else:
             return ModelOutputs(next_token_logits=model_outputs[0])
 
-    def _prepare_continuous_initial_token_inputs(
+    def _prepare_ragged_initial_token_inputs(
         self, context_batch: Sequence[TextContext]
     ) -> tuple[Tensor, ...]:
         # Get input_row_offset: start and end position of each batch in the
@@ -78,7 +78,7 @@ class Llama3Model(PipelineModel):
             Tensor.from_numpy(input_row_offset).to(self.pipeline_config.device),
         )
 
-    def _prepare_naive_initial_token_inputs(
+    def _prepare_padded_initial_token_inputs(
         self, context_batch: Sequence[TextContext]
     ) -> tuple[Tensor, ...]:
         # Get tokens and seq_ids
@@ -99,10 +99,10 @@ class Llama3Model(PipelineModel):
         self, context_batch: Sequence[TextContext]
     ) -> tuple[Tensor, ...]:
         """Prepare the inputs for the first pass in multistep execution."""
-        if self.pipeline_config.cache_strategy == KVCacheStrategy.CONTINUOUS:
-            return self._prepare_continuous_initial_token_inputs(context_batch)
+        if self.pipeline_config.cache_strategy.uses_opaque():
+            return self._prepare_ragged_initial_token_inputs(context_batch)
         else:
-            return self._prepare_naive_initial_token_inputs(context_batch)
+            return self._prepare_padded_initial_token_inputs(context_batch)
 
     def _prepare_continuous_next_token_inputs(
         self,
@@ -253,7 +253,7 @@ class Llama3Model(PipelineModel):
             return graph
 
     def _build_graph(self, weights: GGUFWeights) -> Graph:
-        if self.pipeline_config.cache_strategy == KVCacheStrategy.CONTINUOUS:
+        if self.pipeline_config.cache_strategy.uses_opaque():
             return self._build_opaque_graph(weights)
 
         tokens_type = TensorType(DType.int64, shape=["batch_size", "seq_len"])

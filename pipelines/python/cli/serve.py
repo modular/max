@@ -59,6 +59,16 @@ def batch_config_from_pipeline_config(
             batch_timeout=batch_timeout,
             max_forward_steps=pipeline_config.max_num_steps,
         )
+    elif pipeline_config.cache_strategy == KVCacheStrategy.PAGED:
+        batch_config = TokenGeneratorPipelineConfig.paged(
+            tg_batch_size=pipeline_config.max_cache_batch_size,
+            ce_batch_size=min(
+                pipeline_config.max_cache_batch_size,
+                pipeline_config.max_ce_batch_size,
+            ),
+            ce_batch_timeout=batch_timeout,
+            max_forward_steps=pipeline_config.max_num_steps,
+        )
     else:
         raise ValueError(
             f"{pipeline_config.cache_strategy} caching strategy is not"
@@ -108,6 +118,7 @@ def serve_pipeline(
             get_performance_fake,
             performance_fake,  # type: ignore
         )
+
         pipeline_config.cache_strategy = KVCacheStrategy.CONTINUOUS
 
     # Initialize settings, and TokenGeneratorPipelineConfig.

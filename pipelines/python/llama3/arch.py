@@ -32,14 +32,22 @@ llama_arch = SupportedArchitecture(
             encodings={
                 SupportedEncoding.float32: (
                     HuggingFaceFile("modularai/llama-3", "llama-3-8b-f32.gguf"),
-                    [KVCacheStrategy.CONTINUOUS, KVCacheStrategy.NAIVE],
+                    [
+                        KVCacheStrategy.PAGED,
+                        KVCacheStrategy.CONTINUOUS,
+                        KVCacheStrategy.NAIVE,
+                    ],
                 ),
                 SupportedEncoding.bfloat16: (
                     HuggingFaceFile(
                         "modularai/llama-3",
                         "llama-3-8b-instruct-bf16.gguf",
                     ),
-                    [KVCacheStrategy.CONTINUOUS, KVCacheStrategy.NAIVE],
+                    [
+                        KVCacheStrategy.PAGED,
+                        KVCacheStrategy.CONTINUOUS,
+                        KVCacheStrategy.NAIVE,
+                    ],
                 ),
                 SupportedEncoding.q4_0: (
                     HuggingFaceFile(
@@ -75,7 +83,11 @@ llama_arch = SupportedArchitecture(
                             "llama-3.1-8b-instruct-f32.gguf",
                         )
                     ],
-                    [KVCacheStrategy.CONTINUOUS, KVCacheStrategy.NAIVE],
+                    [
+                        KVCacheStrategy.PAGED,
+                        KVCacheStrategy.CONTINUOUS,
+                        KVCacheStrategy.NAIVE,
+                    ],
                 ),
                 SupportedEncoding.bfloat16: (
                     [
@@ -84,7 +96,11 @@ llama_arch = SupportedArchitecture(
                             "llama-3.1-8b-instruct-bf16.gguf",
                         )
                     ],
-                    [KVCacheStrategy.CONTINUOUS, KVCacheStrategy.NAIVE],
+                    [
+                        KVCacheStrategy.PAGED,
+                        KVCacheStrategy.CONTINUOUS,
+                        KVCacheStrategy.NAIVE,
+                    ],
                 ),
                 SupportedEncoding.q4_0: (
                     [

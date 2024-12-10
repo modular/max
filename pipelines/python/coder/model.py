@@ -37,7 +37,7 @@ class CoderModel(PipelineModel):
         model_outputs = self.model.execute(
             *model_inputs,
             copy_inputs_to_device=(
-                self.pipeline_config.cache_strategy == KVCacheStrategy.NAIVE
+                not self.pipeline_config.cache_strategy.uses_opaque()
             ),
         )
 
@@ -48,7 +48,7 @@ class CoderModel(PipelineModel):
         else:
             return ModelOutputs(next_token_logits=model_outputs[0])
 
-    def _prepare_continuous_initial_token_inputs(
+    def _prepare_ragged_initial_token_inputs(
         self, context_batch: list[TextContext]
     ) -> tuple[Tensor, ...]:
         # Get tokens and seq_ids
@@ -71,7 +71,7 @@ class CoderModel(PipelineModel):
 
         return (next_tokens_batch, input_row_offsets)
 
-    def _prepare_naive_initial_token_inputs(
+    def _prepare_padded_initial_token_inputs(
         self, context_batch: list[TextContext]
     ) -> tuple[Tensor, ...]:
         # Get tokens and seq_ids
@@ -93,9 +93,9 @@ class CoderModel(PipelineModel):
     ) -> tuple[Tensor, ...]:
         """Prepare the inputs for the first pass in multistep execution."""
         if self.pipeline_config.cache_strategy == KVCacheStrategy.CONTINUOUS:
-            return self._prepare_continuous_initial_token_inputs(context_batch)
+            return self._prepare_ragged_initial_token_inputs(context_batch)
         else:
-            return self._prepare_naive_initial_token_inputs(context_batch)
+            return self._prepare_padded_initial_token_inputs(context_batch)
 
     def _prepare_continuous_next_token_inputs(
         self,
