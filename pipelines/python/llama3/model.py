@@ -34,7 +34,6 @@ from max.pipelines import (
 from max.pipelines.kv_cache import (
     KVCacheManager,
     KVCacheParams,
-    KVCacheStrategy,
     estimate_kv_cache_size,
     load_kv_manager,
 )
@@ -104,7 +103,7 @@ class Llama3Model(PipelineModel):
         else:
             return self._prepare_padded_initial_token_inputs(context_batch)
 
-    def _prepare_continuous_next_token_inputs(
+    def _prepare_ragged_next_token_inputs(
         self,
         next_tokens: Tensor,
         prev_model_inputs: tuple[Tensor, ...],
@@ -116,7 +115,7 @@ class Llama3Model(PipelineModel):
 
         return next_token_inputs
 
-    def _prepare_naive_next_token_inputs(
+    def _prepare_padded_next_token_inputs(
         self,
         next_tokens: Tensor,
         prev_model_inputs: tuple[Tensor, ...],
@@ -141,12 +140,12 @@ class Llama3Model(PipelineModel):
         """Prepare the inputs for the next token in multistep execution.
         This should avoid any device synchronization or copy operations.
         """
-        if self.pipeline_config.cache_strategy == KVCacheStrategy.CONTINUOUS:
-            return self._prepare_continuous_next_token_inputs(
+        if self.pipeline_config.cache_strategy.uses_opaque():
+            return self._prepare_ragged_next_token_inputs(
                 next_tokens, prev_model_inputs
             )
         else:
-            return self._prepare_naive_next_token_inputs(
+            return self._prepare_padded_next_token_inputs(
                 next_tokens, prev_model_inputs
             )
 
