@@ -15,10 +15,9 @@
 import functools
 import logging
 import os
-from typing import Union
+from typing import Callable, Optional, Union
 
 import uvloop
-
 from max.pipelines import PIPELINE_REGISTRY, PipelineConfig
 from max.pipelines.kv_cache import KVCacheStrategy
 from max.serve.api_server import (
@@ -90,6 +89,7 @@ def serve_pipeline(
     profile: bool = False,
     batch_timeout: float = 0.0,
     model_name: Union[str, None] = None,
+    failure_predicate: Optional[Callable[[], bool]] = None,
 ):
     # TODO: make validate_pipeline_config more generic or cleanly handle the
     # case where this is a generalized model unsupported by MAX
@@ -117,6 +117,7 @@ def serve_pipeline(
         pipeline_factory = functools.partial(
             get_performance_fake,
             performance_fake,  # type: ignore
+            failure_predicate,
         )
 
         pipeline_config.cache_strategy = KVCacheStrategy.CONTINUOUS

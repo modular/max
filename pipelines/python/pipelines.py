@@ -14,6 +14,7 @@
 import functools
 import logging
 import os
+import random
 
 import click
 from architectures import register_all_models
@@ -79,6 +80,12 @@ def common_server_options(func):
         type=str,
         help="Deprecated, please use `huggingface_repo_id` instead. Optional model alias for serving the model.",
     )
+    @click.option(
+        "--sim-failure",
+        type=int,
+        default=0,
+        help="Simulate fake-perf with failure percentage",
+    )
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -94,16 +101,23 @@ def cli_serve(
     performance_fake,
     batch_timeout,
     model_name,
+    sim_failure,
     **config_kwargs,
 ):
     # Initialize config, and serve.
     pipeline_config = PipelineConfig(**config_kwargs)
+    failure_predicate = None
+    if sim_failure > 0:
+        failure_predicate = lambda: random.randint(0, 100) < min(
+            sim_failure, 100
+        )
     serve_pipeline(
         pipeline_config=pipeline_config,
         profile=profile_serve,
         performance_fake=performance_fake,
         batch_timeout=batch_timeout,
         model_name=model_name,
+        failure_predicate=failure_predicate,
     )
 
 
@@ -169,6 +183,7 @@ def run_llama3(
     performance_fake,
     batch_timeout,
     model_name,
+    sim_failure,
     **config_kwargs,
 ):
     """Runs the Llama3 pipeline."""
@@ -186,12 +201,19 @@ def run_llama3(
         config.cache_strategy = KVCacheStrategy.NAIVE
 
     if serve:
+        failure_predicate = None
+        if sim_failure > 0:
+            failure_predicate = lambda: random.randint(0, 100) < min(
+                sim_failure, 100
+            )
+
         serve_pipeline(
             pipeline_config=config,
             profile=profile_serve,
             performance_fake=performance_fake,
             batch_timeout=batch_timeout,
             model_name=model_name,
+            failure_predicate=failure_predicate,
         )
     else:
         generate_text_for_pipeline(
@@ -230,6 +252,7 @@ def replit(
     performance_fake,
     batch_timeout,
     model_name,
+    sim_failure,
     **config_kwargs,
 ):
     # Update basic parameters.
@@ -248,12 +271,19 @@ def replit(
     # Initialize config, and serve.
     pipeline_config = PipelineConfig(**config_kwargs)
     if serve:
+        failure_predicate = None
+        if sim_failure > 0:
+            failure_predicate = lambda: random.randint(0, 100) < min(
+                sim_failure, 100
+            )
+
         serve_pipeline(
             pipeline_config=pipeline_config,
             profile=profile_serve,
             performance_fake=performance_fake,
             batch_timeout=batch_timeout,
             model_name=model_name,
+            failure_predicate=failure_predicate,
         )
     else:
         generate_text_for_pipeline(
