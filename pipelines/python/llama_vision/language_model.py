@@ -81,8 +81,12 @@ class TextModel(Layer):
         hidden_states = ops.cast(inputs_embeds, self.dtype)
 
         # TODO: This hacky reshape is needed to go from rank 3 -> 2 (ragged tensor).
-        hidden_size = hidden_states.shape[-1]
-        hidden_states = hidden_states.reshape((-1, hidden_size))
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        hidden_states = hidden_states.reshape(
+            (batch_size * seq_len, hidden_size)
+        )
+
+        before_attention_blocks_shape = hidden_states.shape
 
         for idx, decoder_layer in enumerate(self.layers):
             # For text-only path we should skip cross attention layers.
@@ -113,6 +117,12 @@ class TextModel(Layer):
                     kv_collection,
                     input_row_offsets=hidden_input_row_offsets,
                 )
+
+        assert hidden_states.shape == before_attention_blocks_shape
+
+        # TODO: We should actually reshape it back to rank of 3 here but for
+        # whatever reason, it segfaults. Look into this in a separate PR.
+        # hidden_states = hidden_states.reshape((batch_size, seq_len, hidden_size))
 
         return self.norm(hidden_states)
 
