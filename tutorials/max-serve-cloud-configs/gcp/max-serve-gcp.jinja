@@ -88,7 +88,7 @@ resources:
           # Add user to docker group
           sudo usermod -aG docker $(whoami)
 
-          # TODO: use `modular/max-openai-api:25.1.0` for the release
+          # TODO: use `modular/max-openai-api:24.6.0` for the release
           docker run \
             --env "HUGGING_FACE_HUB_TOKEN={{ properties['huggingFaceHubToken'] }}" \
             --env "HF_HUB_ENABLE_HF_TRANSFER=1" \
@@ -96,7 +96,7 @@ resources:
             --gpus 1 \
             -p 80:8000 \
             --ipc host \
-            steventrmodular/max-openai-api:25.1.0 \
+            steventrmodular/max-openai-api:24.6.0 \
             --huggingface-repo-id {{ properties['huggingFaceRepoId'] }}
 
 # Add firewall rule directly in template

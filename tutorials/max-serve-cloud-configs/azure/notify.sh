@@ -25,7 +25,7 @@ fetch_logs() {
 
     LOGS=$(sshpass -p "$VM_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=50 -v azureuser@$PUBLIC_IP "
         # First check if container is running
-        CONTAINER_ID=\$(sudo docker ps -q -f ancestor=steventrmodular/max-openai-api:25.1.0)
+        CONTAINER_ID=\$(sudo docker ps -q -f ancestor=steventrmodular/max-openai-api:24.6.0)
         if [ -n \"\$CONTAINER_ID\" ]; then
             echo '=== Docker Container Found ==='
             sudo docker logs \$CONTAINER_ID
