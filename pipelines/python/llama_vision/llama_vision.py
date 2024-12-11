@@ -155,7 +155,7 @@ class LlamaVision(PipelineModel):
             shape=["batch_size", "num_concurrent_media"],
         )
         aspect_ratio_mask_type = TensorType(
-            self.pipeline_config.dtype,
+            DType.int64,
             shape=[
                 "batch_size",
                 "num_concurrent_media",
@@ -200,13 +200,13 @@ class LlamaVision(PipelineModel):
         pixel_values = Tensor.zeros(
             shape=[batch_size, 1, max_num_tiles, height, width, num_channels],
             dtype=self.pipeline_config.dtype,
-        )
+        ).to(self.pipeline_config.device)
         aspect_ratio_ids = Tensor.zeros(
             shape=[batch_size, 1], dtype=DType.int64
-        )
+        ).to(self.pipeline_config.device)
         aspect_ratio_mask = Tensor.zeros(
             shape=[batch_size, 1, max_num_tiles], dtype=DType.int64
-        )
+        ).to(self.pipeline_config.device)
 
         # Input row offset type: ["input_row_offsets_len"], UInt32
         pixel_row_offsets = Tensor.from_numpy(

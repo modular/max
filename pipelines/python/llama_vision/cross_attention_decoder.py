@@ -27,7 +27,7 @@ from nn import MLP, RMSNorm
 from nn.kernels import (
     MaskVariant,
     flash_attention_ragged_with_causal_mask,
-    matmul_kv_cache_ragged,
+    matmul_kv_cache_ragged,  # noqa: F401
 )
 from nn.layer import Layer
 from nn.linear import Linear
@@ -90,15 +90,17 @@ class CrossSdpaAttention(Layer):
         )
         query_states = self.q_norm(query_states)
 
-        matmul_kv_cache_ragged(
-            kv_params=self.kv_params,
-            # Here, hidden_states correspond to cross_attention_states.
-            hidden_states=cross_attention_states,
-            layer_idx=self.layer_idx,
-            input_row_offsets=cross_input_row_offsets,
-            weight=wkv,
-            kv_collection=kv_collection,
-        )
+        # TODO(AIPIPE-262): Uncommenting this causes the error:
+        # CUDA call failed: CUDA_ERROR_INVALID_VALUE (invalid argument)
+        # matmul_kv_cache_ragged(
+        #     kv_params=self.kv_params,
+        #     # Here, hidden_states correspond to cross_attention_states.
+        #     hidden_states=cross_attention_states,
+        #     layer_idx=self.layer_idx,
+        #     input_row_offsets=cross_input_row_offsets,
+        #     weight=wkv,
+        #     kv_collection=kv_collection,
+        # )
 
         # Calculate Flash Attention.
         attn_out = flash_attention_ragged_with_causal_mask(

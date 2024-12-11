@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from max.graph import Dim, TensorValue
+from max.dtype import DType
+from max.graph import Dim, TensorValue, ops
 from max.pipelines import PipelineConfig
 from nn import Linear
 from nn.layer import Layer
@@ -76,10 +77,12 @@ class ConditionalGenerator(Layer):
                 ]
             )
 
-        return self.language_model(
+        logits = self.language_model(
             kv_cache_inputs=kv_cache_inputs,
             input_ids=input_ids,
             hidden_input_row_offsets=hidden_input_row_offsets,
             cross_attention_states=cross_attention_states,
             cross_input_row_offsets=cross_input_row_offsets,
         )
+        # Always return float32 logits, no matter the activation type
+        return ops.cast(logits, DType.float32)
