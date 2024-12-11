@@ -292,7 +292,7 @@ class TextAndVisionTokenizer(
         self, messages: list[TokenGeneratorRequestMessage]
     ) -> str:
         try:
-            templated_message = self.delegate.apply_chat_template(
+            templated_message = self.processor.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
             return cast(str, templated_message)
@@ -306,7 +306,10 @@ class TextAndVisionTokenizer(
                 elif isinstance(message["content"], list):
                     for content in message["content"]:
                         if content["type"] == "text":
-                            prompt.append(content["text"])
+                            if "text" in "text":
+                                prompt.append(content["text"])
+                            else:
+                                prompt.append(content["content"])
             return "\n".join(prompt)
 
     @property
@@ -357,30 +360,38 @@ class TextAndVisionTokenizer(
             msg = f"{request} does not provide messages or prompt."
             raise ValueError(msg)
 
-        encoded_prompt = await self.encode(prompt)
+        # Load images.
+        images = (
+            [
+                Image.open(io.BytesIO(image_data))
+                for image_data in request.images
+            ]
+            if request.images
+            else None
+        )
+        inputs = self.processor(
+            text=prompt,
+            images=images,
+        )
+        if "input_ids" not in inputs:
+            msg = "input_ids not provided in AutoProcessor output, please ensure you are using the correct processor for multi-modal inputs."
+            raise ValueError(msg)
+        encoded_prompt = np.array(inputs["input_ids"][0])
 
         max_gen_tokens = max_tokens_to_generate(
-            len(encoded_prompt),
+            encoded_prompt.shape[0],
             self.config.max_length,
             request.max_new_tokens
             if request.max_new_tokens is not None
             else self.config.max_new_tokens,
         )
 
-        # Load images.
-        if request.images:
-            image_inputs = self.processor(
-                images=[
-                    Image.open(io.BytesIO(image_data))
-                    for image_data in request.images
-                ],
-            )
-
-            if "pixel_values" not in image_inputs:
+        if images is not None:
+            if "pixel_values" not in inputs:
                 msg = "pixel_values not provided in AutoProcessor output, please ensure you are using the correct processor for multi-modal inputs."
                 raise ValueError(msg)
-
-            pixel_values = image_inputs["pixel_values"]
+            # Swap from Channels-First to Channels-Last image format. Pixtral processor returns CHW images.
+            pixel_values = inputs["pixel_values"][0]
         else:
             pixel_values = None
 
@@ -388,7 +399,7 @@ class TextAndVisionTokenizer(
             prompt=prompt,
             pixel_values=pixel_values,
             cache_seq_id=request.index,
-            next_tokens=np.array(encoded_prompt),
-            max_length=len(encoded_prompt) + max_gen_tokens,
+            next_tokens=encoded_prompt,
+            max_length=encoded_prompt.shape[0] + max_gen_tokens,
         )
         return context

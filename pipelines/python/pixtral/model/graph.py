@@ -86,14 +86,14 @@ def _llava(
     language_model = _transformer(graph, params, weights, kv_params)
 
     return LlavaConditionalGeneration(
-        vision_encoder,
-        multi_modal_projector,
-        language_model,
-        params.huggingface_config.text_config.vocab_size,
-        params.huggingface_config.image_token_index,
-        params.huggingface_config.vision_feature_layer,
-        params.huggingface_config.vision_feature_select_strategy,
-        params.huggingface_config.image_seq_length,
+        vision_encoder=vision_encoder,
+        multi_modal_projector=multi_modal_projector,
+        language_model=language_model,
+        vocab_size=params.huggingface_config.text_config.vocab_size,
+        image_token_index=params.huggingface_config.image_token_index,
+        vision_feature_layer=params.huggingface_config.vision_feature_layer,
+        vision_feature_select_strategy=params.huggingface_config.vision_feature_select_strategy,
+        image_seq_length=params.huggingface_config.image_seq_length,
     )
 
 

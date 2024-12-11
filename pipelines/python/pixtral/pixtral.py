@@ -19,7 +19,7 @@ import numpy as np
 from max.driver import Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
-from max.pipelines import PipelineModel, TextAndVisionContext
+from max.pipelines import PipelineModel, TextAndVisionContext, ModelOutputs
 from max.pipelines.kv_cache import (
     KVCacheManager,
     KVCacheParams,
@@ -33,8 +33,12 @@ from .model.graph import _build_graph
 class PixtralModel(PipelineModel):
     """The overall interface to the Pixtral model."""
 
-    def execute(self, *model_inputs: Tensor) -> tuple[Tensor, ...]:  # type: ignore
-        return self.model.execute(*model_inputs, copy_inputs_to_device=False)[0]  # type: ignore
+    def execute(self, *model_inputs: Tensor) -> ModelOutputs:  # type: ignore
+        model_outputs = self.model.execute(
+            *model_inputs, copy_inputs_to_device=False
+        )
+        assert isinstance(model_outputs[0], Tensor)
+        return ModelOutputs(next_token_logits=model_outputs[0])
 
     def prepare_initial_token_inputs(
         self,
@@ -56,7 +60,7 @@ class PixtralModel(PipelineModel):
         # TODO: change this to include batch_size and num_images_in_seq dims.
         pixel_values = Tensor.zeros(
             dtype=self.pipeline_config.dtype, shape=[304, 400, 3]
-        )
+        ).to(self.pipeline_config.device)
         return (
             input_ids,
             pixel_values,
@@ -68,7 +72,16 @@ class PixtralModel(PipelineModel):
         next_tokens: Tensor,
         prev_model_inputs: tuple[Tensor, ...],
     ) -> tuple[Tensor, ...]:
-        raise NotImplementedError("not yet implemented.")
+        prev_input_ids, prev_pixel_values, old_row_offsets = prev_model_inputs
+
+        row_offsets_size = old_row_offsets.shape[0]
+        next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
+
+        return (
+            next_tokens,
+            prev_pixel_values,
+            next_row_offsets,
+        )
 
     def _get_kv_params(self) -> KVCacheParams:
         return KVCacheParams(
@@ -97,7 +110,7 @@ class PixtralModel(PipelineModel):
         return estimate_kv_cache_size(
             params=self._get_kv_params(),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.image_seq_length,  # TODO: verify this
+            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,  # TODO: verify this
             num_layers=self.pipeline_config.huggingface_config.text_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
             devices=self.pipeline_config.devices,

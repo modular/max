@@ -132,7 +132,7 @@ class PipelineModel(ABC):
         if isinstance(free_memory, (int, float)):
             if total_size > free_memory:
                 raise RuntimeError(
-                    "Estimated model and kv cache memory use exceeds available memory."
+                    f"Estimated model and kv cache memory use exceeds available memory ({to_mib(total_size)} / {free_memory_str} MiB)"
                 )
             elif total_size > 0.75 * free_memory:
                 logging.warning(

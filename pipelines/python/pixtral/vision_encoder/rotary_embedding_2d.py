@@ -65,7 +65,6 @@ def patch_position_ids(
             1:3
         ]  # img_height/patch_size, img_width/patch_size
         # TODO(MSDK-1194): replace with ops.meshgrid()
-        # mesh = ops.meshgrid([ops.range(height), ops.range(width)], indexing="ij")
         mesh = meshgrid(height, width, indexing="ij")
         # TODO(MSDK-1193): replace ? by ops.chunk() or ops.split_tensor()
         # Combine row and col indices into 1 tensor of paired coordinates. Shape = (height, width, 2)
@@ -94,11 +93,11 @@ class RotaryEmbedding2D(Layer):
     rope_scaling: Optional[np.ndarray] = None
     """Scaling factor for the positional frequencies."""
 
-    @cached_property
-    def freqs_cis(self) -> TensorValue:
+    def freqs_cis_base(self) -> TensorValue:
         """
         Computes the frequency tensor for complex exponentials (cis)
-        for a given seq_len. Tensor is scaled with theta parameter.
+        for a given seq_len = num_patches in a block (image).
+        Tensor is scaled with theta parameter.
         Required to apply Rotary Position Embedding (RoPE) to tensor.
         See 'Roformer: Enhanced Transformer with Rotary Embedding'
         (arxiv.org/pdf/2104.09864).
@@ -124,7 +123,7 @@ class RotaryEmbedding2D(Layer):
         # 1D tensor of length head_dim // 2 = 32
         freqs = ops.cast(1.0 / (self.theta ** (iota / head_dim)), DType.float32)
 
-        # Ranges for height and width of image in unit patches.
+        # Indices of patches in each side (height and width) of image.
         # 1D tensor of length max_patches_per_side = 64
         h = ops.range(
             ops.constant(0, DType.float32),
@@ -139,12 +138,12 @@ class RotaryEmbedding2D(Layer):
             ops.constant(1, DType.float32),
             out_dim=self.max_patches_per_side,
         )
-        # create matrices of freqs = outer product of the height and width indices with their respective frequency
-        # 2D tensors of shape (max_patches_per_side = 64, len(freqs)//2 =16)
+        # create matrices of freqs = outer product of height and width indices with their respective frequency.
+        # 2D tensors mapping patch positions to rotary embeddings. shape =(max_patches_per_side = 64, head_dim//4 =16)
         freqs_h = ops.outer(h, freqs[::2])
         freqs_w = ops.outer(w, freqs[1::2])
 
-        # Combines the horizontal and vertical frequency matrices into a single tensor
+        # Combines the frequency matrices of horizontal and vertical patch indices into a single tensor of patches
         # 2D tensor of shape (max_patches_per_side*max_patches_per_side = 4096,  head_dim // 2 = 32)
         _inv_freq = ops.concat(
             [
@@ -160,16 +159,20 @@ class RotaryEmbedding2D(Layer):
             axis=-1,
         ).reshape((-1, head_dim // 2))
 
-        # In Hugging Face Code, double copies to match head_dim
+        # In Hugging Face Code, double copies to have rotary embeddings that match head_dim
         # 2D tensor of shape (max_patches_per_side*max_patches_per_side =4096, head_dim=64)
         _inv_freq = ops.concat((_inv_freq, _inv_freq), axis=-1)
 
-        # Maybe add this? Still trying to figure out what's going on here.
         # 2D tensor of shape (max_patches_per_side*max_patches_per_side =4096, head_dim*2=128)
         # self._freqs_cis = ops.stack(
         #    [ops.cos(_inv_freq), ops.sin(_inv_freq)], axis=-1
         # )
         return TensorValue(_inv_freq)
+
+    @cached_property
+    def freqs_cis(self) -> TensorValue:
+        self._freqs_cis = self.freqs_cis_base()
+        return self._freqs_cis
 
     def __call__(
         self, x: TensorValueLike, position_ids: TensorValue
@@ -178,8 +181,7 @@ class RotaryEmbedding2D(Layer):
 
         Args:
             x: Activation tensor with shape (batch, seq_len, n_kv_heads, head_dim).
-            start_pos: starting position of input tensor
-            seq_len: length of input tensor
+            position_ids: starting position of input tensor
 
         Returns:
             Input activation tensor with rotary positional embeddings applied and

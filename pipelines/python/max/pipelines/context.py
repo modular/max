@@ -126,7 +126,7 @@ class TextContext:
 
 
 class TextAndVisionContext:
-    """A base class for model context, specifically for Text model variants."""
+    """A base class for model context, specifically for Vision model variants."""
 
     def __init__(
         self,
@@ -134,16 +134,16 @@ class TextAndVisionContext:
         prompt: str,
         max_length: int,
         next_tokens: np.ndarray,
-        pixel_values: Optional[np.ndarray] = None,
+        pixel_values: Optional[Union[list[np.ndarray], np.ndarray]] = None,
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
     ):
         self.cache_seq_id = cache_seq_id
         self.prompt = prompt
-        self.pixel_values = pixel_values
         self.max_length = max_length
 
         self._next_tokens: Union[np.ndarray, int] = next_tokens
+        self.pixel_values = pixel_values
         self.current_length = self._next_tokens.shape[-1]
         self.active_length = self.current_length
 
