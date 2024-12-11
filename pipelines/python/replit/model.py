@@ -150,7 +150,7 @@ class ReplitModel(PipelineModel):
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
             max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
             num_layers=self.pipeline_config.huggingface_config.n_layers,
-            devices=[self.pipeline_config.device],
+            devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
             session=session,
         )
@@ -162,7 +162,7 @@ class ReplitModel(PipelineModel):
             max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
             num_layers=self.pipeline_config.huggingface_config.n_layers,
             available_cache_memory=available_cache_memory,
-            devices=[self.pipeline_config.device],
+            devices=self.pipeline_config.devices,
         )
 
     def load_model(

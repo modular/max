@@ -403,8 +403,8 @@ class PipelineRegistry:
                 eos_token_id=tokenizer.eos,
             )
         else:
-            torch_device_type = str(pipeline_config.device_spec.device_type)
-            if pipeline_config.device_spec.device_type == "gpu":
+            torch_device_type = str(pipeline_config.device_specs[0].device_type)
+            if pipeline_config.device_specs[0].device_type == "gpu":
                 torch_device_type = "cuda"
                 torch.multiprocessing.set_start_method("spawn", force=True)
 

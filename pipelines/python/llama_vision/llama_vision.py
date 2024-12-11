@@ -269,7 +269,7 @@ class LlamaVision(PipelineModel):
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
             max_seq_len=max_seq_len(self.pipeline_config),
             num_layers=self.text_config.num_hidden_layers,
-            devices=[self.pipeline_config.device],
+            devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
             session=session,
         )
@@ -281,7 +281,7 @@ class LlamaVision(PipelineModel):
             max_seq_len=max_seq_len(self.pipeline_config),
             num_layers=self.text_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
-            devices=[self.pipeline_config.device],
+            devices=self.pipeline_config.devices,
         )
 
     def load_model(

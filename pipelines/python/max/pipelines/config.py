@@ -105,8 +105,10 @@ class PipelineConfig:
     huggingface_repo_id: Optional[str] = None
     """Optional repo_id of a huggingface model repository to use."""
 
-    device_spec: DeviceSpec = DeviceSpec.cpu()
-    """Device to run inference upon."""
+    device_specs: list[DeviceSpec] = field(
+        default_factory=lambda: [DeviceSpec.cpu()]
+    )
+    """Devices to run inference upon."""
 
     quantization_encoding: Optional[SupportedEncoding] = None
     """Weight encoding type."""
@@ -154,8 +156,8 @@ class PipelineConfig:
     _huggingface_config: Optional[AutoConfig] = None
     """The huggingface config associated with the huggingface repo id."""
 
-    _device: Optional[Device] = None
-    """The underlying initialized device, defined by device_spec."""
+    _devices: list[Device] = field(default_factory=list)
+    """The underlying initialized devices, created by the specific device_specs."""
 
     _weights_converter: Optional[type[WeightsConverter]] = None
     """Weight converter for the provided `weight_path`."""
@@ -254,20 +256,23 @@ class PipelineConfig:
         return self.quantization_encoding.dtype
 
     @property
+    def devices(self) -> list[Device]:
+        """Initialize and return a list of devices, given a list of device specs."""
+        if self._devices:
+            return self._devices
+        for device_spec in self.device_specs:
+            self._devices.append(
+                CPU(device_spec.id)
+                if device_spec.device_type == "cpu"
+                else CUDA(device_spec.id)
+            )
+        return self._devices
+
+    @property
     def device(self) -> Device:
-        """Initialize and return a device, given the provided device spec."""
-
-        if self._device is not None:
-            return self._device
-
-        device_id = self.device_spec.id
-        self._device = (
-            CPU(device_id)
-            if self.device_spec.device_type == "cpu"
-            else CUDA(device_id)
-        )
-
-        return self._device
+        """Initialize and return a singular device, given a singular device spec."""
+        assert len(self.device_specs) == 1
+        return self.devices[0]
 
     @property
     def weights_format(self) -> WeightsFormat:

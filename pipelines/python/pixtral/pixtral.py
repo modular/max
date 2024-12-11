@@ -88,7 +88,7 @@ class PixtralModel(PipelineModel):
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
             max_seq_len=self.pipeline_config.huggingface_config.image_seq_length,  # TODO: verify this
             num_layers=self.pipeline_config.huggingface_config.text_config.num_hidden_layers,
-            devices=[self.pipeline_config.device],
+            devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
             session=session,
         )
@@ -100,7 +100,7 @@ class PixtralModel(PipelineModel):
             max_seq_len=self.pipeline_config.huggingface_config.image_seq_length,  # TODO: verify this
             num_layers=self.pipeline_config.huggingface_config.text_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
-            devices=[self.pipeline_config.device],
+            devices=self.pipeline_config.devices,
         )
 
     def load_model(self, session: InferenceSession) -> Model:
