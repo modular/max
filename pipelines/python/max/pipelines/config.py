@@ -144,6 +144,13 @@ class PipelineConfig:
     pad_to_multiple_of: int = 2
     """Pad input tensors to be a multiple of value provided."""
 
+    gpu_memory_utilization: float = 0.9
+    """The fraction of available device memory that the our process should consume.
+    
+    This is used to inform the size of the KVCache workspace:
+        kv_cache_workspace = (total_free_memory * gpu_memory_utilization) - model_weights_size
+    """
+
     top_k: Optional[int] = None
     """Limits the sampling to the K most probable tokens. If None, will default to greedy sampling."""
 
