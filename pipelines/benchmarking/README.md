@@ -30,6 +30,7 @@ metrics.
 To benchmark model performance with the provided scripts, be sure to have the
 following:
 
+- [Install Magic](https://docs.modular.com/magic/#install-magic)
 - Python 3.9.0 - 3.12.0
 - Docker with credentials for pulling container images
 - A local or cloud environment with access to NVIDIA A100 GPUs (the benchmarking
@@ -45,12 +46,10 @@ git clone -b nightly https://github.com/modularml/max.git
 cd pipelines/benchmarking
 ```
 
-Create a virtual environment and install the provided benchmarking requirements.
+install the dependencies via
 
 ```bash
-python3 -m venv serving-benchmarking
-source serving-benchmarking/bin/activate
-pip install -r requirements.txt
+magic install
 ```
 
 ### Prepare benchmarking dataset
@@ -101,8 +100,14 @@ This repository provides the following script to benchmark MAX Serve:
 
 ### HTTP endpoint benchmarking with `benchmark_serving.py`
 
-This approach allows benchmarking any HTTP endpoint that implements
-OpenAI-compatible APIs:
+First enter the dedicate shell for the project via:
+
+```bash
+magic shell
+```
+
+Then we can benchmark any HTTP endpoint that implements
+OpenAI-compatible APIs as follows:
 
 ```bash
 python benchmark_serving.py \
@@ -113,6 +118,12 @@ python benchmark_serving.py \
     --dataset-path ShareGPT_V3_unfiltered_cleaned_split.json \
     --num-prompts 500
 ```
+
+Notes:
+
+ 1. To exit the Magic shell simply run `exit`.
+
+ 2. For more details about Magic, please see this [step-by-step guide to Magic](https://docs.modular.com/max/tutorials/magic/).
 
 Key features:
 
