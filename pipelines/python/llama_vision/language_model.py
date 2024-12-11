@@ -55,19 +55,6 @@ class TextModel(Layer):
     cross_attention_layers: list[int]
     rotary_emb: OptimizedRotaryEmbedding
 
-    # input_ids: shape=[1, 1], dtype=torch.int64
-    # attention_mask: shape=[1, 22], dtype=torch.int64
-    # position_ids: shape=[1, 1], dtype=torch.int64
-    # cross_attention_states: value=None
-    # cross_attention_mask: shape=[1, 1, 1, 4100], dtype=torch.bfloat16
-    # full_text_row_masked_out_mask: shape=[1, 1, 1, 1], dtype=torch.bfloat16
-    # past_key_values: value=DynamicCache()
-    # inputs_embeds: value=None
-    # use_cache: value=True
-    # output_attentions: value=False
-    # output_hidden_states: value=False
-    # return_dict: value=True
-
     def __call__(
         self,
         kv_cache_inputs: tuple[TensorValue, ...],
@@ -79,12 +66,6 @@ class TextModel(Layer):
         inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = ops.cast(inputs_embeds, self.dtype)
-
-        # TODO: This hacky reshape is needed to go from rank 3 -> 2 (ragged tensor).
-        batch_size, seq_len, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.reshape(
-            (batch_size * seq_len, hidden_size)
-        )
 
         before_attention_blocks_shape = hidden_states.shape
 
@@ -120,10 +101,6 @@ class TextModel(Layer):
 
         assert hidden_states.shape == before_attention_blocks_shape
 
-        # TODO: We should actually reshape it back to rank of 3 here but for
-        # whatever reason, it segfaults. Look into this in a separate PR.
-        # hidden_states = hidden_states.reshape((batch_size, seq_len, hidden_size))
-
         return self.norm(hidden_states)
 
 
@@ -135,22 +112,6 @@ class CausalLanguageModel(Layer):
     kv_params: KVCacheParams
     model: TextModel
     lm_head: Linear
-
-    # input_ids: shape=[1, 14], dtype=torch.int64
-    # attention_mask: shape=[1, 14], dtype=torch.int64
-    # position_ids: shape=[1, 14], dtype=torch.int64
-    # cross_attention_states: shape=[4, 1025, 4096], dtype=torch.bfloat16
-    # cross_attention_mask: shape=[1, 1, 14, 4100], dtype=torch.bfloat16
-    # full_text_row_masked_out_mask: shape=[1, 1, 14, 1], dtype=torch.bfloat16
-    # past_key_values: value=DynamicCache()
-    # inputs_embeds: value=None
-    # labels: value=None
-    # use_cache: value=True
-    # output_attentions: value=False
-    # output_hidden_states: value=False
-    # return_dict: value=True
-    # cache_position: shape=[14], dtype=torch.int64
-    # num_logits_to_keep: value=1
 
     def __call__(
         self,
