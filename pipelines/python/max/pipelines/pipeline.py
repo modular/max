@@ -108,32 +108,37 @@ class PipelineModel(ABC):
 
         total_size += kv_size
 
-        weights_str = str(to_mib(weights_size)) if weights_size else "unknown"
-        free_memory_str = (
-            str(to_mib(free_memory)) if free_memory is not None else "unknown"
-        )
-        max_batch_size_str = (
-            str(max_batch_size) if max_batch_size is not None else "unknown"
-        )
+        weights_str = ""
+        if weights_size:
+            weights_str = (
+                f"\n\t    Weights:                {to_mib(weights_size)} MiB"
+            )
+
+        total_estimated_str = ""
+        if free_memory:
+            free_memory_str = f" / {to_mib(free_memory)} MiB free"
         logging_str = (
             "\n"
             f"\n\tEstimated memory consumption:"
-            f"\n\t    Weights:                {weights_str} MiB"
+            f"{weights_str}"
             f"\n\t    KVCache allocation:     {to_mib(kv_size)} MiB"
-            f"\n\t    Total estimated:        {to_mib(total_size)} MiB used / {free_memory_str} MiB free\n"
+            f"\n\t    Total estimated:        {to_mib(total_size)} MiB used{free_memory_str}\n"
             f"\n\tCurrent batch size: {current_batch_size}"
             f"\n\tCurrent max sequence length: {current_seq_len}"
         )
-        if self.pipeline_config.cache_strategy != KVCacheStrategy.PAGED:
+        if (
+            self.pipeline_config.cache_strategy != KVCacheStrategy.PAGED
+            and max_batch_size is not None
+        ):
             # max batch size is less relevant for paged attention, given that we over-subscribe the
             # number of in-flight batches to available cache space.
-            logging_str += f"\n\tMax recommended batch size for current sequence length: {max_batch_size_str}\n"
+            logging_str += f"\n\tMax recommended batch size for current sequence length: {max_batch_size}\n"
         logging.info(logging_str)
 
         if isinstance(free_memory, (int, float)):
             if total_size > free_memory:
                 raise RuntimeError(
-                    f"Estimated model and kv cache memory use exceeds available memory ({to_mib(total_size)} / {free_memory_str} MiB)"
+                    f"Estimated model and kv cache memory use exceeds available memory ({to_mib(total_size)} / {to_mib(free_memory)} MiB)"
                 )
             elif total_size > 0.75 * free_memory:
                 logging.warning(
