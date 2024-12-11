@@ -104,6 +104,23 @@ tool.
    magic run serve --huggingface-repo-id=modularai/llama-3.1
    ```
 
-   If the repository ID is provided for a Hugging Face large language model
-   that does not currently have an optimized MAX Graph implementation, MAX will
-   fall back to serving a PyTorch eager version of the model.
+## Verified Hugging Face model architectures
+
+If you provide a repository ID for a Hugging Face large language model
+that does not currently have an optimized MAX Graph implementation, MAX
+falls back to serving a PyTorch eager version of the model.
+
+The following table lists the model architectures tested to work with MAX.
+
+| **Architecture** | **Example Model** |
+| --- | --- |
+| AquilaForCausalLM | BAAI/Aquila-7B |
+| ChatGLMModel | THUDM/chatglm3-6b |
+| GPT2LMHeadModel | openai-community/gpt2 |
+| GPTJForCausalLM | EleutherAI/gpt-j-6b |
+| LlamaForCausalLM | meta-llama/Llama-3.2-3B-Instruct |
+| LlamaForCausalLM | Skywork/Skywork-o1-Open-Llama-3.1-8B |
+| LlamaForCausalLM | deepseek-ai/deepseek-coder-1.3b-instruct |
+| PhiForCausalLM | microsoft/phi-2 |
+| Phi3ForCausalLM | microsoft/Phi-3-mini-4k-instruct |
+| Qwen2ForCausalLM | Qwen/Qwen2.5-1.5B-Instruct |
