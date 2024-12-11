@@ -291,7 +291,14 @@ class PagedKVCacheManager(KVCacheManager):
 
             # Assign some new pages to this request.
             for _ in range(num_new_pages):
-                next_block = self.available_blocks.pop()
+                try:
+                    next_block = self.available_blocks.pop()
+                except KeyError:
+                    raise RuntimeError(
+                        "Available KVCache pages have been exhausted! You must restart your process"
+                        " and set a smaller batch size or max seq len."
+                    )
+
                 inflight_metadata.inflight_blocks.append(next_block)
 
             # Populate the lookup table with the new pages.
