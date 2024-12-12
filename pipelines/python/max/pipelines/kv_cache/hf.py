@@ -42,6 +42,11 @@ class ContinuousHFStaticCache(StaticCache):
         self.active_slots: list[int] = []
         self.attention_patterns: dict[int, torch.Tensor] = {}
         self.tokens: dict[int, np.ndarray] = {}
+        self.cache_position: torch.Tensor = torch.arange(
+            0,
+            len(self.active_slots),
+            device=self.device,
+        )
 
     def external_claim(self, seq_ids: list[int]) -> None:
         if not self.available_slots:
@@ -63,6 +68,9 @@ class ContinuousHFStaticCache(StaticCache):
     def set_active_slots(self, seq_ids: list[int]) -> None:
         self.active_slots = seq_ids
 
+    def set_cache_position(self, cache_position: torch.Tensor):
+        self.cache_position = cache_position
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -70,10 +78,8 @@ class ContinuousHFStaticCache(StaticCache):
         layer_idx: int,
         cache_kwargs: Optional[dict[str, Any]] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        if not cache_kwargs or "cache_position" not in cache_kwargs:
-            raise ValueError("cache_position is required in cache_kwargs")
+        cache_position = self.cache_position
 
-        cache_position = cache_kwargs["cache_position"]
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
 

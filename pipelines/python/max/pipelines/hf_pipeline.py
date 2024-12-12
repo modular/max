@@ -108,12 +108,13 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
         # Generate tokens
         with torch.no_grad():
             for step in range(num_steps):
+                self._cache.set_cache_position(cache_position)
+
                 outputs = self._model(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                     past_key_values=self._cache,
                     use_cache=True,
-                    cache_position=cache_position,
                 )
 
                 next_token = outputs.logits[:, -1, :].argmax(dim=-1)
