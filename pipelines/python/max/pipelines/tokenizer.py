@@ -296,9 +296,10 @@ class TextAndVisionTokenizer(
                 messages, tokenize=False, add_generation_prompt=True
             )
             return cast(str, templated_message)
-        except Exception:
+        except Exception as e:
             msg = "apply_chat_template failed for TextAndVisionTokenizer"
             logging.warning(msg)
+            logging.warning(str(e))
             prompt = []
             for message in messages:
                 if isinstance(message["content"], str):
@@ -306,7 +307,7 @@ class TextAndVisionTokenizer(
                 elif isinstance(message["content"], list):
                     for content in message["content"]:
                         if content["type"] == "text":
-                            if "text" in "text":
+                            if "text" in content:
                                 prompt.append(content["text"])
                             else:
                                 prompt.append(content["content"])
@@ -390,7 +391,6 @@ class TextAndVisionTokenizer(
             if "pixel_values" not in inputs:
                 msg = "pixel_values not provided in AutoProcessor output, please ensure you are using the correct processor for multi-modal inputs."
                 raise ValueError(msg)
-            # Swap from Channels-First to Channels-Last image format. Pixtral processor returns CHW images.
             pixel_values = inputs["pixel_values"][0]
         else:
             pixel_values = None

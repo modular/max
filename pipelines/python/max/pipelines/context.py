@@ -8,6 +8,7 @@
 from typing import Protocol, runtime_checkable, Optional, Union
 
 import numpy as np
+from torch import Tensor
 
 
 @runtime_checkable
@@ -134,7 +135,9 @@ class TextAndVisionContext:
         prompt: str,
         max_length: int,
         next_tokens: np.ndarray,
-        pixel_values: Optional[Union[list[np.ndarray], np.ndarray]] = None,
+        pixel_values: Optional[
+            Union[list[Tensor], np.ndarray]
+        ] = None,  # Maybe don't use torch?
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
     ):
@@ -174,6 +177,8 @@ class TextAndVisionContext:
         """Updates the next_tokens attribute, and extends current_length if needed, based on the provided num_steps."""
         self._next_tokens = new_token
         self.current_length += num_steps
+
+        self.active_length = 1
 
     def is_done(self, eos: int) -> bool:
         """Returns true if token gen for this context completed, else false."""

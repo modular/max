@@ -58,6 +58,7 @@ class PixtralModel(PipelineModel):
         input_ids = Tensor.from_numpy(tokens).to(self.pipeline_config.device)
 
         # TODO: change this to include batch_size and num_images_in_seq dims.
+        # Pass dummy values for images for now. Pass the real images in next PR.
         pixel_values = Tensor.zeros(
             dtype=self.pipeline_config.dtype, shape=[304, 400, 3]
         ).to(self.pipeline_config.device)
@@ -99,7 +100,7 @@ class PixtralModel(PipelineModel):
         return load_kv_manager(
             params=self._get_kv_params(),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.image_seq_length,  # TODO: verify this
+            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
             num_layers=self.pipeline_config.huggingface_config.text_config.num_hidden_layers,
             devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
@@ -110,7 +111,7 @@ class PixtralModel(PipelineModel):
         return estimate_kv_cache_size(
             params=self._get_kv_params(),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,  # TODO: verify this
+            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
             num_layers=self.pipeline_config.huggingface_config.text_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
             devices=self.pipeline_config.devices,
