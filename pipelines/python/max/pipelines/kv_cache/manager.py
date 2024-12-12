@@ -38,15 +38,6 @@ class KVCacheManager(ABC):
         self.available = set(range(self.max_cache_batch_size))
         self.cache_lengths: dict[int, int] = {}
 
-        # Allocate boolean tensors
-        # allocating once up top, ensures we are not re-allocating
-        # new memory to store a boolean on each fetch call.
-        self.true_tensor = Tensor.zeros((1,), DType.bool)
-        self.true_tensor[0] = True
-
-        self.false_tensor = Tensor.zeros((1,), DType.bool)
-        self.false_tensor[0] = False
-
         self.is_ragged = is_ragged
         increment_cache_lengths_graph = (
             self._create_increment_cache_lengths_graph()
@@ -73,6 +64,7 @@ class KVCacheManager(ABC):
     def fetch(
         self,
         seq_ids_and_lengths: dict[int, int],
+        num_steps: int = 1,
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]: ...
 
     @abstractmethod
@@ -104,7 +96,9 @@ class KVCacheManager(ABC):
             self.available.remove(seq_id)
             self.cache_lengths[seq_id] = 0
 
-    def step(self, valid_lengths: dict[int, int]) -> None:
+    def step(
+        self, seq_ids_and_lengths: dict[int, int], num_steps: int = 1
+    ) -> None:
         """Update the `cache_lengths` objects to not that a new
         kv projection step has occurred, and that the underlying memory
         has been written to. This `cache_lengths` value is then used
@@ -112,7 +106,7 @@ class KVCacheManager(ABC):
         be used in the kernels.
         """
 
-        for id, length in valid_lengths.items():
+        for id, length in seq_ids_and_lengths.items():
             if id not in self.cache_lengths:
                 raise ValueError(f"seq_id: {id} not in cache.")
 
@@ -180,12 +174,11 @@ class KVCacheManager(ABC):
         during multi-token generation.
 
         Args:
-            kv_cache_inputs: Current cache state tuples (blocks, lengths, lookup, empty flag)
+            kv_cache_inputs: Current cache state tuples (blocks, lengths, lookup, max_lengths)
             prev_model_inputs: Previous model inputs including row offsets
 
         Returns:
-            Updated cache input tuples with incremented lengths and is_cache_empty=False
-            since only the first step can be context encoding
+            Updated cache input tuples with incremented lengths.
         """
         _, input_row_offsets = prev_model_inputs
         blocks = [kv_cache_inputs[i][0] for i in range(len(self.devices))]
@@ -194,19 +187,24 @@ class KVCacheManager(ABC):
         ]
         lookup_table = [kv_cache_inputs[i][2] for i in range(len(self.devices))]
 
-        # Update the cache_lengths of our batch by the previous sequence length
+        # max_lengths is host allocated and the same across all devices.
+        max_lengths = kv_cache_inputs[0][3]
+
+        # Update the cache_lengths of our batch by the previous sequence length.
         updated_cache_lengths = self.increment_cache_lengths_model.execute(
             input_row_offsets, *cache_lengths
         )
 
-        # Return our updated batch. We hard-code the is_cache_empty flag to
-        # False because only the first step could be context encoding.
+        # Advance to the next step of the max_lengths tensor.
+        updated_max_lengths = max_lengths[1:, :]
+
+        # Return our updated batch.
         for i in range(len(self.devices)):
             kv_cache_inputs[i] = (  # type: ignore
                 blocks[i],
                 updated_cache_lengths[i],
                 lookup_table[i],
-                self.false_tensor,
+                updated_max_lengths,
             )
         return kv_cache_inputs
 

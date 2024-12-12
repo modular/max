@@ -67,7 +67,7 @@ class FetchContinuousBatchingKVCacheCollection:
         blocks: TensorValue,  # NDBuffer[type, 6, Self.blocks_shape]
         cache_lengths: TensorValue,  # NDBuffer[DType.uint32, 1],
         lookup_table: TensorValue,  # NDBuffer[DType.uint32, 1],
-        is_cache_empty: TensorValue,
+        max_lengths: TensorValue,
     ) -> ContinuousBatchingKVCacheCollection:
         """Constructs a ContinuousBatchingKVCacheCollection for use downstream."""
 
@@ -107,7 +107,7 @@ class FetchContinuousBatchingKVCacheCollection:
                     blocks,
                     cache_lengths,
                     lookup_table,
-                    is_cache_empty,
+                    max_lengths,
                 ],
                 out_types=[ContinuousBatchingKVCacheCollectionType()],
             )[0].opaque
@@ -170,7 +170,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         return size * len(devices)
 
     def fetch(
-        self, seq_ids_and_lengths: dict[int, int]
+        self, seq_ids_and_lengths: dict[int, int], num_steps: int = 1
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
         """Fetches the KV cache state for the given sequence IDs.
 
@@ -182,13 +182,14 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             seq_ids_and_lengths: Dictionary of sequence IDs to fetch cache state for and the
                 number of new tokens we plan to add to the cache. Each ID must be within
                 the max_cache_batch_size and must exist in the current cache.
+            num_steps: Number of steps to run for multi-step scheduling.
 
         Returns:
             List of tuples for each device containing:
             - blocks: Tensor containing the KV cache blocks
             - cache_lengths: Tensor of current cache lengths for each sequence
             - lookup_table: Tensor mapping sequence IDs to cache positions
-            - is_cache_empty: Boolean tensor indicating if all sequences have empty caches
+            - max_lengths: Tensor containing [max_seq_length, max_cache_length]
 
         Raises:
             ValueError: If any seq_id exceeds max_cache_batch_size or doesn't exist in cache
@@ -200,10 +201,11 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             np.array(list(seq_ids_and_lengths.keys()), np.uint32)
         )
         cache_lengths_np = np.zeros(active_batch_size, np.uint32)
-        is_cache_empty = True
-        for i, (seq_id, num_new_tokens) in enumerate(
-            seq_ids_and_lengths.items()
-        ):
+
+        max_seq_length = 0
+        max_cache_length = 0
+
+        for i, (seq_id, num_tokens) in enumerate(seq_ids_and_lengths.items()):
             if seq_id > self.max_cache_batch_size:
                 msg = (
                     f"seq_id: {seq_id}, beyond max_cache_batch_size, you may"
@@ -216,13 +218,15 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
 
             cache_len = self.cache_lengths[seq_id]
 
-            if num_new_tokens + cache_len > self.max_seq_len:
-                msg = f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} with {num_new_tokens} new tokens. Existing length: {cache_len}"
+            if cache_len + num_tokens + num_steps - 1 > self.max_seq_len:
+                msg = f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} with {num_tokens} new tokens for {num_steps} steps. Existing length: {cache_len}"
                 raise ValueError(msg)
 
             cache_lengths_np[i] = cache_len
-            if cache_len != 0:
-                is_cache_empty = False
+
+            # Update the maximum lengths seen so far.
+            max_seq_length = max(max_seq_length, num_tokens)
+            max_cache_length = max(max_cache_length, cache_len)
 
         cache_lengths = [
             Tensor.from_numpy(cache_lengths_np).to(d) for d in self.devices
@@ -231,16 +235,25 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             lookup_table_tensor.to(self.devices[i])
             for i in range(len(self.devices))
         ]
-        is_cache_empty_buf = (
-            self.true_tensor if is_cache_empty else self.false_tensor
-        )
+
+        # Build a tensor of maximum lengths. Each step slices the first row to
+        # advance to the values for the next row.
+        max_lengths_np = np.empty((num_steps, 2), np.uint32)
+        step_max_seq_length = max_seq_length
+        step_max_cache_length = max_cache_length
+        for step in range(num_steps):
+            max_lengths_np[step, 0] = step_max_seq_length
+            max_lengths_np[step, 1] = step_max_cache_length
+            step_max_cache_length += step_max_seq_length
+            step_max_seq_length = 1
+        max_lengths_host = Tensor.from_numpy(max_lengths_np)
 
         return [
             (
                 self.blocks[i],
                 cache_lengths[i],
                 lookup_table_tensor_list[i],
-                is_cache_empty_buf,
+                max_lengths_host,
             )
             for i in range(len(self.devices))
         ]
@@ -296,7 +309,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             - KV cache blocks: 6D tensor for storing keys and values
             - Cache lengths: 1D tensor tracking sequence lengths
             - Lookup table: 1D tensor mapping sequence IDs to cache positions
-            - Cache empty flag: Scalar boolean tensor
+            - Maximum lengths: 2D tensor tracking maximum sequence and cache lengths per step.
         """
         return [
             (
@@ -325,8 +338,8 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
                     shape=["batch_size"],
                     device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
-                # is_cache_empty
-                TensorType(DType.bool, shape=[1]),
+                # max_lengths
+                TensorType(DType.uint32, shape=["steps_remaining", 2]),
             )
             for i in range(len(self.devices))
         ]

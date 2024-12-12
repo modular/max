@@ -227,6 +227,7 @@ class PagedKVCacheManager(KVCacheManager):
     def fetch(
         self,
         seq_ids_and_lengths: Dict[int, int],
+        num_steps: int = 1,
     ) -> list[tuple[Tensor, Tensor, Tensor, Tensor]]:
         """This method identifies available blocks to service the given requests and marks them as inflight.
         They're assigned to the request as "in-flight" until step is called."""
@@ -238,7 +239,9 @@ class PagedKVCacheManager(KVCacheManager):
         for batch_idx, (seq_id, num_tokens) in enumerate(
             seq_ids_and_lengths.items()
         ):
-            curr_seq_len = num_tokens + self.cache_lengths[seq_id]
+            curr_seq_len = (
+                self.cache_lengths[seq_id] + num_tokens + num_steps - 1
+            )
             if curr_seq_len > max_seq_len_in_batch:
                 max_seq_len_in_batch = curr_seq_len
 
@@ -254,7 +257,8 @@ class PagedKVCacheManager(KVCacheManager):
         lut_table_np = np.zeros((batch_size, max_num_pages), dtype=np.uint32)
         cache_lengths_np = np.zeros((batch_size,), dtype=np.uint32)
 
-        is_cache_empty = True
+        max_seq_length = 0
+        max_cache_length = 0
 
         # Iterate over requests in the batch.
         for batch_idx, (seq_id, num_tokens) in enumerate(
@@ -276,11 +280,9 @@ class PagedKVCacheManager(KVCacheManager):
             # Get the existing cache length for this sequence.
             cache_length = self.cache_lengths[seq_id]
             cache_lengths_np[batch_idx] = cache_length
-            if cache_length > 0:
-                is_cache_empty = False
 
             # Compute the total sequence length and the number of pages required to store it.
-            total_sequence_length = cache_length + num_tokens
+            total_sequence_length = cache_length + num_tokens + num_steps - 1
             num_pages_required = ceildiv(total_sequence_length, self.page_size)
 
             # Compute the number of *new* pages we need to allocate.
@@ -307,6 +309,22 @@ class PagedKVCacheManager(KVCacheManager):
             ):
                 lut_table_np[batch_idx, i] = block_idx
 
+            # Update the maximum lengths seen so far.
+            max_seq_length = max(max_seq_length, num_tokens)
+            max_cache_length = max(max_cache_length, cache_length)
+
+        # Build a tensor of maximum lengths. Each step slices the first row to
+        # advance to the values for the next row.
+        max_lengths_np = np.empty((num_steps, 2), np.uint32)
+        step_max_seq_length = max_seq_length
+        step_max_cache_length = max_cache_length
+        for step in range(num_steps):
+            max_lengths_np[step, 0] = step_max_seq_length
+            max_lengths_np[step, 1] = step_max_cache_length
+            step_max_cache_length += step_max_seq_length
+            step_max_seq_length = 1
+        max_lengths_host = Tensor.from_numpy(max_lengths_np)
+
         lut_table_host = Tensor.from_numpy(lut_table_np)
         cache_lengths_host = Tensor.from_numpy(cache_lengths_np)
         ret_list = []
@@ -316,7 +334,7 @@ class PagedKVCacheManager(KVCacheManager):
                     self.blocks[i],
                     cache_lengths_host.to(device=device),
                     lut_table_host.to(device=device),
-                    self.true_tensor if is_cache_empty else self.false_tensor,
+                    max_lengths_host,
                 )
             )
         return ret_list
@@ -351,8 +369,8 @@ class PagedKVCacheManager(KVCacheManager):
                     shape=["batch_size", "max_num_pages"],
                     device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
-                # is_cache_empty
-                TensorType(DType.bool, shape=[1]),
+                # max_lengths
+                TensorType(DType.uint32, shape=["steps_remaining", 2]),
             )
             for i in range(len(self.devices))
         ]
@@ -387,14 +405,16 @@ class PagedKVCacheManager(KVCacheManager):
             self.available_blocks.add(block)
         del self.active_requests[seq_id]
 
-    def step(self, valid_lengths: dict[int, int]) -> None:
+    def step(
+        self, seq_ids_and_lengths: dict[int, int], num_steps: int = 1
+    ) -> None:
         """Update the `cache_lengths` objects to not that a new
         kv projection step has occurred, and that the underlying memory
         has been written to. This `cache_lengths` value is then used
         downstream in `fetch` to track what section of memory should
         be used in the kernels.
         """
-        for seq_id, length in valid_lengths.items():
+        for seq_id, length in seq_ids_and_lengths.items():
             if seq_id not in self.active_requests:
                 raise ValueError(f"seq_id: {seq_id} not in active requests.")
             request_metadata = self.active_requests[seq_id]
@@ -414,4 +434,4 @@ class PagedKVCacheManager(KVCacheManager):
             )
             request_metadata.inflight_blocks.clear()
 
-        super().step(valid_lengths)
+        super().step(seq_ids_and_lengths, num_steps)

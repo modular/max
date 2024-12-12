@@ -99,7 +99,7 @@ class NaiveKVCacheManager(KVCacheManager):
         ]
 
     def fetch(
-        self, seq_ids_and_lengths: dict[int, int]
+        self, seq_ids_and_lengths: dict[int, int], num_steps: int = 1
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
         existing_keys = list(self.cache_lengths.keys())
         for i, (seq_id, num_new_tokens) in enumerate(
