@@ -12,33 +12,12 @@
 # ===----------------------------------------------------------------------=== #
 # File contains code from the vllm project
 # https://github.com/vllm-project/vllm/blob/main/benchmarks/benchmark_serving.py
-# used under the Apache 2 licenced
-# Derived from commit: dd53c4b023056cda6174cc32dc3d31bc01e8646a
+# derived from commit: dd53c4b023056cda6174cc32dc3d31bc01e8646a
+# and the sglang project
+# https://github.com/sgl-project/sglang/blob/v0.4.0/python/sglang/bench_serving.py
+# used under the Apache 2 licence
 
-"""Benchmark online serving throughput.
-
-On the server side, run one of the following commands:
-    vLLM OpenAI API server
-    vllm serve <your_model> \
-        --swap-space 16 \
-        --disable-log-requests
-
-    (TGI backend)
-    ./launch_tgi_server.sh <your_model> <max_batch_total_tokens>
-
-On the client side, run:
-    python benchmark_serving.py \
-        --backend <backend> \
-        --model <your_model> \
-        --dataset-name sharegpt \
-        --dataset-path <path to dataset> \
-        --request-rate <request_rate> \ # By default <request_rate> is inf
-        --num-prompts <num_prompts> # By default <num_prompts> is 1000
-
-    when using tgi backend, add
-        --endpoint /generate_stream
-    to the end of the command above.
-"""
+"""Benchmark online serving throughput."""
 
 import argparse
 import asyncio
@@ -46,6 +25,7 @@ import json
 import logging
 import os
 import random
+import resource
 import sys
 import time
 import traceback
@@ -53,13 +33,11 @@ import warnings
 from argparse import ArgumentParser as FlexibleArgumentParser
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import partial
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
 
 import aiohttp
 import huggingface_hub.constants
 import numpy as np
-from nvitop import ResourceMetricCollector
 from tqdm.asyncio import tqdm
 from transformers import (
     AutoTokenizer,
@@ -81,11 +59,6 @@ class RequestFuncInput:
     prompt_len: int
     output_len: int
     model: str
-    best_of: int = 1
-    use_beam_search: bool = False
-    logprobs: int = 0
-    echo: bool = False
-    timestamp: int = 0
 
 
 @dataclass
@@ -103,15 +76,12 @@ class RequestFuncOutput:
 
 async def async_request_trt_llm(
     request_func_input: RequestFuncInput,
-    request_limiter: asyncio.Semaphore,
     pbar: Optional[tqdm] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith("generate_stream")
 
     async with aiohttp.ClientSession(timeout=AIOHTTP_TIMEOUT) as session:
-        assert not request_func_input.use_beam_search
-        assert request_func_input.best_of == 1
         payload = {
             "accumulate_tokens": True,
             "text_input": request_func_input.prompt,
@@ -127,10 +97,7 @@ async def async_request_trt_llm(
         st = time.perf_counter()
         most_recent_timestamp = st
         try:
-            async with (
-                request_limiter,
-                session.post(url=api_url, json=payload) as response,
-            ):
+            async with session.post(url=api_url, json=payload) as response:
                 if response.status == 200:
                     async for chunk_bytes in response.content:
                         chunk_bytes = chunk_bytes.strip()
@@ -173,9 +140,7 @@ async def async_request_trt_llm(
 
 async def async_request_openai_completions(
     request_func_input: RequestFuncInput,
-    request_limiter: asyncio.Semaphore,
     pbar: Optional[tqdm] = None,
-    send_timestamp: bool = False,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
     assert api_url.endswith(
@@ -183,20 +148,15 @@ async def async_request_openai_completions(
     ), "OpenAI Completions API URL must end with 'completions' or 'profile'."
 
     async with aiohttp.ClientSession(timeout=AIOHTTP_TIMEOUT) as session:
-        assert not request_func_input.use_beam_search
         payload = {
             "model": request_func_input.model,
             "prompt": request_func_input.prompt,
             "temperature": 0.0,
-            "best_of": request_func_input.best_of,
+            "best_of": 1,
             "max_tokens": request_func_input.output_len,
             "stream": True,
-            "logprobs": request_func_input.logprobs,
-            "echo": request_func_input.echo,
+            "ignore_eos": True,
         }
-
-        if send_timestamp:
-            payload["timestamp"] = request_func_input.timestamp
 
         headers = {
             "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY')}"
@@ -210,12 +170,9 @@ async def async_request_openai_completions(
         st = time.perf_counter()
         most_recent_timestamp = st
         try:
-            async with (
-                request_limiter,
-                session.post(
-                    url=api_url, json=payload, headers=headers
-                ) as response,
-            ):
+            async with session.post(
+                url=api_url, json=payload, headers=headers
+            ) as response:
                 if response.status == 200:
                     async for chunk_bytes in response.content:
                         chunk_bytes = chunk_bytes.strip()
@@ -225,10 +182,9 @@ async def async_request_openai_completions(
                         chunk = remove_prefix(
                             chunk_bytes.decode("utf-8"), "data: "
                         )
+                        latency = time.perf_counter() - st
                         if chunk == "[DONE]":
-                            latency = time.perf_counter() - st
-                        elif "ping -" in chunk:
-                            continue
+                            pass
                         else:
                             data = json.loads(chunk)
 
@@ -236,12 +192,6 @@ async def async_request_openai_completions(
                             # usage summary response without a token so we
                             # want to check a token was generated
                             if data["choices"][0]["text"]:
-                                if request_func_input.logprobs:
-                                    if not data["choices"][0]["logprobs"]:
-                                        warnings.warn(
-                                            "Log probs were requested but were"
-                                            " not returned."
-                                        )
                                 timestamp = time.perf_counter()
                                 # First token
                                 if ttft == 0.0:
@@ -262,8 +212,6 @@ async def async_request_openai_completions(
                 else:
                     output.error = response.reason or ""
                     output.success = False
-        except asyncio.CancelledError:
-            output.success = False
         except Exception:
             output.success = False
             exc_info = sys.exc_info()
@@ -275,7 +223,6 @@ async def async_request_openai_completions(
 
 async def async_request_openai_chat_completions(
     request_func_input: RequestFuncInput,
-    request_limiter: asyncio.Semaphore,
     pbar: Optional[tqdm] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
@@ -310,12 +257,9 @@ async def async_request_openai_chat_completions(
         st = time.perf_counter()
         most_recent_timestamp = st
         try:
-            async with (
-                request_limiter,
-                session.post(
-                    url=api_url, json=payload, headers=headers
-                ) as response,
-            ):
+            async with session.post(
+                url=api_url, json=payload, headers=headers
+            ) as response:
                 if response.status == 200:
                     async for chunk_bytes in response.content:
                         chunk_bytes = chunk_bytes.strip()
@@ -325,10 +269,9 @@ async def async_request_openai_chat_completions(
                         chunk = remove_prefix(
                             chunk_bytes.decode("utf-8"), "data: "
                         )
+                        latency = time.perf_counter() - st
                         if chunk == "[DONE]":
-                            latency = time.perf_counter() - st
-                        elif "ping -" in chunk:
-                            continue
+                            pass
                         else:
                             timestamp = time.perf_counter()
                             data = json.loads(chunk)
@@ -403,9 +346,21 @@ def get_tokenizer(
 ASYNC_REQUEST_FUNCS = {
     "vllm": async_request_openai_completions,
     "trt-llm": async_request_trt_llm,
-    "modular": partial(async_request_openai_completions, send_timestamp=True),
+    "modular": async_request_openai_completions,
     "modular-chat": async_request_openai_chat_completions,
 }
+
+
+# from https://github.com/sgl-project/sglang/blob/v0.4.0/python/sglang/bench_serving.py#L1283
+def set_ulimit(target_soft_limit=65535):
+    resource_type = resource.RLIMIT_NOFILE
+    current_soft, current_hard = resource.getrlimit(resource_type)
+
+    if current_soft < target_soft_limit:
+        try:
+            resource.setrlimit(resource_type, (target_soft_limit, current_hard))
+        except ValueError as e:
+            print(f"Fail to set RLIMIT_NOFILE: {e}")
 
 
 @dataclass
@@ -617,7 +572,7 @@ def calculate_metrics(
     outputs: List[RequestFuncOutput],
     dur_s: float,
     tokenizer: PreTrainedTokenizerBase,
-    collected_metrics: Dict[str, Any],
+    gpu_metrics: Dict[str, Any],
 ) -> Tuple[BenchmarkMetrics, List[int]]:
     actual_output_lens: List[int] = []
     total_input = 0
@@ -701,13 +656,13 @@ def calculate_metrics(
         max_input=max_input,
         max_output=max_output,
         max_total=max_total,
-        peak_gpu_memory_mib=collected_metrics.get(
+        peak_gpu_memory_mib=gpu_metrics.get(
             "benchmark/gpu:0/memory_used (MiB)/max"
         ),
-        available_gpu_memory_mib=collected_metrics.get(
+        available_gpu_memory_mib=gpu_metrics.get(
             "benchmark/gpu:0/memory_free (MiB)/min"
         ),
-        gpu_utilization=collected_metrics.get(
+        gpu_utilization=gpu_metrics.get(
             "benchmark/gpu:0/gpu_utilization (%)/mean"
         ),
     )
@@ -722,23 +677,15 @@ async def benchmark(
     model_id: str,
     tokenizer: PreTrainedTokenizerBase,
     input_requests: List[Tuple[str, int, int]],
-    best_of: int,
-    use_beam_search: bool,
     request_rate: float,
-    max_concurrent_requests: int,
     disable_tqdm: bool,
-    profile: bool,
     do_test_prompt: bool,
-    logprobs: int,
-    echo: bool,
-    log_request_timestamps: bool,
+    collect_gpu_stats: bool,
 ):
     if backend in ASYNC_REQUEST_FUNCS:
         request_func = ASYNC_REQUEST_FUNCS[backend]
     else:
         raise ValueError(f"Unknown backend: {backend}")
-
-    request_limiter = asyncio.Semaphore(max_concurrent_requests)
 
     if do_test_prompt:
         logger.info("Starting initial single prompt test run...")
@@ -749,15 +696,9 @@ async def benchmark(
             api_url=api_url,
             prompt_len=test_prompt_len,
             output_len=test_output_len,
-            best_of=best_of,
-            use_beam_search=use_beam_search,
-            logprobs=logprobs,
-            echo=echo,
-            timestamp=0,
         )
         test_output = await request_func(
             request_func_input=test_input,
-            request_limiter=request_limiter,
         )
         if not test_output.success:
             raise ValueError(
@@ -770,90 +711,53 @@ async def benchmark(
                 "Initial test run completed. Starting main benchmark run..."
             )
 
-    if profile:
-        logger.info("Starting profiler...")
-        profile_input = RequestFuncInput(
-            model=model_id,
-            prompt=test_prompt,
-            api_url=base_url + "/start_profile",
-            prompt_len=test_prompt_len,
-            output_len=test_output_len,
-            best_of=best_of,
-            use_beam_search=use_beam_search,
-            logprobs=logprobs,
-            echo=echo,
-            timestamp=0,
-        )
-        profile_output = await request_func(
-            request_func_input=profile_input,
-            request_limiter=request_limiter,
-        )
-        if profile_output.success:
-            logger.info("Profiler started")
-
     logger.info(f"Traffic request rate: {request_rate}")
 
     pbar = None if disable_tqdm else tqdm(total=len(input_requests))
+    if collect_gpu_stats:
+        from nvitop import ResourceMetricCollector
 
-    collector = ResourceMetricCollector()
+        collector = ResourceMetricCollector()
+        collector.start("benchmark")
+
     benchmark_start_time = time.perf_counter_ns()
-    request_timestamp_ns = benchmark_start_time if log_request_timestamps else 0
-    with collector("benchmark"):
-        tasks: List[asyncio.Task] = []
-        async for request in get_request(input_requests, request_rate):
-            prompt, prompt_len, output_len = request
-            request_func_input = RequestFuncInput(
-                model=model_id,
-                prompt=prompt,
-                api_url=api_url,
-                prompt_len=prompt_len,
-                output_len=output_len,
-                best_of=best_of,
-                use_beam_search=use_beam_search,
-                logprobs=logprobs,
-                echo=echo,
-                timestamp=request_timestamp_ns,
-            )
-            tasks.append(
-                asyncio.create_task(
-                    request_func(
-                        request_func_input=request_func_input,
-                        request_limiter=request_limiter,
-                        pbar=pbar,
-                    )
+    tasks: List[asyncio.Task] = []
+    async for request in get_request(input_requests, request_rate):
+        prompt, prompt_len, output_len = request
+        request_func_input = RequestFuncInput(
+            model=model_id,
+            prompt=prompt,
+            api_url=api_url,
+            prompt_len=prompt_len,
+            output_len=output_len,
+        )
+        tasks.append(
+            asyncio.create_task(
+                request_func(
+                    request_func_input=request_func_input,
+                    pbar=pbar,
                 )
             )
-        outputs: List[RequestFuncOutput] = await asyncio.gather(*tasks)
-        collected_metrics = collector.collect()
-
-    if profile:
-        logger.info("Stopping profiler...")
-        profile_input = RequestFuncInput(
-            model=model_id,
-            prompt=test_prompt,
-            api_url=base_url + "/stop_profile",
-            prompt_len=test_prompt_len,
-            output_len=test_output_len,
-            best_of=best_of,
-            use_beam_search=use_beam_search,
         )
-        profile_output = await request_func(
-            request_func_input=profile_input, request_limiter=request_limiter
-        )
-        if profile_output.success:
-            logger.info("Profiler stopped")
+    outputs: List[RequestFuncOutput] = await asyncio.gather(*tasks)
 
     if pbar is not None:
         pbar.close()
 
     benchmark_duration = (time.perf_counter_ns() - benchmark_start_time) / 1e9
 
+    if collect_gpu_stats:
+        gpu_metrics = collector.collect()
+        collector.stop()
+    else:
+        gpu_metrics = {}
+
     metrics, actual_output_lens = calculate_metrics(
         input_requests=input_requests,
         outputs=outputs,
         dur_s=benchmark_duration,
         tokenizer=tokenizer,
-        collected_metrics=collected_metrics,
+        gpu_metrics=gpu_metrics,
     )
 
     print("{s:{c}^{n}}".format(s=" Serving Benchmark Result ", n=50, c="="))
@@ -905,7 +809,7 @@ async def benchmark(
     print("{:<40} {:<10}".format("Max input tokens:", metrics.max_input))
     print("{:<40} {:<10}".format("Max output tokens:", metrics.max_output))
     print("{:<40} {:<10}".format("Max total tokens:", metrics.max_total))
-    if metrics.gpu_utilization is not None:
+    if collect_gpu_stats:
         print("{s:{c}^{n}}".format(s="GPU Stats", n=50, c="-"))
         print(
             "{:<40} {:<10.2f}".format(
@@ -968,6 +872,9 @@ def main(args: argparse.Namespace):
     logger.info(args)
     random.seed(args.seed)
     np.random.seed(args.seed)
+    # benchmarks can create a large number of concurrent in-flight requests
+    # so bump the file limit to make room for them
+    set_ulimit()
 
     backend = args.backend
     model_id = args.model
@@ -1063,17 +970,10 @@ def main(args: argparse.Namespace):
             model_id=model_id,
             tokenizer=tokenizer,
             input_requests=input_requests,
-            best_of=args.best_of,
-            use_beam_search=args.use_beam_search,
             request_rate=args.request_rate,
-            max_concurrent_requests=args.max_concurrent_requests
-            or len(input_requests),
             disable_tqdm=args.disable_tqdm,
-            profile=args.profile,
             do_test_prompt=not args.skip_test_prompt,
-            logprobs=args.logprobs,
-            echo=args.echo,
-            log_request_timestamps=args.log_request_timestamps,
+            collect_gpu_stats=args.collect_gpu_stats,
         )
     )
 
@@ -1088,8 +988,6 @@ def main(args: argparse.Namespace):
         result_json["backend"] = backend
         result_json["model_id"] = model_id
         result_json["tokenizer_id"] = tokenizer_id
-        result_json["best_of"] = args.best_of
-        result_json["use_beam_search"] = args.use_beam_search
         result_json["num_prompts"] = args.num_prompts
 
         # Metadata
@@ -1131,7 +1029,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--backend",
         type=str,
-        default="vllm",
+        default="modular",
         choices=list(ASYNC_REQUEST_FUNCS.keys()),
     )
     parser.add_argument(
@@ -1180,15 +1078,6 @@ if __name__ == "__main__":
             "Name or path of the tokenizer, if not using the default tokenizer."
         ),
     )
-    parser.add_argument(
-        "--best-of",
-        type=int,
-        default=1,
-        help=(
-            "Generates `best_of` sequences per prompt and returns the best one."
-        ),
-    )
-    parser.add_argument("--use-beam-search", action="store_true")
     parser.add_argument(
         "--num-prompts",
         type=int,
@@ -1265,12 +1154,6 @@ if __name__ == "__main__":
             "the request arrival times."
         ),
     )
-    parser.add_argument(
-        "--max-concurrent-requests",
-        type=int,
-        default=None,
-        help="Maximum number of concurrent requests. Default is unlimited.",
-    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--trust-remote-code",
@@ -1283,17 +1166,14 @@ if __name__ == "__main__":
         help="Specify to disable tqdm progress bar.",
     )
     parser.add_argument(
-        "--profile",
-        action="store_true",
-        help=(
-            "Use Torch Profiler. The endpoint must be launched with "
-            "VLLM_TORCH_PROFILER_DIR to enable profiler."
-        ),
-    )
-    parser.add_argument(
         "--skip-test-prompt",
         action="store_true",
         help="Skip the test prompt.  Useful when doing external profiling.",
+    )
+    parser.add_argument(
+        "--collect-gpu-stats",
+        action="store_true",
+        help="Collect GPU stats with NVML (NVIDIA only).",
     )
     parser.add_argument(
         "--save-result",
@@ -1329,27 +1209,6 @@ if __name__ == "__main__":
             "{backend}-{args.request_rate}qps-{base_model_id}-{current_dt}.json"
             " format."
         ),
-    )
-    parser.add_argument(
-        "--logprobs",
-        type=int,
-        default=0,
-        help=(
-            "Include the log probabilities on the `logprobs` most likely "
-            "output tokens, as well the chosen tokens."
-        ),
-    )
-
-    parser.add_argument(
-        "--echo",
-        action="store_true",
-        help="Whether to include input tokens as part of the log probs.",
-    )
-
-    parser.add_argument(
-        "--log-request-timestamps",
-        action="store_true",
-        help="Whether to log request timestamps on the server.",
     )
 
     args = parser.parse_args()
