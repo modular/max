@@ -137,9 +137,14 @@ class PipelineModel(ABC):
 
         if isinstance(free_memory, (int, float)):
             if total_size > free_memory:
-                raise RuntimeError(
-                    f"Estimated model and kv cache memory use exceeds available memory ({to_mib(total_size)} / {to_mib(free_memory)} MiB)"
+                msg = f"Estimated model and kv cache memory use exceeds available memory ({to_mib(total_size)} / {free_memory_str} MiB)"
+
+                max_batch_size_rec_str = (
+                    f" to {max_batch_size} " if max_batch_size else " "
                 )
+                msg += f". Try reducing your --max-cache-batch-size{max_batch_size_rec_str}or reducing the value passed to --max-seq-len."
+
+                raise RuntimeError(msg)
             elif total_size > 0.75 * free_memory:
                 logging.warning(
                     "Estimated model and kv cache memory use nears available memory. You may experience errors."
