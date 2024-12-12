@@ -22,8 +22,6 @@ def register_all_models():
     import replit as replit
     from mistral import mistral_arch
 
-    import coder as coder
-
     PIPELINE_REGISTRY.register(mistral_arch)
 
 
