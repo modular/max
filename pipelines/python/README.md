@@ -67,6 +67,13 @@ tool.
    magic run mistral --prompt "Why is the sky blue?"
    ```
 
+   or test out generation at the command line for any supported model from
+   Hugging Face using the `generate` command:
+
+   ```shell
+   magic run generate --huggingface-repo-id=modularai/llama-3.1 --prompt "Why is the sky blue?"
+   ```
+
 4. Host a chat completion endpoint via MAX Serve.
 
    MAX Serve provides functionality to host performant OpenAI compatible

@@ -10,6 +10,7 @@ version = "0.1.0"
 llama3 = "python pipelines.py llama3"
 replit = "python pipelines.py replit"
 mistral = "python pipelines.py mistral"
+generate = "python pipelines.py generate"
 serve = "python pipelines.py serve"
 
 [dependencies]
