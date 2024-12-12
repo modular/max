@@ -5,7 +5,7 @@
 # ===----------------------------------------------------------------------=== #
 """Standardized context object for Pipeline Inference."""
 
-from typing import Protocol, runtime_checkable, Optional, Union
+from typing import Optional, Protocol, Sequence, Union, runtime_checkable
 
 import numpy as np
 from torch import Tensor
@@ -68,12 +68,12 @@ class TextContext:
     def __init__(
         self,
         cache_seq_id: int,
-        prompt: str,
+        prompt: Union[str, Sequence[int]],
         max_length: int,
         next_tokens: np.ndarray,
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
-    ):
+    ) -> None:
         self.cache_seq_id = cache_seq_id
         self.prompt = prompt
         self.max_length = max_length
@@ -132,7 +132,7 @@ class TextAndVisionContext:
     def __init__(
         self,
         cache_seq_id: int,
-        prompt: str,
+        prompt: Union[str, Sequence[int]],
         max_length: int,
         next_tokens: np.ndarray,
         pixel_values: Optional[
@@ -140,7 +140,7 @@ class TextAndVisionContext:
         ] = None,  # Maybe don't use torch?
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
-    ):
+    ) -> None:
         self.cache_seq_id = cache_seq_id
         self.prompt = prompt
         self.max_length = max_length

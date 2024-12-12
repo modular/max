@@ -13,6 +13,7 @@ from typing import (
     Literal,
     Optional,
     Protocol,
+    Sequence,
     TypedDict,
     TypeVar,
     Union,
@@ -53,7 +54,7 @@ class TokenGeneratorRequest:
     id: str
     index: int
     model_name: str
-    prompt: Optional[str] = None
+    prompt: Union[str, Sequence[int], None] = None
     """Prompt here is to support legacy /completion APIs"""
     messages: Optional[list[TokenGeneratorRequestMessage]] = None
     """Chat completion APIs work off messages."""

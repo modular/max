@@ -8,7 +8,7 @@
 import asyncio
 import io
 import logging
-from typing import Any, Union, cast
+from typing import Any, Sequence, Union, cast
 
 import numpy as np
 from PIL import Image
@@ -173,14 +173,18 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
     def expects_content_wrapping(self) -> bool:
         return False
 
-    async def encode(self, prompt: str) -> np.ndarray:
+    async def encode(self, prompt: Union[str, Sequence[int]]) -> np.ndarray:
         """Transform the provided prompt into a token array."""
 
-        # Note: the underlying tokenizer may not be thread safe in some cases, see https://github.com/huggingface/tokenizers/issues/537
-        # Add a standard (non-async) lock in the executor thread if needed.
-        encoded_prompt = await run_with_default_executor(
-            self.delegate.encode, prompt
-        )
+        encoded_prompt: np.ndarray
+        if isinstance(prompt, str):
+            # Note: the underlying tokenizer may not be thread safe in some cases, see https://github.com/huggingface/tokenizers/issues/537
+            # Add a standard (non-async) lock in the executor thread if needed.
+            encoded_prompt = await run_with_default_executor(
+                self.delegate.encode, prompt
+            )
+        else:
+            encoded_prompt = np.array(list(prompt))
 
         if len(encoded_prompt) >= self.config.max_length:
             msg = (
@@ -215,7 +219,7 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         """Create a new TextContext object, leveraging necessary information like
         cache_seq_id and prompt from TokenGeneratorRequest."""
 
-        prompt: str
+        prompt: Union[str, Sequence[int]]
         if request.prompt is not None:
             prompt = request.prompt
         elif request.messages is not None:
@@ -321,14 +325,18 @@ class TextAndVisionTokenizer(
     def expects_content_wrapping(self) -> bool:
         return True
 
-    async def encode(self, prompt: str) -> np.ndarray:
+    async def encode(self, prompt: Union[str, Sequence[int]]) -> np.ndarray:
         """Transform the provided prompt into a token array."""
 
-        # Note: the underlying tokenizer may not be thread safe in some cases, see https://github.com/huggingface/tokenizers/issues/537
-        # Add a standard (non-async) lock in the executor thread if needed.
-        encoded_prompt = await run_with_default_executor(
-            self.delegate.encode, prompt
-        )
+        encoded_prompt: np.ndarray
+        if isinstance(prompt, str):
+            # Note: the underlying tokenizer may not be thread safe in some cases, see https://github.com/huggingface/tokenizers/issues/537
+            # Add a standard (non-async) lock in the executor thread if needed.
+            encoded_prompt = await run_with_default_executor(
+                self.delegate.encode, prompt
+            )
+        else:
+            encoded_prompt = np.array(list(prompt))
 
         if len(encoded_prompt) >= self.config.max_length:
             msg = (
@@ -352,7 +360,7 @@ class TextAndVisionTokenizer(
         """Create a new TextAndVisionContext object, leveraging necessary information like
         cache_seq_id and prompt from TokenGeneratorRequest."""
 
-        prompt: str
+        prompt: Union[str, Sequence[int]]
         if request.prompt is not None:
             prompt = request.prompt
         elif request.messages is not None:
