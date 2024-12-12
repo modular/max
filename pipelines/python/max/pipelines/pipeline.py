@@ -287,6 +287,20 @@ class TextGenerationPipeline(TokenGenerator[T]):
         tracer.next("claim_cache_rows")
         # Claim cache rows for our batch.
         for context in context_batch:
+            # this is effectively: max_seq_len - (num_tokens_in_kv_cache + num_new_tokens) - num_new_tokens
+            num_available_steps = self._pipeline_config.max_length - (
+                context.current_length - context.seq_len
+            )
+            if num_available_steps <= 0:
+                raise ValueError(
+                    f"Request {context.cache_seq_id} length ({context.current_length}) is larger than or equal to the configured max_length ({self._pipeline_config.max_length})"
+                )
+
+            num_steps = (
+                num_steps
+                if num_available_steps > num_steps
+                else num_available_steps
+            )
             if not self._pipeline_model.kv_manager.contains(
                 context.cache_seq_id
             ):
