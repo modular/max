@@ -138,9 +138,6 @@ class CrossAttentionDecoderLayer(Layer):
     ) -> TensorValue:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        assert (
-            len(cross_attention_states.shape) == 2
-        ), "cross_attn is expecting a ragged tensor"
 
         hidden_states = self.cross_attn(
             hidden_states,
