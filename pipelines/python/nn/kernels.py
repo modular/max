@@ -13,6 +13,7 @@
 """Helper functions for wrapping custom kv cache/attention related ops."""
 
 from __future__ import annotations
+
 from enum import Enum
 from typing import Union
 
@@ -542,3 +543,48 @@ def swish_glu(
             )
         ],
     )[0].tensor
+
+
+def rms_norm_key_cache(
+    kv_params: KVCacheParams,
+    kv_collection: ContinuousBatchingKVCacheCollection,
+    gamma: TensorValue,
+    epsilon: float | np.floating,
+    layer_idx: int | np.integer,
+    total_seq_len: TensorValue,
+    input_row_offsets: TensorValue,
+) -> None:
+    """Computes RMSNorm on the _new_ entries in the KVCache.
+
+    Currently, the KVCacheT class itself isn't aware of the new cache entries
+    until cache length increment, which happens after model forward.
+    So use `input_row_offsets` to do this bookkeeping.
+    """
+    op_name = f"rms_norm_key_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_cont_batch"
+
+    gamma_rank_expected = 1
+    if gamma.rank != gamma_rank_expected:
+        msg = (
+            f"expected gamma of rank {gamma_rank_expected} but got {gamma.rank}"
+        )
+        raise ValueError(msg)
+
+    if total_seq_len.dtype != DType.uint32:
+        msg = f"expected uint32 total_seq_len but got {total_seq_len.dtype}"
+        raise ValueError(msg)
+
+    if input_row_offsets.dtype != DType.uint32:
+        msg = f"expected uint32 input_row_offsets but got {input_row_offsets.dtype}"
+        raise ValueError(msg)
+
+    ops.inplace_custom(
+        op_name,
+        values=[
+            kv_collection,
+            gamma,
+            ops.constant(epsilon, gamma.dtype),
+            ops.constant(layer_idx, DType.uint32),
+            total_seq_len,
+            input_row_offsets,
+        ],
+    )
