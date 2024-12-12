@@ -139,10 +139,13 @@ class PipelineModel(ABC):
             if total_size > free_memory:
                 msg = f"Estimated model and kv cache memory use exceeds available memory ({to_mib(total_size)} / {free_memory_str} MiB)"
 
-                max_batch_size_rec_str = (
-                    f" to {max_batch_size} " if max_batch_size else " "
-                )
-                msg += f". Try reducing your --max-cache-batch-size{max_batch_size_rec_str}or reducing the value passed to --max-seq-len."
+                if self.pipeline_config.cache_strategy == KVCacheStrategy.PAGED:
+                    msg += ". Try reducing --gpu-memory-consumption to a smaller value."
+                else:
+                    max_batch_size_rec_str = (
+                        f" to {max_batch_size} " if max_batch_size else " "
+                    )
+                    msg += f". Try reducing your --max-cache-batch-size{max_batch_size_rec_str}or reducing the value passed to --max-seq-len."
 
                 raise RuntimeError(msg)
             elif total_size > 0.75 * free_memory:
