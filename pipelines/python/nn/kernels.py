@@ -423,7 +423,7 @@ class MaskVariant(str, Enum):
     ALIBI_MASK = "alibi_mask"
 
 
-def flash_attention_ragged_with_causal_mask(
+def flash_attention_ragged(
     kv_params: KVCacheParams,
     input: TensorValue,
     input_row_offsets: TensorValue,

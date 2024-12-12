@@ -19,10 +19,10 @@ from max.graph import TensorValue, ops
 from max.pipelines.kv_cache import ContinuousBatchingKVCacheCollection
 
 from ..kernels import (
-    flash_attention_ragged_with_causal_mask,
+    MaskVariant,
+    flash_attention_ragged,
     fused_qk_ragged_rope,
     fused_qkv_ragged_matmul,
-    MaskVariant,
 )
 from ..rotary_embedding import OptimizedRotaryEmbedding
 from .interfaces import AttentionImpl, AttentionImplQKV
@@ -72,7 +72,7 @@ class AttentionWithRope(AttentionImpl):
         )
 
         # Calculate Flash Attention.
-        attn_out = flash_attention_ragged_with_causal_mask(
+        attn_out = flash_attention_ragged(
             self.kv_params,
             input=xq,
             kv_collection=kv_collection,
@@ -132,7 +132,7 @@ class AttentionWithRopeQKV(AttentionImplQKV):
         )
 
         # Calculate Flash Attention.
-        attn_out = flash_attention_ragged_with_causal_mask(
+        attn_out = flash_attention_ragged(
             self.kv_params,
             input=xq,
             kv_collection=kv_collection,

@@ -26,7 +26,7 @@ from max.pipelines.kv_cache import (
 from nn import MLP, RMSNorm
 from nn.kernels import (
     MaskVariant,
-    flash_attention_ragged_with_causal_mask,
+    flash_attention_ragged,
     matmul_kv_cache_ragged,  # noqa: F401
 )
 from nn.layer import Layer
@@ -103,7 +103,7 @@ class CrossSdpaAttention(Layer):
         # )
 
         # Calculate Flash Attention.
-        attn_out = flash_attention_ragged_with_causal_mask(
+        attn_out = flash_attention_ragged(
             self.kv_params,
             input=query_states,
             kv_collection=kv_collection,
