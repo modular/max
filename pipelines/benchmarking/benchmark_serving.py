@@ -989,6 +989,8 @@ def main(args: argparse.Namespace):
         result_json["model_id"] = model_id
         result_json["tokenizer_id"] = tokenizer_id
         result_json["num_prompts"] = args.num_prompts
+        result_json["server_args"] = args.server_args
+        result_json["dataset_name"] = args.dataset_name
 
         # Metadata
         if args.metadata:
@@ -1209,6 +1211,13 @@ if __name__ == "__main__":
             "{backend}-{args.request_rate}qps-{base_model_id}-{current_dt}.json"
             " format."
         ),
+    )
+
+    parser.add_argument(
+        "--server-args",
+        type=str,
+        default="",
+        help="Server args",
     )
 
     args = parser.parse_args()
