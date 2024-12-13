@@ -421,6 +421,7 @@ def flash_attention_with_causal_mask(
 class MaskVariant(str, Enum):
     CAUSAL_MASK = "causal_mask"
     ALIBI_MASK = "alibi_mask"
+    NULL_MASK = "null_mask"
 
 
 def flash_attention_ragged(
@@ -463,6 +464,8 @@ def flash_attention_ragged(
         mask_variant_str = ""
     elif mask_variant == MaskVariant.ALIBI_MASK:
         mask_variant_str = "alibi_mask"
+    elif mask_variant == MaskVariant.NULL_MASK:
+        mask_variant_str = "null_mask"
     else:
         msg = f"mask_variant '{mask_variant}' not supported."
         raise ValueError(msg)
