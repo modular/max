@@ -24,7 +24,7 @@ from cli import (
     pipeline_config_options,
     serve_pipeline,
 )
-from max.pipelines import PipelineConfig, SupportedEncoding
+from max.pipelines import PIPELINE_REGISTRY, PipelineConfig, SupportedEncoding
 from max.pipelines.kv_cache import KVCacheStrategy
 
 logger = logging.getLogger(__name__)
@@ -142,6 +142,25 @@ def cli_pipeline(prompt, num_warmups, **config_kwargs):
     generate_text_for_pipeline(
         pipeline_config, prompt=prompt, num_warmups=num_warmups
     )
+
+
+@main.command(name="warm-cache")
+@pipeline_config_options
+def cli_warm_cache(**config_kwargs) -> None:
+    """Load the model and do nothing with it, warming the cache in the process.
+
+    This command is particularly useful in combination with
+    --save-to-serialized-model-path.  Providing that option to this command
+    will result in a compiled model being stored to that path.  Subsequent
+    invocations of other commands can then use --serialized-model-path to reuse
+    the previously-compiled model.
+
+    Even without --save-to-serialized-model-path, this command will as a side
+    effect warm the HuggingFace cache and in some cases, MAX compilation
+    caches.
+    """
+    pipeline_config = PipelineConfig(**config_kwargs)
+    _ = PIPELINE_REGISTRY.retrieve(pipeline_config)
 
 
 @main.command(name="list")
