@@ -104,6 +104,7 @@ class PixtralModel(PipelineModel):
             num_layers=self.pipeline_config.huggingface_config.text_config.num_hidden_layers,
             devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
+            page_size=self.pipeline_config.kv_cache_page_size,
             session=session,
         )
 

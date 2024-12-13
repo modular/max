@@ -144,6 +144,9 @@ class PipelineConfig:
     pad_to_multiple_of: int = 2
     """Pad input tensors to be a multiple of value provided."""
 
+    kv_cache_page_size: int = 512
+    """The number of tokens in a single page in the KVCache."""
+
     gpu_memory_utilization: float = 0.9
     """The fraction of available device memory that the our process should consume.
     
