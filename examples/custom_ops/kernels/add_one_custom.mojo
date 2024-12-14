@@ -36,7 +36,7 @@ struct AddOneCustom:
         @parameter
         @always_inline
         fn func[width: Int](idx: IndexList[x.rank]) -> SIMD[x.type, width]:
-            return x.load[width, x.rank](idx) + 1
+            return x.load[width](idx) + 1
 
         foreach[func, synchronous, target](out, ctx)
 
