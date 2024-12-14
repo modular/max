@@ -7,10 +7,6 @@ channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 
 [tasks]
-llama2 = "mojo run_pipeline.🔥 llama2"
-llama3 = "mojo run_pipeline.🔥 llama3"
-replit = "mojo run_pipeline.🔥 replit"
-quantize-tinystories = "mojo run_pipeline.🔥 quantize-tinystories"
 basic = "mojo basics/basic.🔥"
 inspect-guff = "mojo inspect-guff.🔥"
 
