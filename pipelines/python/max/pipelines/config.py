@@ -90,6 +90,9 @@ class WeightsFormat(str, Enum):
 
 @dataclass(frozen=False)
 class PipelineConfig:
+    huggingface_repo_id: str
+    """repo_id of a huggingface model repository to use."""
+
     engine: Optional[PipelineEngine] = None
     """Engine backend to use for serving, 'max' for the max engine, or 'huggingface' as fallback option for improved model coverage."""
 
@@ -101,9 +104,6 @@ class PipelineConfig:
 
     weight_path: list[Path] = field(default_factory=list)
     """Optional path or url of the model weights to use."""
-
-    huggingface_repo_id: Optional[str] = None
-    """Optional repo_id of a huggingface model repository to use."""
 
     device_specs: list[DeviceSpec] = field(
         default_factory=lambda: [DeviceSpec.cpu()]
@@ -149,7 +149,7 @@ class PipelineConfig:
 
     gpu_memory_utilization: float = 0.9
     """The fraction of available device memory that the our process should consume.
-    
+
     This is used to inform the size of the KVCache workspace:
         kv_cache_workspace = (total_free_memory * gpu_memory_utilization) - model_weights_size
     """
@@ -176,11 +176,6 @@ class PipelineConfig:
     """Whether the model should be built with echo capabilities."""
 
     def __post_init__(self) -> None:
-        # Validate that an architecture is provided or retrievable.
-        if self.architecture is None and self.huggingface_repo_id is None:
-            msg = "either architecture or huggingface_repo_id must be provided."
-            raise ValueError(msg)
-
         # Default if weight_path is passed as None
         if self.weight_path is None:
             msg = (
@@ -211,23 +206,15 @@ class PipelineConfig:
 
         self.weight_path = weight_paths
 
-        # Validate that if a huggingface repo_id is provided:
-        #   - that it exists
-        #   - is a repo_id versus a model_id
-        if self.huggingface_repo_id:
-            # Validate that the repo exists.
-            if not repo_exists(self.huggingface_repo_id):
-                # If repo doesnt exist, it will try to load as if a model_id is provided.
-                info = model_info(self.huggingface_repo_id)
-                self.huggingface_repo_id = info.modelId  # type: ignore
+        # Validate that the repo exists.
+        if not repo_exists(self.huggingface_repo_id):
+            # If repo doesnt exist, it will try to load as if a model_id is provided.
+            info = model_info(self.huggingface_repo_id)
+            self.huggingface_repo_id = info.modelId  # type: ignore
 
     @property
     def huggingface_config(self) -> AutoConfig:
         """Given the huggingface_repo_id, return the Huggingface Config."""
-
-        if self.huggingface_repo_id is None:
-            msg = "no huggingface_repo_id provided in PipelineConfig."
-            raise ValueError(msg)
 
         if self._huggingface_config is None:
             self._huggingface_config = AutoConfig.from_pretrained(
@@ -315,14 +302,6 @@ class PipelineConfig:
                 size += os.path.getsize(file_path)
                 continue
 
-            if self.huggingface_repo_id is None:
-                msg = (
-                    f"weight_path: {file_path} not found locally, and"
-                    " huggingface_repo_id not provided, cannot load"
-                    " weight size."
-                )
-                raise ValueError(msg)
-
             next_size = HuggingFaceFile(
                 repo_id=self.huggingface_repo_id,
                 filename=str(file_path),
@@ -338,14 +317,6 @@ class PipelineConfig:
         # Try to load locally.
         for i, file_path in enumerate(self.weight_path):
             if not os.path.exists(file_path):
-                if self.huggingface_repo_id is None:
-                    msg = (
-                        f"weight_path: {file_path} not found locally, and"
-                        " huggingface_repo_id not provided, cannot download"
-                        " weights."
-                    )
-                    raise ValueError(msg)
-
                 hf_file = HuggingFaceFile(
                     repo_id=self.huggingface_repo_id,
                     filename=str(file_path),
@@ -387,21 +358,14 @@ class PipelineConfig:
     @property
     def short_name(self) -> str:
         """Returns a short name for the model defined by this PipelineConfig."""
-        name = ""
-        if self.architecture:
-            name = self.architecture
-            if self.version:
-                name += self.version
-        else:
-            assert self.huggingface_repo_id is not None
-            name = self.huggingface_repo_id
-        return name
+        # TODO: Deprecate use of short_name.
+        return self.huggingface_repo_id
 
     @staticmethod
     def help() -> dict[str, str]:
         return {
-            "engine": "Specify the engine backend to use for serving the model. Options include 'max' for the MAX engine, or 'huggingface' as a fallback option that provides improved model coverage.",
             "huggingface_repo_id": "Specify the repository ID of a Huggingface model repository to use. This is used to load both Tokenizers, architectures and model weights.",
+            "engine": "Specify the engine backend to use for serving the model. Options include 'max' for the MAX engine, or 'huggingface' as a fallback option that provides improved model coverage.",
             "weight_path": "Provide an optional local path or path relative to the root of a Huggingface repo to the model weights you want to use. This allows you to specify custom weights instead of using defaults. You may pass multiple, ie. `--weight-path=model-00001-of-00002.safetensors --weight-path=model-00002-of-00002.safetensors`",
             "quantization_encoding": "Define the weight encoding type for quantization. This can help optimize performance and memory usage during inference. ie. q4_k, bfloat16 etc.",
             "maximum_length": "Set the maximum sequence length for input data processed by the model. The default is 512 tokens. This can be raised up until the maximum of the model provided. As this value increases memory consumed by the engine increases accordingly.",
