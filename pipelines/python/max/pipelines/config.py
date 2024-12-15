@@ -11,9 +11,19 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
-from huggingface_hub import model_info, repo_exists
+from typing import Optional, Iterable, Union
+
+from huggingface_hub import (
+    model_info,
+    repo_exists,
+    hf_hub_download,
+    file_exists,
+    list_repo_files,
+    get_safetensors_metadata,
+)
+from huggingface_hub.hf_api import ModelInfo
+from huggingface_hub.utils import SafetensorsRepoMetadata
 from max.driver import CPU, CUDA, Device, DeviceSpec
 from max.dtype import DType
 from max.graph.quantization import QuantizationEncoding
@@ -51,6 +61,21 @@ class SupportedEncoding(str, Enum):
     def __str__(self) -> str:
         return self.name
 
+    @classmethod
+    def parse_from_file_name(cls, name: str):
+        if "f32" in name or "float32" in name:
+            return SupportedEncoding.float32
+        elif "bf16" in name or "bfloat16" in name:
+            return SupportedEncoding.bfloat16
+        elif "q4_k_m" in name:
+            return SupportedEncoding.q4_k
+        elif "q4_0" in name:
+            return SupportedEncoding.q4_0
+        elif "q6_k" in name:
+            return SupportedEncoding.q6_k
+        else:
+            return None
+
     @property
     def quantization_encoding(self) -> Optional[QuantizationEncoding]:
         if self in [SupportedEncoding.float32, SupportedEncoding.bfloat16]:
@@ -86,6 +111,171 @@ class WeightsFormat(str, Enum):
     gguf = "gguf"
     safetensors = "safetensors"
     pytorch = "pytorch"
+
+
+@dataclass
+class HuggingFaceRepo:
+    repo_id: str
+    _info: Optional[ModelInfo] = None
+    _formats_available: list[WeightsFormat] = field(default_factory=list)
+    _supported_encodings: list[SupportedEncoding] = field(default_factory=list)
+    _gguf_architecture: Optional[str] = None
+    _files: Iterable[str] = field(default_factory=list)
+    _safetensors_metadata: Optional[SafetensorsRepoMetadata] = None
+
+    def __post_init__(self) -> None:
+        # Check if repo exists.
+        if not repo_exists(self.repo_id):
+            msg = f"huggingface_repo_id: {self.repo_id} does not exist"
+            raise ValueError(msg)
+
+    def __str__(self) -> str:
+        return self.repo_id
+
+    def __repr__(self) -> str:
+        return self.repo_id
+
+    @property
+    def info(self) -> ModelInfo:
+        if not self._info:
+            self._info = model_info(self.repo_id, files_metadata=False)
+
+        return self._info
+
+    @property
+    def files(self) -> Iterable[str]:
+        if not self._files:
+            self._files = list_repo_files(self.repo_id)
+
+        return self._files
+
+    @property
+    def safetensors_metadata(self) -> Optional[SafetensorsRepoMetadata]:
+        if not self._safetensors_metadata:
+            if WeightsFormat.safetensors in self.formats_available:
+                self._safetensors_metadata = get_safetensors_metadata(
+                    repo_id=self.repo_id
+                )
+
+        return self._safetensors_metadata
+
+    @property
+    def supported_encodings(self) -> list[SupportedEncoding]:
+        if not self._supported_encodings:
+            if WeightsFormat.gguf in self.formats_available:
+                for file_name in self.files:
+                    encoding = SupportedEncoding.parse_from_file_name(file_name)
+                    if encoding:
+                        self._supported_encodings.append(encoding)
+
+            if WeightsFormat.safetensors in self.formats_available:
+                if safetensors_info := self.info.safetensors:
+                    for params in safetensors_info.parameters:
+                        if "BF16" in params:
+                            self._supported_encodings.append(
+                                SupportedEncoding.bfloat16
+                            )
+                        elif "F32" in params:
+                            self._supported_encodings.append(
+                                SupportedEncoding.float32
+                            )
+
+        return self._supported_encodings
+
+    def _get_gguf_files_for_encoding(
+        self, encoding: SupportedEncoding
+    ) -> dict[WeightsFormat, list[Path]]:
+        if WeightsFormat.gguf not in self.formats_available:
+            return {}
+
+        files = []
+        for file_name in self.files:
+            file_encoding = SupportedEncoding.parse_from_file_name(file_name)
+            if file_encoding == encoding:
+                files.append(Path(file_name))
+
+        if files:
+            return {WeightsFormat.gguf: files}
+        else:
+            return {}
+
+    def _get_safetensor_files_for_encoding(
+        self, encoding: SupportedEncoding
+    ) -> dict[WeightsFormat, list[Path]]:
+        if WeightsFormat.safetensors not in self.formats_available:
+            return {}
+
+        if encoding not in self.supported_encodings:
+            return {}
+
+        if paths := [
+            Path(file) for file in self.files if file.endswith(".safetensors")
+        ]:
+            return {WeightsFormat.safetensors: paths}
+        else:
+            return {}
+
+    def file_exists(self, filename: str) -> bool:
+        return file_exists(self.repo_id, filename)
+
+    def download(self, filename: str, force_download: bool = False) -> Path:
+        return Path(
+            hf_hub_download(
+                self.repo_id, filename, force_download=force_download
+            )
+        )
+
+    def files_for_encoding(
+        self,
+        encoding: SupportedEncoding,
+        weights_format: Optional[WeightsFormat] = None,
+    ) -> dict[WeightsFormat, list[Path]]:
+        if weights_format is WeightsFormat.gguf:
+            return self._get_gguf_files_for_encoding(encoding)
+        elif weights_format == WeightsFormat.safetensors:
+            return self._get_safetensor_files_for_encoding(encoding)
+
+        gguf_files = self._get_gguf_files_for_encoding(encoding)
+        safetensor_files = self._get_safetensor_files_for_encoding(encoding)
+
+        gguf_files.update(safetensor_files)
+        return gguf_files
+
+    @property
+    def gguf_architecture(self) -> Optional[str]:
+        if not self._gguf_architecture:
+            if hasattr(self.info, "gguf"):
+                gguf_info = getattr(self.info, "gguf")
+                self._gguf_architecture = gguf_info["architecture"]
+
+        return self._gguf_architecture
+
+    @property
+    def formats_available(self) -> list[WeightsFormat]:
+        if not self._formats_available:
+            # Retrieve formats.
+            if hasattr(self.info, "gguf"):
+                self._formats_available.append(WeightsFormat.gguf)
+
+            if getattr(self.info, "safetensors", None):
+                self._formats_available.append(WeightsFormat.safetensors)
+
+        return self._formats_available
+
+    def encoding_for_file(self, file: Union[str, Path]) -> SupportedEncoding:
+        if str(file).endswith(".safetensors"):
+            # If this file is safetensors, return the first encoding, as Safetensor repos can only have one.
+            return self.supported_encodings[0]
+        elif str(file).endswith(".gguf"):
+            encoding = SupportedEncoding.parse_from_file_name(str(file))
+            if encoding:
+                return encoding
+
+            msg = f"gguf file, but encoding not found in file name: {file}"
+            raise ValueError(msg)
+        else:
+            msg = f"weight path: {file} not gguf or safetensors"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=False)
