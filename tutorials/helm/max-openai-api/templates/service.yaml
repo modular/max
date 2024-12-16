@@ -1,0 +1,26 @@
+##===----------------------------------------------------------------------===##
+#
+# This file is Modular Inc proprietary.
+#
+##===----------------------------------------------------------------------===##
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "max.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ template "max.name" . }}
+    helm.sh/chart: {{ template "max.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- with .Values.service.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports: {{- .Values.service.ports | toYaml | nindent 2 }}
+  selector:
+    app.kubernetes.io/name: {{ template "max.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  {{- if .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+  {{- end }}

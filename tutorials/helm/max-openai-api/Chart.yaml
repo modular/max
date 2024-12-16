@@ -1,0 +1,20 @@
+##===----------------------------------------------------------------------===##
+#
+# This file is Modular Inc proprietary.
+#
+##===----------------------------------------------------------------------===##
+apiVersion: v2
+appVersion: "0.1.0"
+description: The MAX platform unifies the leading AI development frameworks (TensorFlow, PyTorch, ONNX) and hardware backends in order to simplify deployment for AI production teams and accelerate innovation for AI developers.
+name: max-openai-api-chart
+home: https://www.modular.com/
+keywords:
+  - machine learning
+  - inference
+sources:
+  - https://github.com/modularml/max
+maintainers:
+  - name: Modular team
+    email: max-feedback@modular.com
+    url: https://github.com/modularml/max
+version: 0.1.0
