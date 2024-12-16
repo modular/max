@@ -24,28 +24,37 @@ from typing import (
 class TokenGeneratorRequestMessage(TypedDict):
     role: Literal["system", "user", "assistant", "tool", "function"]
     content: Union[str, list[dict[str, Any]]]
-    """ Content can be simple string or a list of message parts of different
-    modalities. For e.g.
-    {
-      "role": "user",
-      "content": "What'\''s the weather like in Boston today?"
-    }
-    or
-    {
-        "role": "user",
-        "content": [
+    """Content can be simple string or a list of message parts of different
+    modalities.
+
+    For example:
+
+    .. code-block:: json
+
+        {
+          "role": "user",
+          "content": "What'\''s the weather like in Boston today?"
+        }
+
+    Or:
+
+    .. code-block:: json
+
+        {
+          "role": "user",
+          "content": [
             {
-                "type": "text",
-                "text": "What'\''s in this image?"
+              "type": "text",
+              "text": "What'\''s in this image?"
             },
             {
-                "type": "image_url",
-                "image_url": {
-                    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
-                }
+              "type": "image_url",
+              "image_url": {
+                  "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+              }
             }
-        ]
-    }
+          ]
+        }
     """
 
 
