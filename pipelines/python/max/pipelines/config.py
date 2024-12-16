@@ -11,18 +11,17 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-
-from typing import Optional, Iterable, Union
+from typing import Iterable, Optional, Union
 
 from huggingface_hub import (
-    hf_hub_url,
-    hf_hub_download,
+    file_exists,
     get_hf_file_metadata,
+    get_safetensors_metadata,
+    hf_hub_download,
+    hf_hub_url,
+    list_repo_files,
     model_info,
     repo_exists,
-    file_exists,
-    list_repo_files,
-    get_safetensors_metadata,
 )
 from huggingface_hub.hf_api import ModelInfo
 from huggingface_hub.utils import SafetensorsRepoMetadata
