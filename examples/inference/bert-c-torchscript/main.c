@@ -79,21 +79,21 @@ int main(int argc, char **argv) {
       (int64_t *)readFileOrExit("inputs/input_ids_shape.bin");
   M_TorchInputSpec *inputIdsInputSpec =
       M_newTorchInputSpec(inputIdsShape, /*dimNames=*/NULL, /*rankSize=*/2,
-                          /*type=*/M_INT32, status);
+                          /*type=*/M_INT32, /*device=*/"", status);
   CHECK(status);
 
   int64_t *attentionMaskShape =
       (int64_t *)readFileOrExit("inputs/attention_mask_shape.bin");
   M_TorchInputSpec *attentionMaskInputSpec =
       M_newTorchInputSpec(attentionMaskShape, /*dimNames=*/NULL, /*rankSize=*/2,
-                          /*type=*/M_INT32, status);
+                          /*type=*/M_INT32, /*device=*/"", status);
   CHECK(status);
 
   int64_t *tokenTypeIdsShape =
       (int64_t *)readFileOrExit("inputs/token_type_ids_shape.bin");
   M_TorchInputSpec *tokenTypeIdsInputSpec =
       M_newTorchInputSpec(tokenTypeIdsShape, /*dimNames=*/NULL, /*rankSize=*/2,
-                          /*type=*/M_INT32, status);
+                          /*type=*/M_INT32, /*device=*/"", status);
   CHECK(status);
 
   M_TorchInputSpec *inputSpecs[3] = {inputIdsInputSpec, attentionMaskInputSpec,
