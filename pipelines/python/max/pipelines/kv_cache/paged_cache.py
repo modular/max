@@ -416,13 +416,18 @@ class PagedKVCacheManager(KVCacheManager):
         for seq_id, length in seq_ids_and_lengths.items():
             if seq_id not in self.active_requests:
                 raise ValueError(f"seq_id: {seq_id} not in active requests.")
+
             request_metadata = self.active_requests[seq_id]
+
             expected_num_pages = ceildiv(
-                length + self.cache_lengths[seq_id], self.page_size
+                length + self.cache_lengths[seq_id] + num_steps - 1,
+                self.page_size,
             )
+
             actual_num_pages = len(request_metadata.inflight_blocks) + len(
                 request_metadata.committed_blocks
             )
+
             if expected_num_pages != actual_num_pages:
                 raise ValueError(
                     f"Mismatch between expected and actual number of pages for seq_id: {seq_id}. Expected: {expected_num_pages}, Actual: {actual_num_pages}  "

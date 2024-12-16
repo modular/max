@@ -114,8 +114,11 @@ class NaiveKVCacheManager(KVCacheManager):
                 )
                 raise ValueError(msg)
 
-            if self.cache_lengths[seq_id] + num_new_tokens > self.max_seq_len:
-                msg = f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} with {num_new_tokens} new tokens. Existing length: {self.cache_lengths[seq_id]}"
+            total_length = (
+                self.cache_lengths[seq_id] + num_new_tokens + num_steps - 1
+            )
+            if total_length > self.max_seq_len:
+                msg = f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} with {num_new_tokens + num_steps - 1} new tokens. Existing length: {self.cache_lengths[seq_id]}"
                 raise ValueError(msg)
 
         return [

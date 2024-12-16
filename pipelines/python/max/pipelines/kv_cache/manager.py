@@ -110,7 +110,7 @@ class KVCacheManager(ABC):
             if id not in self.cache_lengths:
                 raise ValueError(f"seq_id: {id} not in cache.")
 
-            self.cache_lengths[id] += length
+            self.cache_lengths[id] += length + num_steps - 1
 
     def release(self, seq_id: int) -> None:
         """Release `seq_id` provided, marking this sequence as complete.
