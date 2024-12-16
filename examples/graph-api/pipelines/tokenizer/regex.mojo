@@ -86,7 +86,7 @@ struct _CRegex:
         # _CRegex can't be safely moved once it's initialized.
         # We have to implement __move__ currently to satisfy ArcPointer's Movable
         # trait bounds.
-        self.__init__()
+        self = Self()
 
     fn __del__(owned self):
         if self._initialized:
