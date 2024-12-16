@@ -11,16 +11,17 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-from .model import ReplitModel
 from max.pipelines import (
     HuggingFaceFile,
     SupportedArchitecture,
-    SupportedVersion,
     SupportedEncoding,
+    SupportedVersion,
     TextTokenizer,
     WeightsFormat,
 )
 from max.pipelines.kv_cache import KVCacheStrategy
+
+from .model import ReplitModel
 
 replit_arch = SupportedArchitecture(
     name="MPTForCausalLM",

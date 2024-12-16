@@ -10,8 +10,8 @@ from typing import List
 
 from max.driver import Device, Tensor
 from max.dtype import DType
-from max.graph import TensorType, Graph, DeviceRef
 from max.engine import InferenceSession
+from max.graph import DeviceRef, Graph, TensorType
 
 from .cache_params import KVCacheParams
 

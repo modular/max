@@ -12,8 +12,8 @@ from pathlib import Path
 
 from huggingface_hub import (
     file_exists,
-    hf_hub_download,
     get_hf_file_metadata,
+    hf_hub_download,
     hf_hub_url,
 )
 

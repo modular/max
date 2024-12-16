@@ -20,11 +20,10 @@ import torch
 from llama3.config import get_llama_huggingface_file
 from max.driver import CPU, CUDA
 from max.pipelines import (
+    PIPELINE_REGISTRY,
     PipelineConfig,
     SupportedEncoding,
-    PIPELINE_REGISTRY,
 )
-
 from shared import (
     RAG_PROMPT,
     RAG_SYSTEM_PROMPT,

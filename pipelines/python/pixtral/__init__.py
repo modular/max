@@ -11,9 +11,10 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-from .pixtral import PixtralModel
 from max.pipelines import PIPELINE_REGISTRY
+
 from .arch import pixtral_arch
+from .pixtral import PixtralModel
 
 PIPELINE_REGISTRY.register(pixtral_arch)
 

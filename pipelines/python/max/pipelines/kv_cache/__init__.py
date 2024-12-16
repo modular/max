@@ -4,9 +4,10 @@
 #
 # ===----------------------------------------------------------------------=== #
 
+from typing import Any, Dict, List, Optional, Type
+
 from max.driver import Device
 from max.engine import InferenceSession
-from typing import List, Any, Dict, Type, Optional
 
 from .cache_params import KVCacheParams, KVCacheStrategy
 from .continuous_batching_cache import (
@@ -18,14 +19,14 @@ from .continuous_batching_cache import (
     FetchContinuousBatchingKVCacheCollection,
 )
 from .hf import ContinuousHFStaticCache
-from .paged_cache import (
-    PagedKVCacheManager,
-    PagedKVCacheCollection,
-    PagedKVCacheType,
-    FetchPagedKVCacheCollection,
-)
 from .manager import KVCacheManager
 from .naive_cache import NaiveKVCacheManager
+from .paged_cache import (
+    FetchPagedKVCacheCollection,
+    PagedKVCacheCollection,
+    PagedKVCacheManager,
+    PagedKVCacheType,
+)
 from .radix_trie import RadixTrie
 
 CACHE_MANAGER_REGISTRY: dict[KVCacheStrategy, Type[KVCacheManager]] = {

@@ -11,23 +11,23 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-from enum import Enum
 import os
-from pathlib import Path
 import subprocess
-from typing import Optional, List, Tuple
+from enum import Enum
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 try:
     from rich.console import Console
-    from rich.table import Table
     from rich.prompt import Confirm
+    from rich.table import Table
 
 except ImportError:
     print("rich not found. Installing rich...")
     subprocess.run(["python3", "-m", "pip", "install", "rich"])
     from rich.console import Console
-    from rich.table import Table
     from rich.prompt import Confirm
+    from rich.table import Table
 
 ROOT = Path(os.path.dirname(__file__))
 RETRIES = 10

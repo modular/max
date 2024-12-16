@@ -12,8 +12,8 @@
 # ===----------------------------------------------------------------------=== #
 
 import torch
-from transformers import ResNetForImageClassification
 from torch.onnx import export
+from transformers import ResNetForImageClassification
 
 # The HuggingFace model name and exported file name
 HF_MODEL_NAME = "microsoft/resnet-50"

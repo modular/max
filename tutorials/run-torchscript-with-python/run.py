@@ -14,10 +14,9 @@
 from pathlib import Path
 
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-
 from max import engine
 from max.dtype import DType
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 # The HuggingFace model name and TorchScript file name
 HF_MODEL_NAME = "cardiffnlp/twitter-roberta-base-emotion-multilabel-latest"

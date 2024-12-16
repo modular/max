@@ -12,7 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 """All configurable parameters for Llama3."""
 
-from max.pipelines import SupportedEncoding, HuggingFaceFile
+from max.pipelines import HuggingFaceFile, SupportedEncoding
 
 
 def get_llama_huggingface_file(

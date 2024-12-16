@@ -11,9 +11,9 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-import numpy as np
 from pathlib import Path
 
+import numpy as np
 from max.driver import CPU, CUDA, accelerator_count
 from max.dtype import DType
 from max.engine import InferenceSession

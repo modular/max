@@ -14,9 +14,9 @@
 
 import os
 import signal
-from ultralytics import YOLO
 from argparse import ArgumentParser
 
+from ultralytics import YOLO
 
 DEFAULT_MODEL_DIR = "../../models/yolo"
 DESCRIPTION = "Download a Yolo segmentation model."

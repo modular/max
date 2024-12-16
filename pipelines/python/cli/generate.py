@@ -12,19 +12,21 @@
 # ===----------------------------------------------------------------------=== #
 """Utilities for generating text in the cli."""
 
-import uuid
 import asyncio
 import logging
+import uuid
 from typing import Optional
+
 from max.pipelines import (
-    PipelineConfig,
     PIPELINE_REGISTRY,
+    PipelineConfig,
 )
 from max.pipelines.interfaces import (
-    TokenGeneratorRequest,
     PipelineTokenizer,
     TokenGenerator,
+    TokenGeneratorRequest,
 )
+
 from .metrics import TextGenerationMetrics
 
 logger = logging.getLogger(__name__)

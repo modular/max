@@ -12,8 +12,9 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import PIPELINE_REGISTRY
-from .llama_vision import LlamaVision
+
 from .arch import llama_vision_arch
+from .llama_vision import LlamaVision
 
 PIPELINE_REGISTRY.register(llama_vision_arch)
 

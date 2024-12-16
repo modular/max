@@ -7,9 +7,9 @@
 
 from .config import (
     PipelineConfig,
+    PipelineEngine,
     SupportedEncoding,
     WeightsFormat,
-    PipelineEngine,
 )
 from .context import InputContext, TextAndVisionContext, TextContext
 from .hf_utils import HuggingFaceFile
@@ -26,8 +26,8 @@ from .response import LogProbabilities, TextResponse
 from .tokenizer import (
     IdentityPipelineTokenizer,
     PreTrainedPipelineTokenizer,
-    TextTokenizer,
     TextAndVisionTokenizer,
+    TextTokenizer,
 )
 
 __all__ = [

@@ -12,9 +12,10 @@ from typing import List
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
-from max.graph import TensorType, BufferType
-from .manager import KVCacheManager
+from max.graph import BufferType, TensorType
+
 from .cache_params import KVCacheParams
+from .manager import KVCacheManager
 
 
 class NaiveKVCacheManager(KVCacheManager):

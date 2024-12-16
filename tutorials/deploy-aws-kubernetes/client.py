@@ -18,7 +18,6 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "critical"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import numpy as np
-
 import tritonclient.http as httpclient
 from transformers import AutoTokenizer
 

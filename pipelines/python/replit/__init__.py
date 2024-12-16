@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import PIPELINE_REGISTRY
+
 from .arch import replit_arch
 from .model import ReplitModel
 

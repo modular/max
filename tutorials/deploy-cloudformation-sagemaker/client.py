@@ -17,10 +17,11 @@ import os
 os.environ["TRANSFORMERS_VERBOSITY"] = "critical"
 
 import json
+
 import boto3
+import numpy as np
 import transformers
 from botocore.config import Config
-import numpy as np
 
 config = Config(region_name="us-east-1")
 client = boto3.client("sagemaker-runtime", config=config)

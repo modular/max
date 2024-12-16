@@ -19,7 +19,7 @@ import numpy as np
 from max.driver import Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
-from max.pipelines import PipelineModel, TextAndVisionContext, ModelOutputs
+from max.pipelines import ModelOutputs, PipelineModel, TextAndVisionContext
 from max.pipelines.kv_cache import (
     KVCacheManager,
     KVCacheParams,

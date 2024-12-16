@@ -12,8 +12,9 @@ from itertools import chain
 from typing import Dict, Iterator
 
 import numpy as np
-
+from max.driver import Device, Tensor
 from max.dtype import DType
+from max.engine import InferenceSession
 from max.graph import (
     DeviceRef,
     TensorType,
@@ -22,8 +23,6 @@ from max.graph import (
     _OpaqueValue,
     ops,
 )
-from max.engine import InferenceSession
-from max.driver import Device, Tensor
 
 from .cache_params import KVCacheParams
 from .manager import KVCacheManager

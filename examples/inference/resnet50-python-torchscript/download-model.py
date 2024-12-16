@@ -18,8 +18,9 @@ from argparse import ArgumentParser
 # suppress extraneous logging
 os.environ["TRANSFORMERS_VERBOSITY"] = "critical"
 
-import torch
 from pathlib import Path
+
+import torch
 from transformers import ResNetForImageClassification
 
 DEFAULT_MODEL_PATH = "../../models/resnet50.torchscript"
