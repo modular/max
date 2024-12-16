@@ -208,7 +208,8 @@ def run_llama3(
     """Runs the Llama3 pipeline."""
 
     # Update basic parameters.
-    if "huggingface_repo_id" not in config_kwargs:
+    repo_id = config_kwargs.get("huggingface_repo_id", None)
+    if not repo_id:
         config_kwargs["huggingface_repo_id"] = "modularai/llama-3.1"
 
     config = PipelineConfig(**config_kwargs)
@@ -277,7 +278,8 @@ def replit(
     # Update basic parameters.
     config_kwargs["trust_remote_code"] = True
 
-    if "huggingface_repo_id" not in config_kwargs:
+    repo_id = config_kwargs.get("huggingface_repo_id", None)
+    if not repo_id:
         config_kwargs["huggingface_repo_id"] = "modularai/replit-code-1.5"
 
     # Initialize config, and serve.
