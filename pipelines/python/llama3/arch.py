@@ -26,6 +26,22 @@ from .safetensor_converter import LlamaSafetensorWeights
 
 llama_arch = SupportedArchitecture(
     name="LlamaForCausalLM",
+    default_encoding=SupportedEncoding.q4_k,
+    supported_encodings={
+        SupportedEncoding.q4_k: [KVCacheStrategy.NAIVE],
+        SupportedEncoding.q4_0: [KVCacheStrategy.NAIVE],
+        SupportedEncoding.q6_k: [KVCacheStrategy.NAIVE],
+        SupportedEncoding.float32: [
+            KVCacheStrategy.PAGED,
+            KVCacheStrategy.CONTINUOUS,
+            KVCacheStrategy.NAIVE,
+        ],
+        SupportedEncoding.bfloat16: [
+            KVCacheStrategy.PAGED,
+            KVCacheStrategy.CONTINUOUS,
+            KVCacheStrategy.NAIVE,
+        ],
+    },
     versions=[
         SupportedVersion(
             name="3",

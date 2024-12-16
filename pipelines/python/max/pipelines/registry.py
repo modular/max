@@ -84,6 +84,8 @@ class SupportedArchitecture:
     def __init__(
         self,
         name: str,
+        default_encoding: SupportedEncoding,
+        supported_encodings: dict[SupportedEncoding, list[KVCacheStrategy]],
         versions: list[SupportedVersion],
         default_version: str,
         pipeline_model: Type[PipelineModel],
@@ -110,6 +112,8 @@ class SupportedArchitecture:
                 input checkpoint has a different format than the default.
         """
         self.name = name
+        self.default_encoding = default_encoding
+        self.supported_encodings = supported_encodings
         self.versions = {version.name: version for version in versions}
 
         if default_version not in self.versions:

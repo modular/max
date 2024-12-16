@@ -25,6 +25,10 @@ from .model import MistralModel
 
 mistral_arch = SupportedArchitecture(
     name="MistralForCausalLM",
+    default_encoding=SupportedEncoding.bfloat16,
+    supported_encodings={
+        SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS]
+    },
     versions=[
         SupportedVersion(
             name="default",

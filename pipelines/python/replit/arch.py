@@ -24,6 +24,11 @@ from max.pipelines.kv_cache import KVCacheStrategy
 
 replit_arch = SupportedArchitecture(
     name="MPTForCausalLM",
+    default_encoding=SupportedEncoding.bfloat16,
+    supported_encodings={
+        SupportedEncoding.float32: [KVCacheStrategy.CONTINUOUS],
+        SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS],
+    },
     versions=[
         SupportedVersion(
             name="1.5",
