@@ -40,7 +40,7 @@ async def stream_text_to_console(
     prompt: str,
     metrics: Optional[TextGenerationMetrics] = None,
     print_tokens: bool = True,
-):
+) -> None:
     # Length of request_id_context_dict should be == batch_size.
     request_id_context = {}
 
@@ -102,7 +102,7 @@ async def stream_text_to_console(
 
 def generate_text_for_pipeline(
     pipeline_config: PipelineConfig, prompt: str, num_warmups: int = 0
-):
+) -> None:
     # Run timed run & print results.
     with TextGenerationMetrics(print_report=True) as metrics:
         # Load tokenizer and Pipeline.

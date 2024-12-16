@@ -455,7 +455,7 @@ PIPELINE_REGISTRY = PipelineRegistry([])
 
 
 def _weights_from_huggingface(
-    repo_id,
+    repo_id: str,
     default_weights_format: WeightsFormat,
     weight_converters: dict[WeightsFormat, Type[WeightsConverter]],
     arch_name: str,
@@ -516,14 +516,14 @@ def _weights_from_huggingface(
         )
 
 
-def _load_gguf(repo_id, files: list[str]) -> list[Path]:
+def _load_gguf(repo_id: str, files: list[str]) -> list[Path]:
     trim_prefix = len(repo_id) + 1  # Trim "{user}/{repo_name}/" from the path.
     if len(files) > 1:
         raise ValueError(f"Found multiple ggufs in HuggingFace repo {repo_id}")
     return [Path(files[0][trim_prefix:])]
 
 
-def _load_safetensors(repo_id, files: list[str]) -> list[Path]:
+def _load_safetensors(repo_id: str, files: list[str]) -> list[Path]:
     trim_prefix = len(repo_id) + 1  # Trim "{user}/{repo_name}/" from the path.
     trimmed_files = [f[trim_prefix:] for f in files]
     sharded = SAFE_WEIGHTS_INDEX_NAME in trimmed_files
@@ -540,7 +540,7 @@ def _load_safetensors(repo_id, files: list[str]) -> list[Path]:
     )
 
 
-def _load_pytorch(repo_id, files: list[str]) -> list[Path]:
+def _load_pytorch(repo_id: str, files: list[str]) -> list[Path]:
     trim_prefix = len(repo_id) + 1  # Trim "{user}/{repo_name}/" from the path.
     if len(files) > 1:
         raise ValueError(

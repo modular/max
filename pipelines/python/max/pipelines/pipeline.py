@@ -249,7 +249,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         pipeline_model: Type[PipelineModel],
         # TODO: This should be removed.
         eos_token_id: int,
-    ):
+    ) -> None:
         self._pipeline_config = pipeline_config
         self._eos_token_id = eos_token_id
 
