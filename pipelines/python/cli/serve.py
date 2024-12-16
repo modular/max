@@ -14,7 +14,6 @@
 
 import functools
 import logging
-import os
 from typing import Callable, Optional, Union
 
 import uvloop
@@ -32,7 +31,6 @@ from max.serve.pipelines.performance_fake import (
     PerformanceFakingPipelineTokenizer,
     get_performance_fake,
 )
-from opentelemetry import trace
 from transformers import AutoTokenizer
 from uvicorn import Server
 
@@ -150,16 +148,6 @@ def serve_pipeline(
         debug_settings,
         serving_settings,
     )
-
-    # Export traces to Datadog.
-    if os.environ.get("MODULAR_ENABLE_TRACING"):
-        try:
-            from ddtrace.opentelemetry import TracerProvider  # type: ignore
-
-            logger.info("Exporting traces to datadog")
-            trace.set_tracer_provider(TracerProvider())
-        except ImportError:
-            logger.info("ddtrace not found. Not exporting traces")
 
     server = Server(fastapi_config(app=app))
     uvloop.run(server.serve())
