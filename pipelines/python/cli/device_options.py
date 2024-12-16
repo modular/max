@@ -24,15 +24,6 @@ class DevicesOptionType(click.ParamType):
             return []
         try:
             results = [int(i) for i in value.split(",")]
-            if len(results) > 1:
-                self.fail(
-                    (
-                        f"{value!r} is not supported at the moment - Only 1"
-                        " device is supported."
-                    ),
-                    param,
-                    ctx,
-                )
             return results
         except ValueError:
             self.fail(
