@@ -15,9 +15,11 @@ from pathlib import Path
 from typing import Optional, Iterable, Union
 
 from huggingface_hub import (
+    hf_hub_url,
+    hf_hub_download,
+    get_hf_file_metadata,
     model_info,
     repo_exists,
-    hf_hub_download,
     file_exists,
     list_repo_files,
     get_safetensors_metadata,
@@ -35,8 +37,6 @@ from max.graph.weights import (
 )
 from max.pipelines.kv_cache import KVCacheStrategy
 from transformers import AutoConfig
-
-from .hf_utils import HuggingFaceFile
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +148,11 @@ class HuggingFaceRepo:
             self._files = list_repo_files(self.repo_id)
 
         return self._files
+
+    def size_of(self, filename: str) -> Union[int, None]:
+        url = hf_hub_url(self.repo_id, filename)
+        metadata = get_hf_file_metadata(url)
+        return metadata.size
 
     @property
     def safetensors_metadata(self) -> Optional[SafetensorsRepoMetadata]:
@@ -397,10 +402,7 @@ class PipelineConfig:
         self.weight_path = weight_paths
 
         # Validate that the repo exists.
-        if not repo_exists(self.huggingface_repo_id):
-            # If repo doesnt exist, it will try to load as if a model_id is provided.
-            info = model_info(self.huggingface_repo_id)
-            self.huggingface_repo_id = info.modelId  # type: ignore
+        self.huggingface_repo = HuggingFaceRepo(self.huggingface_repo_id)
 
     @property
     def huggingface_config(self) -> AutoConfig:
@@ -492,10 +494,7 @@ class PipelineConfig:
                 size += os.path.getsize(file_path)
                 continue
 
-            next_size = HuggingFaceFile(
-                repo_id=self.huggingface_repo_id,
-                filename=str(file_path),
-            ).size()
+            next_size = self.huggingface_repo.size_of(str(file_path))
 
             if next_size is None:
                 return None
@@ -505,23 +504,21 @@ class PipelineConfig:
 
     def download_weights(self) -> None:
         # Try to load locally.
-        for i, file_path in enumerate(self.weight_path):
-            if not os.path.exists(file_path):
-                hf_file = HuggingFaceFile(
-                    repo_id=self.huggingface_repo_id,
-                    filename=str(file_path),
-                )
+        if all([os.path.exists(file_path) for file_path in self.weight_path]):
+            logger.info("All files exist locally, skipping download.")
+            return
 
-                start_time = datetime.datetime.now()
-                logger.info(
-                    f"Starting download of model: {self.huggingface_repo_id}."
-                )
-                self.weight_path[i] = hf_file.download(
-                    force_download=self.force_download
-                )
-                logger.info(
-                    f"Finished download of model: {self.huggingface_repo_id} in {(datetime.datetime.now() - start_time).total_seconds()} seconds."
-                )
+        start_time = datetime.datetime.now()
+        logger.info(f"Starting download of model: {self.huggingface_repo_id}")
+        for i, file_path in enumerate(self.weight_path):
+            self.weight_path[i] = self.huggingface_repo.download(
+                str(file_path),
+                force_download=self.force_download,
+            )
+
+        logger.info(
+            f"Finished download of model: {self.huggingface_repo_id} in {(datetime.datetime.now() - start_time).total_seconds()} seconds."
+        )
 
     def load_weights(self) -> Weights:
         self.download_weights()
