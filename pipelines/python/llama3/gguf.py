@@ -12,10 +12,10 @@
 # ===----------------------------------------------------------------------=== #
 """Build a Llama3 model via Graph API from GGUF weights."""
 
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 from max.dtype import DType
-from max.graph import DeviceRef, Graph, ops, TensorValue, TensorValueLike
+from max.graph import DeviceRef, Graph, TensorValue, TensorValueLike, ops
 from max.graph.quantization import QuantizationEncoding
 from max.graph.weights import Weights
 from max.pipelines import PipelineConfig
@@ -27,19 +27,19 @@ from max.pipelines.kv_cache import (
 )
 from nn import (
     MLP,
-    DistributedMLP,
     AttentionWithRope,
     DistributedAttentionWithRope,
-    Embedding,
-    Linear,
+    DistributedMLP,
+    DistributedRMSNorm,
     DistributedTransformer,
     DistributedTransformerBlock,
+    Embedding,
+    Linear,
     NaiveAttentionWithRope,
     NaiveTransformer,
     NaiveTransformerBlock,
     OptimizedRotaryEmbedding,
     RMSNorm,
-    DistributedRMSNorm,
     RotaryEmbedding,
     Transformer,
     TransformerBlock,

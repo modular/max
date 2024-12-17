@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import time
 import warnings
-from typing import Sequence, List, Union
+from typing import List, Sequence, Union
 
 import numpy as np
 from dataprocessing import batch_padded_tokens_and_mask
@@ -40,7 +40,7 @@ from max.pipelines.kv_cache import (
 )
 from nn.compute_log_probabilities import compute_log_probabilities
 
-from .gguf import transformer, distributed_transformer_opaque
+from .gguf import distributed_transformer_opaque, transformer
 
 
 class Llama3Model(PipelineModel):

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import List
 
 from max.dtype import DType
-from max.graph import TensorValue, ops, DeviceRef
+from max.graph import DeviceRef, TensorValue, ops
 from max.pipelines.kv_cache import ContinuousBatchingKVCacheCollection
 
 from ..kernels import (

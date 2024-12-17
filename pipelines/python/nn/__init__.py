@@ -17,15 +17,15 @@ from .attention import (
     AttentionImplQKV,
     AttentionQKV,
     AttentionWithRope,
+    AttentionWithRopeQKV,
     DistributedAttentionImpl,
     DistributedAttentionWithRope,
-    AttentionWithRopeQKV,
     NaiveAttentionWithRope,
 )
 from .conv import Conv2D
 from .embedding import Embedding
-from .linear import MLP, Linear, DistributedMLP
-from .norm import LPLayerNorm, RMSNorm, DistributedRMSNorm
+from .linear import MLP, DistributedMLP, Linear
+from .norm import DistributedRMSNorm, LPLayerNorm, RMSNorm
 from .rotary_embedding import OptimizedRotaryEmbedding, RotaryEmbedding
 from .sequential import Sequential
 from .transformer import (

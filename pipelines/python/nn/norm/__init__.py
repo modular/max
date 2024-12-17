@@ -12,6 +12,6 @@
 # ===----------------------------------------------------------------------=== #
 
 from .lp_norm import LPLayerNorm
-from .rms_norm import RMSNorm, DistributedRMSNorm
+from .rms_norm import DistributedRMSNorm, RMSNorm
 
 __all__ = ["LPLayerNorm", "RMSNorm", "DistributedRMSNorm"]

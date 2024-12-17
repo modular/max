@@ -15,7 +15,7 @@
 
 from dataclasses import dataclass
 
-from max.graph import TensorType, TensorValue, TensorValueLike, ops, DeviceRef
+from max.graph import DeviceRef, TensorType, TensorValue, TensorValueLike, ops
 
 from ..layer import Layer
 

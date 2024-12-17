@@ -15,8 +15,8 @@
 from .attention import Attention, AttentionQKV
 from .attention_with_rope import (
     AttentionWithRope,
-    DistributedAttentionWithRope,
     AttentionWithRopeQKV,
+    DistributedAttentionWithRope,
 )
 from .interfaces import (
     AttentionImpl,

@@ -28,7 +28,7 @@ from ..attention.interfaces import DistributedAttentionImpl
 from ..embedding import Embedding
 from ..layer import Layer
 from ..linear import DistributedMLP, Linear
-from ..norm import LPLayerNorm, RMSNorm, DistributedRMSNorm
+from ..norm import DistributedRMSNorm, LPLayerNorm, RMSNorm
 
 
 # TODO (pavan): clean up duplicate instances of distribute_value, shard_col_value,
