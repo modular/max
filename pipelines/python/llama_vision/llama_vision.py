@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
+
 from __future__ import annotations
 
 import logging
@@ -129,15 +130,6 @@ class LlamaVision(PipelineModel):
         )
 
     def _llama3_vision_graph(self) -> Graph:
-        # TODO: Verify if the mapping is correct:
-        # From dumping the inputs before executing the reference model...
-        # key: input_id_values, shape: torch.Size([1, 14])
-        # key: pixel_values, shape: torch.Size([1, 1, 4, 3, 448, 448])
-        # but manually transposed by us from CHW -> HWC
-        # key: aspect_ratio_ids, shape: torch.Size([1, 1])
-        # key: aspect_ratio_mask, shape: torch.Size([1, 1, 4])
-        # key: cross_attention_mask, shape: torch.Size([1, 14, 1, 4])
-
         # Inserted a manual CHW -> HWC transpose here.
         pixel_values_type = TensorType(
             self.pipeline_config.dtype,
@@ -188,15 +180,21 @@ class LlamaVision(PipelineModel):
         self,
         context_batch: Sequence[TextAndVisionContext],  # type: ignore
     ) -> tuple[Tensor, ...]:
+        """Creates tensors of token and image inputs, if applicable."""
         if self.pipeline_config.cache_strategy != KVCacheStrategy.CONTINUOUS:
             msg = "Llama Vision only supports continuous batching"
             raise ValueError(msg)
 
+        # Marshal out hyperparameters.
         batch_size = len(context_batch)
         height = self.vision_config.image_size
         width = self.vision_config.image_size
         num_channels = self.vision_config.num_channels
         max_num_tiles = self.vision_config.max_num_tiles
+        patch_size = self.vision_config.patch_size
+        # TODO(bduke): account for the actual instead of max number of tiles.
+        image_seq_len = max_num_tiles * (height * width) // patch_size**2
+
         pixel_values = Tensor.zeros(
             shape=[batch_size, 1, max_num_tiles, height, width, num_channels],
             dtype=self.pipeline_config.dtype,
@@ -209,13 +207,24 @@ class LlamaVision(PipelineModel):
         ).to(self.pipeline_config.device)
 
         # Input row offset type: ["input_row_offsets_len"], UInt32
-        pixel_row_offsets = Tensor.from_numpy(
+        input_id_row_offsets = Tensor.from_numpy(
             np.cumsum(
                 [0] + [ctx.seq_len for ctx in context_batch],
                 dtype=np.uint32,
             )
         ).to(self.pipeline_config.device)
-        input_id_row_offsets = pixel_row_offsets
+
+        pixel_row_offsets = Tensor.from_numpy(
+            np.cumsum(
+                [0]
+                + [
+                    # Use an input row offset of 0 to mean no image.
+                    image_seq_len if ctx.pixel_values is not None else 0
+                    for ctx in context_batch
+                ],
+                dtype=np.uint32,
+            )
+        ).to(self.pipeline_config.device)
 
         # Input Ids: ["total_seq_len"], Int64
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
