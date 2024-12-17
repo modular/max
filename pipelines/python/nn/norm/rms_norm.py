@@ -34,5 +34,5 @@ class RMSNorm(Layer):
         return ops.custom(
             "rms_norm",
             [x, ops.cast(self.weight, x.dtype), ops.cast(self.eps, x.dtype)],
-            [TensorType(dtype=x.dtype, shape=x.shape)],
+            [TensorType(dtype=x.dtype, shape=x.shape, device=x.device)],
         )[0].tensor
