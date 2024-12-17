@@ -338,10 +338,18 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
                     shape=["batch_size"],
                     device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
-                # max_lengths
+                # max_lengths (on host)
                 TensorType(
                     DType.uint32,
                     shape=["steps_remaining", 2],
+                    # TODO: This is a hack introduced to remediate a negative side effect
+                    # of the graph compiler changes introduced in #52793.
+                    # We are tricking the compiler into thinking that the max_lengths
+                    # tensor is on the device, even though it is on the host.
+                    # With #52793 graph compiler changes, the compiler would
+                    # insert erroneous device transfers that lead to CUDA_ILLEGAL_ADDRESS
+                    # errors if we don't do this forceful device specification.
+                    device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
             )
             for i in range(len(self.devices))
