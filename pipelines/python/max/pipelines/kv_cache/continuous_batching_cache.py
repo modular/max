@@ -339,7 +339,10 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
                     device=DeviceRef(self.devices[i].label, self.devices[i].id),
                 ),
                 # max_lengths
-                TensorType(DType.uint32, shape=["steps_remaining", 2]),
+                TensorType(
+                    DType.uint32,
+                    shape=["steps_remaining", 2],
+                ),
             )
             for i in range(len(self.devices))
         ]
