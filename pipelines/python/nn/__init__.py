@@ -17,16 +17,20 @@ from .attention import (
     AttentionImplQKV,
     AttentionQKV,
     AttentionWithRope,
+    DistributedAttentionImpl,
+    DistributedAttentionWithRope,
     AttentionWithRopeQKV,
     NaiveAttentionWithRope,
 )
 from .conv import Conv2D
 from .embedding import Embedding
-from .linear import MLP, Linear
-from .norm import LPLayerNorm, RMSNorm
+from .linear import MLP, Linear, DistributedMLP
+from .norm import LPLayerNorm, RMSNorm, DistributedRMSNorm
 from .rotary_embedding import OptimizedRotaryEmbedding, RotaryEmbedding
 from .sequential import Sequential
 from .transformer import (
+    DistributedTransformer,
+    DistributedTransformerBlock,
     NaiveTransformer,
     NaiveTransformerBlock,
     Transformer,
@@ -40,16 +44,22 @@ __all__ = [
     "AttentionImplQKV",
     "AttentionWithRope",
     "AttentionWithRopeQKV",
+    "DistributedAttentionImpl",
+    "DistributedAttentionWithRope",
+    "DistributedTransformer",
+    "DistributedTransformerBlock",
     "NaiveAttentionWithRope",
     "Conv2D",
     "Embedding",
     "Linear",
     "LPLayerNorm",
     "MLP",
+    "DistributedMLP",
     "NaiveTransformer",
     "NaiveTransformerBlock",
     "OptimizedRotaryEmbedding",
     "RMSNorm",
+    "DistributedRMSNorm",
     "RotaryEmbedding",
     "Sequential",
     "Transformer",

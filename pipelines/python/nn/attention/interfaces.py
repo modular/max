@@ -102,6 +102,21 @@ class AttentionImpl(ABC, Layer):
 
 
 @dataclass
+class DistributedAttentionImpl(ABC, Layer):
+    """
+    A generalized Distributed attention interface.
+    """
+
+    @abstractmethod
+    def __call__(
+        self,
+        x: list[TensorValue],
+        kv_collections: list[ContinuousBatchingKVCacheCollection],
+        **kwargs,
+    ) -> list[TensorValue]: ...
+
+
+@dataclass
 class AttentionImplQKV(ABC, Layer):
     """
     A generalized attention interface, that will be used upstream by a general Transformer.

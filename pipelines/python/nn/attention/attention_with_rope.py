@@ -13,9 +13,10 @@
 """An opaque KV Cache optimized attention mechanism with Rope."""
 
 from dataclasses import dataclass
+from typing import List
 
 from max.dtype import DType
-from max.graph import TensorValue, ops
+from max.graph import TensorValue, ops, DeviceRef
 from max.pipelines.kv_cache import ContinuousBatchingKVCacheCollection
 
 from ..kernels import (
@@ -25,7 +26,11 @@ from ..kernels import (
     fused_qkv_ragged_matmul,
 )
 from ..rotary_embedding import OptimizedRotaryEmbedding
-from .interfaces import AttentionImpl, AttentionImplQKV
+from .interfaces import (
+    AttentionImpl,
+    AttentionImplQKV,
+    DistributedAttentionImpl,
+)
 
 
 @dataclass
@@ -58,8 +63,10 @@ class AttentionWithRope(AttentionImpl):
         # Apply rope.
         xq = xq.reshape((-1, self.n_heads, self.kv_params.head_dim))
 
-        # Cast freqs_cis to xq's dtype to match the fused_qk_ragged_rope kernel.
-        freqs_cis = ops.cast(self.rope.freqs_cis, xq.dtype)
+        if xq.device is not None:
+            freqs_cis = ops.cast(self.rope.freqs_cis, xq.dtype).to(xq.device)
+        else:
+            freqs_cis = ops.cast(self.rope.freqs_cis, xq.dtype)
 
         xq = fused_qk_ragged_rope(
             self.kv_params,
@@ -84,6 +91,35 @@ class AttentionWithRope(AttentionImpl):
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])
 
         return self.wo(attn_out)
+
+
+def distribute_value(v: TensorValue, devices: List[DeviceRef]):
+    return [v.to(device) for device in devices]
+
+
+@dataclass
+class DistributedAttentionWithRope(DistributedAttentionImpl):
+    list_of_attentions: List[AttentionWithRope]
+    devices: list[DeviceRef]
+
+    def __call__(  # type: ignore
+        self,
+        x: List[TensorValue],
+        kv_collections: List[ContinuousBatchingKVCacheCollection],
+        input_row_offsets: TensorValue,
+    ) -> TensorValue:
+        input_row_offsets_ = distribute_value(input_row_offsets, self.devices)
+
+        return ops.allreduce.sum(
+            [
+                self.list_of_attentions[i](
+                    x[i],
+                    kv_collections[i],
+                    input_row_offsets=input_row_offsets_[i],
+                )
+                for i in range(len(self.devices))
+            ]
+        )  # type: ignore
 
 
 @dataclass

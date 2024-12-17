@@ -12,10 +12,16 @@
 # ===----------------------------------------------------------------------=== #
 """The transformer mechanism used within the model."""
 
+from .distributed_transformer import (
+    DistributedTransformer,
+    DistributedTransformerBlock,
+)
 from .naive_transformer import NaiveTransformer, NaiveTransformerBlock
 from .transformer import Transformer, TransformerBlock
 
 __all__ = [
+    "DistributedTransformer",
+    "DistributedTransformerBlock",
     "NaiveTransformer",
     "NaiveTransformerBlock",
     "Transformer",

@@ -16,14 +16,14 @@ from __future__ import annotations
 import logging
 import time
 import warnings
-from typing import Sequence
+from typing import Sequence, List, Union
 
 import numpy as np
 from dataprocessing import batch_padded_tokens_and_mask
 from max.driver import CPU, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
-from max.graph import Graph, TensorType
+from max.graph import DeviceRef, Graph, TensorType
 from max.graph.weights import GGUFWeights
 from max.pipelines import (
     LogProbabilities,
@@ -40,7 +40,7 @@ from max.pipelines.kv_cache import (
 )
 from nn.compute_log_probabilities import compute_log_probabilities
 
-from .gguf import transformer
+from .gguf import transformer, distributed_transformer_opaque
 
 
 class Llama3Model(PipelineModel):
@@ -74,8 +74,10 @@ class Llama3Model(PipelineModel):
         tokens = np.concatenate([ctx.next_tokens for ctx in context_batch])
 
         return (
-            Tensor.from_numpy(tokens).to(self.pipeline_config.device),
-            Tensor.from_numpy(input_row_offset).to(self.pipeline_config.device),
+            Tensor.from_numpy(tokens).to(self.pipeline_config.devices[0]),
+            Tensor.from_numpy(input_row_offset).to(
+                self.pipeline_config.devices[0]
+            ),
         )
 
     def _prepare_padded_initial_token_inputs(
@@ -163,6 +165,7 @@ class Llama3Model(PipelineModel):
             head_dim=self.pipeline_config.huggingface_config.hidden_size
             // self.pipeline_config.huggingface_config.num_attention_heads,
             cache_strategy=self.pipeline_config.cache_strategy,
+            n_devices=len(self.pipeline_config.devices),
         )
 
     def load_kv_manager(
@@ -201,7 +204,7 @@ class Llama3Model(PipelineModel):
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
             )
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         # Read in weights.
         self._weights = self.pipeline_config.load_weights()
@@ -236,31 +239,91 @@ class Llama3Model(PipelineModel):
                 model._export_mef(export_path)
             return model
 
+    def _unflatten_kv_inputs(
+        self, kv_inputs_flat: Sequence[Tensor]
+    ) -> List[tuple[Tensor, ...]]:
+        kv_params = self._get_kv_params()
+        n_devices = kv_params.n_devices
+        fetch_types = self.kv_manager.input_symbols()
+        len_of_kv_tuple_per_dev = len(fetch_types[0])
+        kv_caches_per_dev = [
+            tuple(
+                kv_inputs_flat[
+                    i * len_of_kv_tuple_per_dev : (i + 1)
+                    * len_of_kv_tuple_per_dev
+                ]
+            )
+            for i in range(n_devices)
+        ]
+        return kv_caches_per_dev
+
+    def _flatten_kv_inputs(
+        self, kv_caches_per_dev: List[tuple[Union[Tensor, TensorType], ...]]
+    ) -> Sequence[Union[Tensor, TensorType]]:
+        return [item for sublist in kv_caches_per_dev for item in sublist]
+
     def _build_opaque_graph(self, weights: GGUFWeights) -> Graph:
-        tokens_type = TensorType(DType.int64, shape=["total_seq_len"])
+        device0 = self.pipeline_config.devices[0]
+        deviceRef = DeviceRef(device0.label, device0.id)
+        tokens_type = TensorType(
+            DType.int64, shape=["total_seq_len"], device=deviceRef
+        )
         # NOTE: input_row_offsets_len should be batch_size + 1.
         input_row_offsets_type = TensorType(
-            DType.uint32, shape=["input_row_offsets_len"]
+            DType.uint32, shape=["input_row_offsets_len"], device=deviceRef
         )
 
-        kv_cache_args = self.kv_manager.input_symbols()[0]
+        if len(self.pipeline_config.devices) > 1:
+            kv_cache_args = self.kv_manager.input_symbols()
+            flattened_kv_types = self._flatten_kv_inputs(kv_cache_args)
 
-        with Graph(
-            "llama3",
-            input_types=[tokens_type, input_row_offsets_type, *kv_cache_args],
-        ) as graph:
-            model = transformer(
-                graph,
-                self.pipeline_config,
-                weights,
-                self._get_kv_params(),
-            )
-            tokens, input_row_offsets, *kv_cache = graph.inputs
-            outputs = model(
-                tokens, kv_cache, input_row_offsets=input_row_offsets
-            )
-            graph.output(*outputs)
-            return graph
+            with Graph(
+                "llama3",
+                input_types=[
+                    tokens_type,
+                    input_row_offsets_type,
+                    *flattened_kv_types,
+                ],
+            ) as graph:
+                model = distributed_transformer_opaque(
+                    graph,
+                    self.pipeline_config,
+                    weights,
+                    self._get_kv_params(),
+                )
+                tokens, input_row_offsets, *kv_cache = graph.inputs
+                kv_caches_per_dev = self._unflatten_kv_inputs(kv_cache)
+
+                outputs = model(
+                    tokens,
+                    kv_caches_per_dev,
+                    input_row_offsets=input_row_offsets,
+                )
+                graph.output(*outputs)
+                return graph
+        else:
+            kv_cache_args = self.kv_manager.input_symbols()[0]
+
+            with Graph(
+                "llama3",
+                input_types=[
+                    tokens_type,
+                    input_row_offsets_type,
+                    *kv_cache_args,
+                ],
+            ) as graph:
+                model = transformer(
+                    graph,
+                    self.pipeline_config,
+                    weights,
+                    self._get_kv_params(),
+                )
+                tokens, input_row_offsets, *kv_cache = graph.inputs
+                outputs = model(
+                    tokens, kv_cache, input_row_offsets=input_row_offsets
+                )
+                graph.output(*outputs)
+                return graph
 
     def _build_graph(self, weights: GGUFWeights) -> Graph:
         if self.pipeline_config.cache_strategy.uses_opaque():
@@ -270,6 +333,11 @@ class Llama3Model(PipelineModel):
         attn_mask_type = TensorType(
             DType.float32, shape=["batch_size", "seq_len", "post_seq_len"]
         )
+
+        if len(self.pipeline_config.devices) > 1:
+            raise ValueError(
+                "Naive mode does not support distributed execution"
+            )
 
         kv_inputs = self.kv_manager.input_symbols()[0]
 

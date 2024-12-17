@@ -14,6 +14,7 @@
 """Multi-layer Perceptron."""
 
 from __future__ import annotations
+from typing import List
 
 from dataclasses import dataclass
 
@@ -76,3 +77,13 @@ class MLP(Layer):
             )
 
         return self.down_proj((ops.silu(self.gate_proj(x)) * self.up_proj(x)))  # type: ignore
+
+
+@dataclass
+class DistributedMLP(Layer):
+    list_of_mlps: List[MLP]
+    num_devices: int
+
+    def __call__(self, x: List[TensorValue]) -> List[TensorValue]:
+        mlp_outs = [self.list_of_mlps[i](x[i]) for i in range(self.num_devices)]
+        return ops.allreduce.sum(mlp_outs)  # type: ignore
