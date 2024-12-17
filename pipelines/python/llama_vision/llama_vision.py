@@ -20,8 +20,9 @@ from collections.abc import Sequence
 import numpy as np
 from max.driver import Tensor
 from max.dtype import DType
-from max.engine import InferenceSession, Model
-from max.graph import Graph, TensorType, TensorValue
+from max.engine import InferenceSession, MultimodalModel
+from max.graph import Dim, Graph, TensorType, TensorValue, ops
+from max.graph.weights import Weights
 from max.pipelines import (
     ModelOutputs,
     PipelineConfig,
@@ -36,8 +37,8 @@ from max.pipelines.kv_cache import (
     load_kv_manager,
 )
 from nn import Linear
+from nn.layer import Layer
 
-from .conditional_generator import ConditionalGenerator
 from .language_model import instantiate_language_model
 from .vision_model import instantiate_vision_model
 
@@ -49,8 +50,137 @@ def max_seq_len(config: PipelineConfig) -> int:
     )
 
 
+class LlamaVisionModel(Layer):
+    """
+    The Llama 3.2 vision model.
+    """
+
+    def __init__(
+        self, pipeline_config: PipelineConfig, weights: Weights
+    ) -> None:
+        # Set convenience attributes for the text and vision configs.
+        self.vision_config = pipeline_config.huggingface_config.vision_config
+        self.text_config = pipeline_config.huggingface_config.text_config
+
+        self.vision_model = instantiate_vision_model(
+            dtype=pipeline_config.dtype,
+            image_size=self.vision_config.image_size,
+            patch_size=self.vision_config.patch_size,
+            supported_aspect_ratios=self.vision_config.supported_aspect_ratios,
+            hidden_size=self.vision_config.hidden_size,
+            max_num_tiles=self.vision_config.max_num_tiles,
+            num_channels=self.vision_config.num_channels,
+            norm_eps=self.vision_config.norm_eps,
+            attention_heads=self.vision_config.attention_heads,
+            num_hidden_layers=self.vision_config.num_hidden_layers,
+            intermediate_size=self.vision_config.intermediate_size,
+            num_global_layers=self.vision_config.num_global_layers,
+            intermediate_layers_indices=self.vision_config.intermediate_layers_indices,
+            weights=weights,
+        )
+
+        self.multi_modal_projector = Linear(
+            weights.multi_modal_projector.weight.allocate(
+                pipeline_config.dtype,
+                [
+                    self.text_config.hidden_size,
+                    self.vision_config.vision_output_dim,
+                ],
+            ),
+            weights.multi_modal_projector.bias.allocate(
+                pipeline_config.dtype,
+                [self.text_config.hidden_size],
+            ),
+        )
+
+    def __call__(
+        self,
+        pixel_values: TensorValue,
+        aspect_ratio_ids: TensorValue,
+        aspect_ratio_mask: TensorValue,
+    ) -> TensorValue:
+        if aspect_ratio_ids is None:
+            msg = (
+                "`aspect_ratio_ids` must be provided if `pixel_values` is "
+                "provided"
+            )
+            raise ValueError(msg)
+
+        # Get vision tokens from vision model.
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            aspect_ratio_ids=aspect_ratio_ids,
+            aspect_ratio_mask=aspect_ratio_mask,
+        )
+        cross_attention_states = vision_outputs[0]
+
+        num_patches = cross_attention_states.shape[-2]
+
+        cross_attention_states = self.multi_modal_projector(
+            cross_attention_states
+        ).reshape(
+            [
+                Dim("batch_size")
+                * Dim("num_concurrent_media")
+                * self.vision_config.max_num_tiles
+                * num_patches,
+                self.text_config.hidden_size,
+            ]
+        )
+
+        return cross_attention_states
+
+
+class LlamaVisionLanguageModel(Layer):
+    """
+    The Llama 3.2 vision language model.
+    """
+
+    def __init__(
+        self,
+        pipeline_config: PipelineConfig,
+        weights: Weights,
+        kv_params: KVCacheParams,
+    ) -> None:
+        text_config = pipeline_config.huggingface_config.text_config
+
+        self.language_model = instantiate_language_model(
+            dtype=pipeline_config.dtype,
+            hidden_size=text_config.hidden_size,
+            n_heads=text_config.num_attention_heads,
+            rope_theta=text_config.rope_theta,
+            max_seq_len=max_seq_len(pipeline_config),
+            num_hidden_layers=text_config.num_hidden_layers,
+            cross_attention_layers=text_config.cross_attention_layers,
+            vocab_size=text_config.vocab_size,
+            rms_norm_eps=text_config.rms_norm_eps,
+            num_key_value_heads=text_config.num_key_value_heads,
+            intermediate_size=text_config.intermediate_size,
+            kv_params=kv_params,
+            weights=weights,
+        )
+
+    def __call__(
+        self,
+        cross_attention_states: TensorValue,
+        input_ids: TensorValue,
+        hidden_input_row_offsets: TensorValue,
+        cross_input_row_offsets: TensorValue,
+        *kv_cache_inputs: TensorValue,
+    ) -> TensorValue:
+        logits = self.language_model(
+            kv_cache_inputs=kv_cache_inputs,
+            input_ids=input_ids,
+            hidden_input_row_offsets=hidden_input_row_offsets,
+            cross_attention_states=cross_attention_states,
+            cross_input_row_offsets=cross_input_row_offsets,
+        )
+        # Always return float32 logits, no matter the activation type
+        return ops.cast(logits, DType.float32)
+
+
 class LlamaVision(PipelineModel):
-    """The Llama3.2 vision model."""
+    """The entire (multimodal) Llama3.2 vision model."""
 
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession
@@ -59,78 +189,13 @@ class LlamaVision(PipelineModel):
         self.vision_config = pipeline_config.huggingface_config.vision_config
         self.text_config = pipeline_config.huggingface_config.text_config
 
+        # These need to be set at graph instantiation time.
+        self.vision_graph_input_size = -1
+        self.language_graph_input_size = -1
+
         super().__init__(pipeline_config, session)
 
-    def __call__(
-        self,
-        pixel_values: TensorValue,
-        aspect_ratio_ids: TensorValue,
-        aspect_ratio_mask: TensorValue,
-        input_id_values: TensorValue,
-        pixel_row_offsets: TensorValue,
-        input_id_row_offsets: TensorValue,
-        *kv_cache_inputs: TensorValue,
-    ) -> TensorValue:
-        """Builds the graph: all op staging happens here in __call__."""
-        conditional_generator = ConditionalGenerator(
-            pipeline_config=self.pipeline_config,
-            vision_model=instantiate_vision_model(
-                dtype=self.pipeline_config.dtype,
-                image_size=self.vision_config.image_size,
-                patch_size=self.vision_config.patch_size,
-                supported_aspect_ratios=self.vision_config.supported_aspect_ratios,
-                hidden_size=self.vision_config.hidden_size,
-                max_num_tiles=self.vision_config.max_num_tiles,
-                num_channels=self.vision_config.num_channels,
-                norm_eps=self.vision_config.norm_eps,
-                attention_heads=self.vision_config.attention_heads,
-                num_hidden_layers=self.vision_config.num_hidden_layers,
-                intermediate_size=self.vision_config.intermediate_size,
-                num_global_layers=self.vision_config.num_global_layers,
-                intermediate_layers_indices=self.vision_config.intermediate_layers_indices,
-                weights=self.weights,
-            ),
-            multi_modal_projector=Linear(
-                self.weights.multi_modal_projector.weight.allocate(
-                    self.pipeline_config.dtype,
-                    [
-                        self.text_config.hidden_size,
-                        self.vision_config.vision_output_dim,
-                    ],
-                ),
-                self.weights.multi_modal_projector.bias.allocate(
-                    self.pipeline_config.dtype,
-                    [self.text_config.hidden_size],
-                ),
-            ),
-            language_model=instantiate_language_model(
-                dtype=self.pipeline_config.dtype,
-                hidden_size=self.text_config.hidden_size,
-                n_heads=self.text_config.num_attention_heads,
-                rope_theta=self.text_config.rope_theta,
-                max_seq_len=max_seq_len(self.pipeline_config),
-                num_hidden_layers=self.text_config.num_hidden_layers,
-                cross_attention_layers=self.text_config.cross_attention_layers,
-                vocab_size=self.text_config.vocab_size,
-                rms_norm_eps=self.text_config.rms_norm_eps,
-                num_key_value_heads=self.text_config.num_key_value_heads,
-                intermediate_size=self.text_config.intermediate_size,
-                kv_params=self._get_kv_params(),
-                weights=self.weights,
-            ),
-        )
-
-        return conditional_generator(
-            pixel_values,
-            aspect_ratio_ids,
-            aspect_ratio_mask,
-            input_id_values,
-            pixel_row_offsets,
-            input_id_row_offsets,
-            kv_cache_inputs,
-        )
-
-    def _llama3_vision_graph(self) -> Graph:
+    def _llama3_vision_vision_graph(self) -> Graph:
         # Inserted a manual CHW -> HWC transpose here.
         pixel_values_type = TensorType(
             self.pipeline_config.dtype,
@@ -156,25 +221,59 @@ class LlamaVision(PipelineModel):
             ],
         )
 
+        input_types = [
+            pixel_values_type,
+            aspect_ratio_ids_type,
+            aspect_ratio_mask_type,
+        ]
+        self.vision_graph_input_size = len(input_types)
+        return Graph(
+            "llama3-vision-vision-model-graph",
+            forward=LlamaVisionModel(
+                pipeline_config=self.pipeline_config, weights=self.weights
+            ),
+            input_types=input_types,
+        )
+
+    def _llama3_vision_language_graph(self) -> Graph:
         input_ids_type = TensorType(DType.int64, shape=["total_seq_len"])
+        # image_size = self.vision_config.image_size
+        # patch_size = self.vision_config.patch_size
+        cross_attention_states_type = TensorType(
+            self.pipeline_config.dtype,
+            shape=[
+                # TODO(bduke): fix algebraic dim creation outside of graph
+                # contexts.
+                # Dim("batch_size")
+                # * "num_concurrent_media"
+                # * self.vision_config.max_num_tiles
+                # * ((image_size // patch_size) ** 2 + 1),
+                "num_vision_embeddings",
+                self.text_config.hidden_size,
+            ],
+        )
         input_row_offsets_type = TensorType(
             DType.uint32, shape=["input_row_offsets_len"]
         )
 
+        input_types = [
+            cross_attention_states_type,
+            input_ids_type,
+            # Pass 2 sets of offsets for hidden and cross attn states.
+            input_row_offsets_type,
+            input_row_offsets_type,
+            *self.kv_manager.input_symbols()[0],
+        ]
+        self.language_graph_input_size = len(input_types)
+
         return Graph(
-            "llama3-vision",
-            # Pass PipelineModel as the Graph's forward callable until nn.Model.
-            forward=self,
-            input_types=[
-                pixel_values_type,
-                aspect_ratio_ids_type,
-                aspect_ratio_mask_type,
-                input_ids_type,
-                # Pass 2 sets of offsets for hidden and cross attn states.
-                input_row_offsets_type,
-                input_row_offsets_type,
-                *self.kv_manager.input_symbols()[0],
-            ],
+            "llama3-vision-language-model-graph",
+            forward=LlamaVisionLanguageModel(
+                pipeline_config=self.pipeline_config,
+                weights=self.weights,
+                kv_params=self._get_kv_params(),
+            ),
+            input_types=input_types,
         )
 
     def prepare_initial_token_inputs(
@@ -251,8 +350,43 @@ class LlamaVision(PipelineModel):
         raise NotImplementedError("not yet implemented.")
 
     def execute(self, *model_inputs: Tensor) -> ModelOutputs:
-        model_outputs = self.model.execute(
-            *model_inputs, copy_inputs_to_device=False
+        assert isinstance(
+            self.model.modalities,  # type: ignore
+            tuple,
+        ), "Modalities must be a tuple"
+        assert (
+            len(self.model.modalities) == 2  # type: ignore
+        ), "Must have only vision and language modalities"
+        vision_model, language_model = self.model.modalities  # type: ignore
+
+        model_input_list = list(model_inputs)
+
+        # Vision model has 3 more inputs.
+        # pixel_values(1), aspect_ratio_ids(1), aspect_ratio_mask(1)
+        if len(model_input_list) >= self.vision_graph_input_size:
+            cross_attention_states = vision_model.execute(
+                *model_input_list[: self.vision_graph_input_size],
+                copy_inputs_to_device=False,
+            )[0]
+            model_input_list = model_input_list[self.vision_graph_input_size :]
+
+        # Insert vision model output to be fed as input to the subsequent
+        # language model. This assumes cross_attention_states is the first input
+        # since the list needs to be ordered.
+        model_input_list.insert(0, cross_attention_states)  # type: ignore
+
+        # Language model has 8 inputs.
+        # kv_cache_inputs (4), input_ids(1), hidden_input_row_offsets(1),
+        # cross_attention_states(1), cross_input_row_offsets(1)
+        if len(model_input_list) != self.language_graph_input_size:
+            raise ValueError(
+                "Expecting language_model inputs to have {}, got {} instead".format(
+                    self.language_graph_input_size, len(model_input_list)
+                )
+            )
+
+        model_outputs = language_model.execute(
+            *model_input_list, copy_inputs_to_device=False
         )
         assert not self.pipeline_config.enable_echo
         assert isinstance(model_outputs[0], Tensor)
@@ -298,17 +432,36 @@ class LlamaVision(PipelineModel):
     def load_model(
         self,
         session: InferenceSession,
-    ) -> Model:
+    ) -> MultimodalModel:
+        """
+        Load the Llama vision multimodal model. Since this is a multimodal model,
+        we have vision and language models (graph) loaded.
+        """
         self.weights = self.pipeline_config.load_weights()
 
-        logging.info("Building model...")
-        graph = self._llama3_vision_graph()
+        logging.info("Building vision model...")
+        vision_model_graph = self._llama3_vision_vision_graph()
         logging.info("Compiling...")
         before = time.perf_counter()
-        model = session.load(
-            graph,
+        vision_model = session.load(
+            vision_model_graph,
             weights_registry=self.weights.allocated_weights,
         )
         after = time.perf_counter()
-        logging.info(f"Compiling model took {after - before:.6f} seconds")
-        return model
+        logging.info(
+            f"Compiling vision model took {after - before:.6f} seconds"
+        )
+
+        logging.info("Building language model...")
+        language_model_graph = self._llama3_vision_language_graph()
+        logging.info("Compiling...")
+        before = time.perf_counter()
+        language_model = session.load(
+            language_model_graph,
+            weights_registry=self.weights.allocated_weights,
+        )
+        after = time.perf_counter()
+        logging.info(
+            f"Compiling language model took {after - before:.6f} seconds"
+        )
+        return MultimodalModel((vision_model, language_model))

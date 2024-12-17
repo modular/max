@@ -16,7 +16,7 @@ from typing import Any, Optional, Sequence, Type, TypeVar
 import numpy as np
 from max.driver import CPU, Tensor
 from max.dtype import DType
-from max.engine import InferenceSession, Model
+from max.engine import InferenceSession, Model, MultimodalModel
 from max.profiler import Tracer, traced
 
 from .config import PipelineConfig
@@ -207,8 +207,8 @@ class PipelineModel(ABC):
     def load_model(
         self,
         session: InferenceSession,
-    ) -> Model:
-        """Provided a PipelineConfig and InferenceSession, build and load the model graph."""
+    ) -> Model | MultimodalModel:
+        """Provided a PipelineConfig and InferenceSession, build and load the model graph(s)."""
         ...
 
     def compute_log_probabilities(
@@ -265,7 +265,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         self._sampler = session.load(
             token_sampler(
                 self._pipeline_config.top_k,
-                # Logits are at index 0 of model ouputs.
+                # Logits are at index 0 of model outputs.
                 in_dtype=self._pipeline_model.model.output_metadata[0].dtype,
                 # Logits returned from the sampler are always float32 for now.
                 out_dtype=DType.float32,
