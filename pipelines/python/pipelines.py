@@ -14,7 +14,6 @@
 import functools
 import logging
 import os
-import random
 
 import click
 from architectures import register_all_models
@@ -106,18 +105,16 @@ def cli_serve(
 ):
     # Initialize config, and serve.
     pipeline_config = PipelineConfig(**config_kwargs)
-    failure_predicate = None
+    failure_percentage = None
     if sim_failure > 0:
-        failure_predicate = lambda: random.randint(0, 100) < min(
-            sim_failure, 100
-        )
+        failure_percentage = sim_failure
     serve_pipeline(
         pipeline_config=pipeline_config,
         profile=profile_serve,
         performance_fake=performance_fake,
         batch_timeout=batch_timeout,
         model_name=model_name,
-        failure_predicate=failure_predicate,
+        failure_percentage=failure_percentage,
     )
 
 
@@ -221,11 +218,9 @@ def run_llama3(
         config.cache_strategy = KVCacheStrategy.NAIVE
 
     if serve:
-        failure_predicate = None
+        failure_percentage = None
         if sim_failure > 0:
-            failure_predicate = lambda: random.randint(0, 100) < min(
-                sim_failure, 100
-            )
+            failure_percentage = sim_failure
 
         serve_pipeline(
             pipeline_config=config,
@@ -233,7 +228,7 @@ def run_llama3(
             performance_fake=performance_fake,
             batch_timeout=batch_timeout,
             model_name=model_name,
-            failure_predicate=failure_predicate,
+            failure_percentage=failure_percentage,
         )
     else:
         generate_text_for_pipeline(
@@ -285,11 +280,9 @@ def replit(
     # Initialize config, and serve.
     pipeline_config = PipelineConfig(**config_kwargs)
     if serve:
-        failure_predicate = None
+        failure_percentage = None
         if sim_failure > 0:
-            failure_predicate = lambda: random.randint(0, 100) < min(
-                sim_failure, 100
-            )
+            failure_percentage = sim_failure
 
         serve_pipeline(
             pipeline_config=pipeline_config,
@@ -297,7 +290,7 @@ def replit(
             performance_fake=performance_fake,
             batch_timeout=batch_timeout,
             model_name=model_name,
-            failure_predicate=failure_predicate,
+            failure_percentage=failure_percentage,
         )
     else:
         generate_text_for_pipeline(
