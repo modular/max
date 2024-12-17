@@ -169,7 +169,8 @@ def pipeline_config_options(func):
     def wrapper(*args, **kwargs):
         if kwargs["use_gpu"]:
             kwargs["device_specs"] = [
-                DeviceSpec.cuda(id=gpu_id) for gpu_id in kwargs["use_gpu"]
+                DeviceSpec.accelerator(id=gpu_id)
+                for gpu_id in kwargs["use_gpu"]
             ]
             # If the user is passing in a specific, quantization_encoding don't overwrite it.
             # If it is empty, set it to default to bfloat16 on gpu.
