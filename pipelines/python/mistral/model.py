@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Sequence
 
 import numpy as np
@@ -162,6 +163,10 @@ class MistralModel(PipelineModel):
                 self.kv_manager,
             )
             logging.info("Compiling...")
-            return session.load(
+            before = time.perf_counter()
+            model = session.load(
                 graph, weights_registry=self._weights.allocated_weights
             )
+            after = time.perf_counter()
+            logging.info(f"Compiling model took {after - before:.6f} seconds")
+            return model

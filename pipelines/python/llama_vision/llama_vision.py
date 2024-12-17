@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Sequence
 
 import numpy as np
@@ -303,8 +304,11 @@ class LlamaVision(PipelineModel):
         logging.info("Building model...")
         graph = self._llama3_vision_graph()
         logging.info("Compiling...")
+        before = time.perf_counter()
         model = session.load(
             graph,
             weights_registry=self.weights.allocated_weights,
         )
+        after = time.perf_counter()
+        logging.info(f"Compiling model took {after - before:.6f} seconds")
         return model

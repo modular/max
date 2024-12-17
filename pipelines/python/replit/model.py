@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import warnings
 from typing import Sequence
 
@@ -204,9 +205,12 @@ class ReplitModel(PipelineModel):
                 kv_manager=self.kv_manager,
             )
             logging.info("Compiling...")
+            before = time.perf_counter()
             model = session.load(
                 graph, weights_registry=self._weights.allocated_weights
             )
+            after = time.perf_counter()
+            logging.info(f"Compiling model took {after - before:.6f} seconds")
             if (
                 export_path
                 := self.pipeline_config.save_to_serialized_model_path
