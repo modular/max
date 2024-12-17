@@ -14,7 +14,7 @@
 from pathlib import Path
 
 import numpy as np
-from max.driver import CPU, CUDA, accelerator_count
+from max.driver import CPU, Accelerator, accelerator_count
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import Graph, TensorType, ops
@@ -53,7 +53,7 @@ if __name__ == "__main__":
 
     # Set up an inference session that runs the graph on a GPU, if available.
     session = InferenceSession(
-        devices=[CPU() if accelerator_count() == 0 else CUDA()],
+        devices=[CPU() if accelerator_count() == 0 else Accelerator()],
         custom_extensions=path,
     )
     # Compile the graph.

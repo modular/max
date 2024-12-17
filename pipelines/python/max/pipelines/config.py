@@ -25,7 +25,7 @@ from huggingface_hub import (
 )
 from huggingface_hub.hf_api import ModelInfo
 from huggingface_hub.utils import SafetensorsRepoMetadata
-from max.driver import CPU, CUDA, Device, DeviceSpec, accelerator_count
+from max.driver import CPU, Accelerator, Device, DeviceSpec, accelerator_count
 from max.dtype import DType
 from max.graph.quantization import QuantizationEncoding
 from max.graph.weights import (
@@ -454,7 +454,7 @@ class PipelineConfig:
             self._devices.append(
                 CPU(device_spec.id)
                 if device_spec.device_type == "cpu"
-                else CUDA(device_spec.id)
+                else Accelerator(device_spec.id)
             )
         return self._devices
 

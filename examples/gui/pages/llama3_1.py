@@ -18,7 +18,7 @@ from pathlib import Path
 import streamlit as st
 import torch
 from llama3.config import get_llama_huggingface_file
-from max.driver import CPU, CUDA
+from max.driver import CPU, Accelerator
 from max.pipelines import (
     PIPELINE_REGISTRY,
     PipelineConfig,
@@ -59,7 +59,7 @@ def start_llama3(
 ) -> Llama3:
     config = PipelineConfig(
         architecture="LlamaForCausalLM",
-        device=CUDA() if use_gpu else CPU(),
+        device=Accelerator() if use_gpu else CPU(),
         weight_path=[Path(weight_path)],
         quantization_encoding=quantization,
         max_length=max_length,
@@ -87,7 +87,7 @@ if torch.cuda.is_available():
     )
 else:
     use_gpu = st.sidebar.checkbox(
-        "Use GPU (CUDA not available)", value=False, disabled=True
+        "Use GPU (Accelerator not available)", value=False, disabled=True
     )
 
 if use_gpu:
