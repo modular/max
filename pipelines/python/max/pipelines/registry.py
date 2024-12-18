@@ -209,11 +209,6 @@ class PipelineRegistry:
         elif pipeline_config.engine != PipelineEngine.MAX:
             return pipeline_config
 
-        # TODO(KERN-1104) remove this constraint after we support passing context length to MHA kernel.
-        if pipeline_config.max_length > 16384:
-            msg = f"MAX engine currently has a max_length of 16384, got {pipeline_config.max_length}"
-            raise ValueError(msg)
-
         assert pipeline_config.architecture
         if pipeline_config.architecture not in self.architectures:
             msg = (
