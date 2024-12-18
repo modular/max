@@ -10,6 +10,8 @@ from max.dtype import DType
 VALID_KV_KERNELS = [
     ("bf16", 1, 16),
     ("f32", 1, 16),
+    ("bf16", 3, 64),  # SmolLM
+    ("f32", 3, 64),  # SmolLM
     ("bf16", 8, 128),
     ("f32", 8, 128),
     ("bf16", 8, 32),
