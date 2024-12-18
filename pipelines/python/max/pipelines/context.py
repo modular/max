@@ -5,10 +5,9 @@
 # ===----------------------------------------------------------------------=== #
 """Standardized context object for Pipeline Inference."""
 
-from typing import Optional, Protocol, Sequence, Union, runtime_checkable
+from typing import Protocol, Sequence, Union, runtime_checkable
 
 import numpy as np
-from torch import Tensor
 
 
 @runtime_checkable
@@ -135,9 +134,7 @@ class TextAndVisionContext:
         prompt: Union[str, Sequence[int]],
         max_length: int,
         next_tokens: np.ndarray,
-        pixel_values: Optional[
-            Union[list[Tensor], np.ndarray]
-        ] = None,  # Maybe don't use torch?
+        pixel_values: Union[np.ndarray, list[np.ndarray]],
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
     ) -> None:

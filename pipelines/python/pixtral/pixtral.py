@@ -18,6 +18,7 @@ import time
 
 import numpy as np
 from max.driver import Tensor
+from max.dtype import DType
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
 from max.pipelines import ModelOutputs, PipelineModel, TextAndVisionContext
@@ -55,14 +56,23 @@ class PixtralModel(PipelineModel):
 
         # Input Ids: ["total_seq_len"], Int64
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
-        tokens = np.concatenate([ctx.next_tokens for ctx in context_batch])
+        tokens = np.ascontiguousarray(
+            np.concatenate([ctx.next_tokens for ctx in context_batch])
+        )
         input_ids = Tensor.from_numpy(tokens).to(self.pipeline_config.device)
 
-        # TODO: change this to include batch_size and num_images_in_seq dims.
-        # Pass dummy values for images for now. Pass the real images in next PR.
-        pixel_values = Tensor.zeros(
-            dtype=self.pipeline_config.dtype, shape=[304, 400, 3]
-        ).to(self.pipeline_config.device)
+        if context_batch[0].pixel_values:
+            # Get first image in first batch and permute the order to (HWC).
+            # Pixtral processor returns CHW images.
+            image = np.transpose(context_batch[0].pixel_values[0], (1, 2, 0))
+            pixel_values = Tensor.from_dlpack(image).to(
+                self.pipeline_config.device
+            )
+        else:
+            # Model assumes exactly one image as input. Pass an empty tensor which is never accessed.
+            pixel_values = Tensor.zeros(
+                dtype=DType.float32, shape=[304, 400, 3]
+            ).to(self.pipeline_config.device)
         return (
             input_ids,
             pixel_values,

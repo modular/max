@@ -97,41 +97,41 @@ def _rms_norm(dims: int, eps: float, weights: SafetensorWeights) -> RMSNorm:
 
 
 def _encoder_attention(
-    params: PipelineConfig,
+    pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
 ) -> Attention:
     # TODO: Do we need to transpose weights? Not obvious from shapes. Both dims are the same.
-    hidden_dim = params.huggingface_config.vision_config.hidden_size
+    hidden_dim = pipeline_config.huggingface_config.vision_config.hidden_size
     wq = _linear(
-        params.dtype,
+        pipeline_config.dtype,
         hidden_dim,
         hidden_dim,
         weights.attention.q_proj,
     )
     wk = _linear(
-        params.dtype,
+        pipeline_config.dtype,
         hidden_dim,
         hidden_dim,
         weights.attention.k_proj,
     )
     wv = _linear(
-        params.dtype,
+        pipeline_config.dtype,
         hidden_dim,
         hidden_dim,
         weights.attention.v_proj,
     )
     wo = _linear(
-        params.dtype,
+        pipeline_config.dtype,
         hidden_dim,
         hidden_dim,
         weights.attention.o_proj,
     )
 
     return Attention(
-        n_heads=params.huggingface_config.vision_config.num_attention_heads,
+        n_heads=pipeline_config.huggingface_config.vision_config.num_attention_heads,
         dim=hidden_dim,
-        head_dim=params.huggingface_config.vision_config.head_dim,
-        dropout=params.huggingface_config.vision_config.attention_dropout,
+        head_dim=pipeline_config.huggingface_config.vision_config.head_dim,
+        dropout=pipeline_config.huggingface_config.vision_config.attention_dropout,
         wq=wq,
         wk=wk,
         wv=wv,
@@ -141,67 +141,69 @@ def _encoder_attention(
 
 def _transformer(
     graph: Graph,
-    params: PipelineConfig,
+    pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
 ):
     with graph:
         layers = [
             TransformerBlock(
-                attention=_encoder_attention(params, weights.layers[i]),
+                attention=_encoder_attention(
+                    pipeline_config, weights.layers[i]
+                ),
                 mlp=_feed_forward(
-                    params.dtype,
-                    params.huggingface_config.vision_config.hidden_size,
-                    params.huggingface_config.vision_config.intermediate_size,
+                    pipeline_config.dtype,
+                    pipeline_config.huggingface_config.vision_config.hidden_size,
+                    pipeline_config.huggingface_config.vision_config.intermediate_size,
                     weights.layers[i],
                 ),
                 attention_norm=_rms_norm(
-                    params.huggingface_config.vision_config.hidden_size,
+                    pipeline_config.huggingface_config.vision_config.hidden_size,
                     1e-5,
                     weights.layers[i].attention_norm,
                 ),
                 mlp_norm=_rms_norm(
-                    params.huggingface_config.vision_config.hidden_size,
+                    pipeline_config.huggingface_config.vision_config.hidden_size,
                     1e-5,
                     weights.layers[i].ffn_norm,
                 ),
             )
             for i in range(
-                params.huggingface_config.vision_config.num_hidden_layers
+                pipeline_config.huggingface_config.vision_config.num_hidden_layers
             )
         ]
 
         return Transformer(
-            n_heads=params.huggingface_config.vision_config.num_attention_heads,
+            n_heads=pipeline_config.huggingface_config.vision_config.num_attention_heads,
             layers=layers,
         )
 
 
 def _vision_encoder(
     graph: Graph,
-    params: PipelineConfig,
+    pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
 ) -> VisionEncoder:
     patch_conv = _patch_conv2d(
-        params.dtype,
-        params.huggingface_config.vision_config.num_channels,
-        params.huggingface_config.vision_config.patch_size,
-        params.huggingface_config.vision_config.hidden_size,
+        pipeline_config.dtype,
+        pipeline_config.huggingface_config.vision_config.num_channels,
+        pipeline_config.huggingface_config.vision_config.patch_size,
+        pipeline_config.huggingface_config.vision_config.hidden_size,
         weights.vision_tower.patch_conv,
     )
     ln_pre = _rms_norm(
-        params.huggingface_config.vision_config.hidden_size,
+        pipeline_config.huggingface_config.vision_config.hidden_size,
         1e-5,
         weights.vision_tower.ln_pre,
     )
     patch_rope = RotaryEmbedding2D(
-        dim=params.huggingface_config.vision_config.hidden_size,
-        n_heads=params.huggingface_config.vision_config.num_attention_heads,
-        theta=params.huggingface_config.vision_config.rope_theta,
-        max_patches_per_side=params.huggingface_config.vision_config.image_size
-        // params.huggingface_config.vision_config.patch_size,
+        dim=pipeline_config.huggingface_config.vision_config.hidden_size,
+        n_heads=pipeline_config.huggingface_config.vision_config.num_attention_heads,
+        theta=pipeline_config.huggingface_config.vision_config.rope_theta,
+        max_patches_per_side=pipeline_config.huggingface_config.vision_config.image_size
+        // pipeline_config.huggingface_config.vision_config.patch_size,
     )
     encoder_transformer = _transformer(
-        graph, params, weights.vision_tower.transformer
+        graph, pipeline_config, weights.vision_tower.transformer
     )
 
     return VisionEncoder(
@@ -209,8 +211,9 @@ def _vision_encoder(
         layer_norm=ln_pre,
         patch_positional_embedding=patch_rope,
         transformer=encoder_transformer,
-        patch_size=params.huggingface_config.vision_config.patch_size,
-        max_image_size=params.huggingface_config.vision_config.image_size,
+        dtype=pipeline_config.dtype,
+        patch_size=pipeline_config.huggingface_config.vision_config.patch_size,
+        max_image_size=pipeline_config.huggingface_config.vision_config.image_size,
     )
 
 
@@ -220,7 +223,7 @@ def _build_graph(
 ) -> Graph:
     # Graph input types.
     # TODO: What is the image type?
-    image_type = TensorType(DType.bfloat16, shape=[300, 400, 3])
+    image_type = TensorType(DType.float32, shape=[300, 400, 3])
 
     # Initialize Graph.
     with Graph(

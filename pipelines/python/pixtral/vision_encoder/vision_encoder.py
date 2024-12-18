@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
+from max.dtype import DType
 from max.graph import TensorValue, ops
 from nn.conv import Conv2D
 from nn.layer import Layer
@@ -39,6 +40,7 @@ class VisionEncoder(Layer):
     layer_norm: RMSNorm
     patch_positional_embedding: RotaryEmbedding2D
     transformer: Transformer
+    dtype: DType
     patch_size: int = 16
     max_image_size: int = 1024
 
@@ -49,7 +51,8 @@ class VisionEncoder(Layer):
         # Images go through a convolution independently to get patched.
         # Returns a list of [batch_size, hidden_size, height/patch_size, width/patch_size] tensors
         patch_embeds_list = [
-            self.patch_conv(ops.unsqueeze(img, 0)) for img in imgs
+            self.patch_conv(ops.unsqueeze(ops.cast(img, self.dtype), 0))
+            for img in imgs
         ]
 
         # Flatten all images to a single tensor of patches of size (n_patches=seq_length, hidden_size).

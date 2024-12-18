@@ -11,6 +11,7 @@ import logging
 from typing import Any, Sequence, Union, cast
 
 import numpy as np
+import torch
 from PIL import Image
 from transformers import (
     AutoProcessor,
@@ -378,6 +379,8 @@ class TextAndVisionTokenizer(
             if request.images
             else None
         )
+        # PixtralProcessor returns a list of torch tensors.
+        # LlamaVision returns a np Array.
         inputs = self.processor(
             text=prompt,
             images=images,
@@ -400,8 +403,13 @@ class TextAndVisionTokenizer(
                 msg = "pixel_values not provided in AutoProcessor output, please ensure you are using the correct processor for multi-modal inputs."
                 raise ValueError(msg)
             pixel_values = inputs["pixel_values"][0]
+            if isinstance(pixel_values, list):
+                pixel_values = [
+                    tensor.numpy() if torch.is_tensor(tensor) else tensor
+                    for tensor in pixel_values
+                ]
         else:
-            pixel_values = None
+            pixel_values = []
 
         context = TextAndVisionContext(
             prompt=prompt,

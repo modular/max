@@ -44,7 +44,7 @@ def _linear(
 
 def _multi_modal_projector(
     dtype: DType,
-    params: PipelineConfig,
+    pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
 ) -> LlavaMultiModalConnector:
     """Connects the vision encoder to the text decoder.
@@ -55,14 +55,14 @@ def _multi_modal_projector(
     return LlavaMultiModalConnector(
         _linear(
             dtype,
-            params.huggingface_config.text_config.hidden_size,
-            params.huggingface_config.vision_config.hidden_size,
+            pipeline_config.huggingface_config.text_config.hidden_size,
+            pipeline_config.huggingface_config.vision_config.hidden_size,
             weights.linear_1,
         ),
         _linear(
             dtype,
-            params.huggingface_config.text_config.hidden_size,
-            params.huggingface_config.text_config.hidden_size,
+            pipeline_config.huggingface_config.text_config.hidden_size,
+            pipeline_config.huggingface_config.text_config.hidden_size,
             weights.linear_2,
         ),
     )
@@ -70,7 +70,7 @@ def _multi_modal_projector(
 
 def _llava(
     graph: Graph,
-    params: PipelineConfig,
+    pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
     kv_params: KVCacheParams,
 ) -> LlavaConditionalGeneration:
@@ -78,27 +78,27 @@ def _llava(
     # vision encoder params missing from pixtral config.json:
     # num_attention_heads, num_channels, hidden_size, attention_dropout, intermediate_size, num_hidden_layers
 
-    vision_encoder = _vision_encoder(graph, params, weights)
+    vision_encoder = _vision_encoder(graph, pipeline_config, weights)
     multi_modal_projector = _multi_modal_projector(
-        params.dtype, params, weights.multi_modal_projector
+        pipeline_config.dtype, pipeline_config, weights.multi_modal_projector
     )
     # Weights of pixtral have the same names and shapes as weights of mistral.
-    language_model = _transformer(graph, params, weights, kv_params)
+    language_model = _transformer(graph, pipeline_config, weights, kv_params)
 
     return LlavaConditionalGeneration(
         vision_encoder=vision_encoder,
         multi_modal_projector=multi_modal_projector,
         language_model=language_model,
-        vocab_size=params.huggingface_config.text_config.vocab_size,
-        image_token_index=params.huggingface_config.image_token_index,
-        vision_feature_layer=params.huggingface_config.vision_feature_layer,
-        vision_feature_select_strategy=params.huggingface_config.vision_feature_select_strategy,
-        image_seq_length=params.huggingface_config.image_seq_length,
+        vocab_size=pipeline_config.huggingface_config.text_config.vocab_size,
+        image_token_index=pipeline_config.huggingface_config.image_token_index,
+        vision_feature_layer=pipeline_config.huggingface_config.vision_feature_layer,
+        vision_feature_select_strategy=pipeline_config.huggingface_config.vision_feature_select_strategy,
+        image_seq_length=pipeline_config.huggingface_config.image_seq_length,
     )
 
 
 def _build_graph(
-    params: PipelineConfig,
+    pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
     kv_params: KVCacheParams,
     kv_manager: KVCacheManager,
@@ -114,7 +114,7 @@ def _build_graph(
     )
     # TODO: should be changed to add "batch_size", "n_images" dims when working with multiple images
     pixel_values_type = TensorType(
-        DType.bfloat16,
+        DType.float32,
         [304, 400, 3],  # ["height", "width", "num_channels"]
     )
     # Type of start and end position of each batch in the combined total_seq_len dimension.
@@ -133,7 +133,7 @@ def _build_graph(
             *kv_cache_types,
         ],
     ) as graph:
-        model = _llava(graph, params, weights, kv_params)
+        model = _llava(graph, pipeline_config, weights, kv_params)
         input_ids, pixel_values, input_row_offsets, *kv_cache_inputs = (
             graph.inputs
         )
