@@ -27,7 +27,8 @@ from nn import MLP, RMSNorm
 from nn.kernels import (
     MaskVariant,
     flash_attention_ragged,
-    matmul_kv_cache_ragged,  # noqa: F401
+    matmul_kv_cache_ragged,
+    rms_norm_key_cache,
 )
 from nn.layer import Layer
 from nn.linear import Linear
@@ -75,9 +76,6 @@ class CrossSdpaAttention(Layer):
         Returns:
             Attended hidden activation.
         """
-        # Get the combined sequence length: sum(seq_len for seq_len in batch).
-        total_seq_len = hidden_states.shape[0]
-
         wkv = ops.concat((self.wk, self.wv), axis=0)
 
         query_states = self.q_proj(hidden_states)
@@ -90,17 +88,25 @@ class CrossSdpaAttention(Layer):
         )
         query_states = self.q_norm(query_states)
 
-        # TODO(AIPIPE-262): Uncommenting this causes the error:
-        # CUDA call failed: CUDA_ERROR_INVALID_VALUE (invalid argument)
-        # matmul_kv_cache_ragged(
-        #     kv_params=self.kv_params,
-        #     # Here, hidden_states correspond to cross_attention_states.
-        #     hidden_states=cross_attention_states,
-        #     layer_idx=self.layer_idx,
-        #     input_row_offsets=cross_input_row_offsets,
-        #     weight=wkv,
-        #     kv_collection=kv_collection,
-        # )
+        matmul_kv_cache_ragged(
+            kv_params=self.kv_params,
+            # Here, hidden_states correspond to cross_attention_states.
+            hidden_states=cross_attention_states,
+            layer_idx=self.layer_idx,
+            input_row_offsets=cross_input_row_offsets,
+            weight=wkv,
+            kv_collection=kv_collection,
+        )
+        rms_norm_key_cache(
+            self.kv_params,
+            kv_collection,
+            gamma=ops.cast(self.k_norm.weight, hidden_states.dtype),
+            epsilon=self.k_norm.eps,
+            layer_idx=self.layer_idx,
+            # Use the total sequence length of the cross attention states.
+            total_seq_len=cross_attention_states.shape[0],
+            input_row_offsets=cross_input_row_offsets,
+        )
 
         # Calculate Flash Attention.
         attn_out = flash_attention_ragged(
@@ -112,7 +118,8 @@ class CrossSdpaAttention(Layer):
             mask_variant=MaskVariant.CAUSAL_MASK,
         )
 
-        attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])
+        # Reshape back to (hidden total seq len, hidden size).
+        attn_out = ops.reshape(attn_out, shape=[hidden_states.shape[0], -1])
 
         return self.o_proj(attn_out)
 

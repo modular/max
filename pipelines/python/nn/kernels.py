@@ -19,7 +19,7 @@ from typing import Union
 
 import numpy as np
 from max.dtype import DType
-from max.graph import TensorType, TensorValue, TensorValueLike, ops
+from max.graph import Dim, TensorType, TensorValue, TensorValueLike, ops
 from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheCollection,
     KVCacheParams,
@@ -545,7 +545,7 @@ def rms_norm_key_cache(
     gamma: TensorValue,
     epsilon: float | np.floating,
     layer_idx: int | np.integer,
-    total_seq_len: TensorValue,
+    total_seq_len: Dim,
     input_row_offsets: TensorValue,
 ) -> None:
     """Computes RMSNorm on the _new_ entries in the KVCache.
@@ -563,10 +563,6 @@ def rms_norm_key_cache(
         )
         raise ValueError(msg)
 
-    if total_seq_len.dtype != DType.uint32:
-        msg = f"expected uint32 total_seq_len but got {total_seq_len.dtype}"
-        raise ValueError(msg)
-
     if input_row_offsets.dtype != DType.uint32:
         msg = f"expected uint32 input_row_offsets but got {input_row_offsets.dtype}"
         raise ValueError(msg)
@@ -578,7 +574,7 @@ def rms_norm_key_cache(
             gamma,
             ops.constant(epsilon, gamma.dtype),
             ops.constant(layer_idx, DType.uint32),
-            total_seq_len,
+            ops.cast(TensorValue.from_dim(total_seq_len), DType.uint32),
             input_row_offsets,
         ],
     )

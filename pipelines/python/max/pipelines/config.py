@@ -342,7 +342,7 @@ class PipelineConfig:
     """The number of tokens in a single page in the KVCache."""
 
     gpu_memory_utilization: float = 0.9
-    """The fraction of available device memory that the our process should consume.
+    """The fraction of available device memory that the process should consume.
 
     This is used to inform the size of the KVCache workspace:
         kv_cache_workspace = (total_free_memory * gpu_memory_utilization) - model_weights_size
@@ -358,7 +358,7 @@ class PipelineConfig:
     """Whether to force download a given file if it’s not already present in the local cache."""
 
     _huggingface_config: Optional[AutoConfig] = None
-    """The huggingface config associated with the huggingface repo id."""
+    """The HuggingFace config associated with the huggingface repo id."""
 
     _devices: list[Device] = field(default_factory=list)
     """The underlying initialized devices, created by the specific device_specs."""
@@ -405,9 +405,10 @@ class PipelineConfig:
 
     @property
     def huggingface_config(self) -> AutoConfig:
-        """Given the huggingface_repo_id, return the Huggingface Config."""
+        """Given the huggingface_repo_id, return the HuggingFace Config."""
 
         if self._huggingface_config is None:
+            # Lazy initialize the HuggingFace config field.
             self._huggingface_config = AutoConfig.from_pretrained(
                 self.huggingface_repo_id,
                 trust_remote_code=self.trust_remote_code,
