@@ -359,12 +359,10 @@ class PipelineRegistry:
         pipeline_config = self.validate_pipeline_config(pipeline_config)
 
         if pipeline_config.engine == PipelineEngine.MAX:
-            # MAX pipeline
-            pipeline_config = self.validate_pipeline_config(pipeline_config)
-            if pipeline_config.architecture is None:
-                msg = "architecture must be provided to load pipeline."
-                raise ValueError(msg)
+            # Keep MyPy happy.
+            assert pipeline_config.architecture is not None
 
+            # MAX pipeline
             arch = self.architectures[pipeline_config.architecture]
             logging.info(
                 self._load_logging_message(
