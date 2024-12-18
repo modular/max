@@ -51,9 +51,9 @@ class LlamaSafetensorWeights(SafetensorWeights, WeightsConverter):
     """Loads Safetensor weights with GGUF names.
 
     Does the following when loading weights:
-    (1) converts Safetensor weight names to GGUF names. For example, the
-    GGUF weight "blk.{i}.attn_q.weight" is instead saved as
-    "model.layers.{i}.self_attn.q_proj.weight" in Safetensor.
+    (1) converts Safetensor weight names to and from GGUF names. For example,
+        the GGUF weight "blk.{i}.attn_q.weight" is instead saved as
+        "model.layers.{i}.self_attn.q_proj.weight" in Safetensor.
     (2) Computes the rope_freqs.weight using the HuggingFace config
     (3) Transposes the q_proj and k_proj weights.
 
@@ -97,20 +97,41 @@ class LlamaSafetensorWeights(SafetensorWeights, WeightsConverter):
         )
 
     def items(self):
-        # This is defined in SafetensorWeights. Currently there's no reason to
-        # use this LlamaSafetensorWeights, so it is unimplemented.
-        raise NotImplementedError
+        """Iterate through all allocable weights that start with the prefix."""
+        # `self._tensor` contains Safetensor names, but the Llama pipeline
+        # expects GGUF names so this function should return GGUF names.
+        for safetensor_name in self._tensors:
+            if safetensor_name.startswith(self.name):
+                gguf_name = safetensor_name
+
+                # The _gguf_name_map maps gguf -> safetensor names.
+                # We want the reverse transformation from safetensor -> gguf.
+                for after, before in self._gguf_name_map.items():
+                    gguf_name = gguf_name.replace(before, after)
+                yield (
+                    gguf_name,
+                    LlamaSafetensorWeights(
+                        self._filepaths,
+                        self._gguf_name_map,
+                        huggingface_config=self._huggingface_config,
+                        has_rope_scaling=self._has_rope_scaling,
+                        rope_freqs_tensor=self._rope_freqs_tensor,
+                        tensors=self._tensors,
+                        tensors_to_file_idx=self._tensors_to_file_idx,
+                        prefix=gguf_name,
+                        allocated=self._allocated,
+                        _st_weight_map=self._st_weight_map,
+                    ),
+                )
 
     @cached_property
     def name(self) -> str:
         """The current weight name or prefix."""
+        # Convert the prefix, which follows the GGUF naming pattern, to
+        # Safetensor weight name.
         name = self._prefix
-        if self._gguf_name_map:
-            # Note that the following replacement only works for models like
-            # Llama or Mistral which do not include `{bid}` (block ID) in the
-            # name map.
-            for before, after in self._gguf_name_map.items():
-                name = name.replace(before, after)
+        for before, after in self._gguf_name_map.items():
+            name = name.replace(before, after)
         return name
 
     def __getattr__(self, attr) -> LlamaSafetensorWeights:

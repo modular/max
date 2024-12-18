@@ -212,8 +212,8 @@ class Llama3Model(PipelineModel):
         if serialized_path := self.pipeline_config.serialized_model_path:
             # Hydrate all weights to be referenced by the serialized path.
             weights_registry = {}
-            for name, tensor in self._weights._tensors.items():
-                weights_registry[name] = tensor.data
+            for name, weight in self._weights.items():
+                weights_registry[name] = weight.raw_tensor()
 
             logging.info("Loading serialized model from %s", serialized_path)
 

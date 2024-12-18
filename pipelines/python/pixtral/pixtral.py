@@ -144,11 +144,8 @@ class PixtralModel(PipelineModel):
         if serialized_path := self.pipeline_config.serialized_model_path:
             # Hydrate all weights to be referenced by the serialized graph.
             weights_registry = {}
-            for (
-                name,
-                tensor,
-            ) in self.pipeline_config._tensors.items():  # type:ignore
-                weights_registry[name] = tensor.data
+            for name, weight in self._weights.items():
+                weights_registry[name] = weight.raw_tensor()
             logging.info(
                 "Loading serialized model from ", serialized_path, "..."
             )
@@ -171,4 +168,10 @@ class PixtralModel(PipelineModel):
             )
             after = time.perf_counter()
             logging.info(f"Compiling model took {after - before:.6f} seconds")
+            if (
+                export_path
+                := self.pipeline_config.save_to_serialized_model_path
+            ):
+                logging.info("Exporting serialized model to %s", export_path)
+                model._export_mef(export_path)
             return model
