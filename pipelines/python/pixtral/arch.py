@@ -31,7 +31,7 @@ pixtral_arch = SupportedArchitecture(
     },
     versions=[
         SupportedVersion(
-            name="default",
+            name="pixtral12b",
             encodings={
                 SupportedEncoding.bfloat16: (
                     [
@@ -66,7 +66,7 @@ pixtral_arch = SupportedArchitecture(
             default_encoding=SupportedEncoding.bfloat16,
         )
     ],
-    default_version="default",
+    default_version="pixtral12b",
     pipeline_model=PixtralModel,
     tokenizer=TextAndVisionTokenizer,
     default_weights_format=WeightsFormat.safetensors,
