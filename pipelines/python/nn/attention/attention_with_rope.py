@@ -93,7 +93,9 @@ class AttentionWithRope(AttentionImpl):
         return self.wo(attn_out)
 
 
-def distribute_value(v: TensorValue, devices: List[DeviceRef]):
+def distribute_value(
+    v: TensorValue, devices: List[DeviceRef]
+) -> List[TensorValue]:
     return [v.to(device) for device in devices]
 
 
@@ -102,24 +104,28 @@ class DistributedAttentionWithRope(DistributedAttentionImpl):
     list_of_attentions: List[AttentionWithRope]
     devices: list[DeviceRef]
 
-    def __call__(  # type: ignore
+    def __call__(
         self,
         x: List[TensorValue],
         kv_collections: List[ContinuousBatchingKVCacheCollection],
-        input_row_offsets: TensorValue,
-    ) -> TensorValue:
+        **kwargs,
+    ) -> List[TensorValue]:
+        input_row_offsets = kwargs["input_row_offsets"]
+        assert isinstance(input_row_offsets, TensorValue)
         input_row_offsets_ = distribute_value(input_row_offsets, self.devices)
 
-        return ops.allreduce.sum(
-            [
-                self.list_of_attentions[i](
-                    x[i],
-                    kv_collections[i],
-                    input_row_offsets=input_row_offsets_[i],
-                )
-                for i in range(len(self.devices))
-            ]
-        )  # type: ignore
+        return list(
+            ops.allreduce.sum(
+                [
+                    self.list_of_attentions[i](
+                        x[i],
+                        kv_collections[i],
+                        input_row_offsets=input_row_offsets_[i],
+                    )
+                    for i in range(len(self.devices))
+                ]
+            )
+        )
 
 
 @dataclass

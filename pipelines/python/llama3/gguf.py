@@ -46,11 +46,15 @@ from nn import (
 )
 
 
-def distribute_value(v: TensorValue, devices: List[DeviceRef]):
+def distribute_value(
+    v: TensorValue, devices: List[DeviceRef]
+) -> List[TensorValue]:
     return [v.to(device) for device in devices]
 
 
-def shard_col_value(x: TensorValueLike, devices: List[DeviceRef]):
+def shard_col_value(
+    x: TensorValueLike, devices: List[DeviceRef]
+) -> List[TensorValue]:
     n_devices = len(devices)
     v = TensorValue(x)
     col_size = v.shape[1].dim // n_devices
@@ -60,7 +64,9 @@ def shard_col_value(x: TensorValueLike, devices: List[DeviceRef]):
     ]
 
 
-def shard_row_value(x: TensorValueLike, devices: List[DeviceRef]):
+def shard_row_value(
+    x: TensorValueLike, devices: List[DeviceRef]
+) -> List[TensorValue]:
     n_devices = len(devices)
     v = TensorValue(x)
     row_size = v.shape[0].dim // n_devices
@@ -76,7 +82,7 @@ def feed_forward(
     hidden_dim: int,
     feed_forward_length: int,
     weights: Weights,
-):
+) -> MLP:
     return MLP(
         linear(
             dtype,
@@ -125,7 +131,7 @@ def distributed_rms_norm(
     eps: float,
     weights: Weights,
     devices: List[DeviceRef],
-):
+) -> DistributedRMSNorm:
     weights_ = TensorValue(weights.weight.allocate(DType.float32, [dims]))
     weights_devs = distribute_value(weights_, devices)
 
@@ -139,7 +145,7 @@ def embedding(
     vocab_size: int,
     hidden_dim: int,
     weights: Weights,
-):
+) -> Embedding:
     return Embedding(
         weights.weight.allocate(
             pipeline_config.dtype,
@@ -156,7 +162,7 @@ def distributed_feed_forward(
     feed_forward_length: int,
     weights: Weights,
     devices: List[DeviceRef],
-):
+) -> DistributedMLP:
     w_ffn_down_full = weights.ffn_down.weight.allocate(
         dtype, [hidden_dim, feed_forward_length], quantization_encoding
     )
@@ -183,13 +189,13 @@ def distributed_feed_forward(
 
 
 def distributed_attention_opaque(
-    kv_params,
+    kv_params: KVCacheParams,
     pipeline_config: PipelineConfig,
-    rope,
-    weights,
-    layer_idx: int,
+    rope: OptimizedRotaryEmbedding,
+    weights: Weights,
+    layer_idx: TensorValue,
     devices: List[DeviceRef],
-):
+) -> DistributedAttentionWithRope:
     wq_full = ops.transpose(
         weights.attn_q.weight.allocate(
             pipeline_config.dtype,
@@ -237,7 +243,8 @@ def distributed_attention_opaque(
     wk_shards = shard_col_value(wk_full, devices)
     wv_shards = shard_col_value(wv_full, devices)
 
-    # Didn't transpose here since linear will transpose so shard on col instead of row
+    # Didn't transpose here since linear will transpose so shard on col instead
+    # of row
     wo_shards = shard_col_value(wo_full, devices)
     attns = [
         AttentionWithRope(
@@ -254,16 +261,16 @@ def distributed_attention_opaque(
         for rank in range(len(devices))
     ]
 
-    return DistributedAttentionWithRope(attns, devices)  # type: ignore
+    return DistributedAttentionWithRope(attns, devices)
 
 
 def _attention_opaque(
-    kv_params,
+    kv_params: KVCacheParams,
     pipeline_config: PipelineConfig,
-    rope,
-    weights,
-    layer_idx,
-):
+    rope: OptimizedRotaryEmbedding,
+    weights: Weights,
+    layer_idx: TensorValue,
+) -> AttentionWithRope:
     wq = ops.transpose(
         weights.attn_q.weight.allocate(
             pipeline_config.dtype,
@@ -322,7 +329,7 @@ def distributed_transformer_opaque(
     pipeline_config: PipelineConfig,
     weights: Weights,
     kv_params: KVCacheParams,
-):
+) -> DistributedTransformer:
     devices = [
         DeviceRef(spec.device_type, spec.id)
         for spec in pipeline_config.device_specs
@@ -426,7 +433,7 @@ def _transformer_opaque(
     pipeline_config: PipelineConfig,
     weights: Weights,
     kv_params: KVCacheParams,
-):
+) -> Transformer:
     with graph:
         if weights.rope_freqs.weight.exists():
             rope_scaling = weights.rope_freqs.weight.raw_tensor()
@@ -522,7 +529,7 @@ def attention(
     pipeline_config: PipelineConfig,
     rope: Union[OptimizedRotaryEmbedding, RotaryEmbedding],
     weights: Weights,
-):
+) -> NaiveAttentionWithRope:
     kv_weight_dim = (
         pipeline_config.huggingface_config.hidden_size
         // pipeline_config.huggingface_config.num_attention_heads
@@ -568,7 +575,7 @@ def transformer(
     pipeline_config: PipelineConfig,
     weights: Weights,
     kv_params: KVCacheParams,
-):
+) -> Union[Transformer, NaiveTransformer]:
     if pipeline_config.cache_strategy.uses_opaque():
         return _transformer_opaque(graph, pipeline_config, weights, kv_params)
 
