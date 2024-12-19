@@ -40,7 +40,7 @@ class MLP(Layer):
     up_proj: Linear
 
     def __call__(self, x: TensorValueLike) -> TensorValue:
-        return self.down_proj((ops.gelu(self.gate_proj(x)) * self.up_proj(x)))  # type: ignore
+        return self.down_proj((ops.silu(self.gate_proj(x)) * self.up_proj(x)))  # type: ignore
 
 
 @dataclass
@@ -56,18 +56,18 @@ class TransformerBlock(Layer):
         self,
         x: TensorValue,
         attention_mask: TensorValueLike,
-        position_embeddings: TensorValue,
-    ) -> tuple[TensorValue]:
+        position_embeddings: tuple[TensorValue, TensorValue],
+    ) -> TensorValue:
         attention_out = self.attention(
             self.attention_norm(x),
             attention_mask,
-            position_embeddings,  # type: ignore
+            position_embeddings,
         )
 
         h = x + attention_out
         h = h + self.mlp(self.mlp_norm(h))
 
-        return h  # type: ignore
+        return h
 
 
 @dataclass
@@ -87,18 +87,18 @@ class Transformer(Layer):
 
     def __call__(
         self,
-        patch_embeds,
-        attention_mask,
-        position_embeddings,
+        patch_embeds: TensorValue,
+        attention_mask: TensorValueLike,
+        position_embeddings: tuple[TensorValue, TensorValue],
         **kwargs,
     ):
         h = patch_embeds
 
         for _, layer in enumerate(self.layers):
             h = layer(
-                h,
-                attention_mask,
-                position_embeddings,
+                x=h,
+                attention_mask=attention_mask,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 

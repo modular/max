@@ -33,18 +33,19 @@ class Transformer(Layer):
     layers: list[TransformerBlock]
     norm: Union[RMSNorm, LPLayerNorm]
     output: Linear
-    embedding: Embedding  # this embedding layer is not used by __call__ but used by LlavaConditionalGeneration
+    embedding: Embedding
     kv_params: KVCacheParams
     kv_collection_constructor: FetchContinuousBatchingKVCacheCollection
+    all_logits: bool = False
 
     def __call__(
         self,
-        embeds,
+        embeds: TensorValue,
         kv_cache_inputs: tuple[
             TensorValue, TensorValue, TensorValue, TensorValue
         ],
         **kwargs,
-    ) -> TensorValue:
+    ) -> tuple[TensorValue, ...]:
         """Takes as input:
         embeds: embeddings of the sequence of text tokens and possibly images.
         shape = [batch_size, n_patches, hidden_dim]
@@ -56,22 +57,47 @@ class Transformer(Layer):
         for _, layer in enumerate(self.layers):
             h = layer(h, kv_collection, **kwargs)
 
-        # Predict with the last non-pad token (right-padded).
-        if "input_row_offsets" in kwargs:
-            # For ragged tensors gather the last tokens from packed dim 0.
-            input_row_offsets: TensorValueLike = kwargs["input_row_offsets"]
-            last_token_indices = input_row_offsets[1:] - 1  # type: ignore
-            # Should be: last_token = h[last_token_indices]
-            last_token = ops.gather(h, last_token_indices, axis=0)
+        if self.all_logits:
+            # When echo is enabled, the logits of the input tokens are
+            # returned.
+            logits = ops.cast(self.output(self.norm(h)), DType.float32)
+            if "input_row_offsets" in kwargs:
+                # For ragged tensors gather the last tokens from packed dim 0.
+                input_row_offsets: TensorValueLike = kwargs["input_row_offsets"]
+                last_token_indices = input_row_offsets[1:] - 1  # type: ignore
+                last_token_logits = ops.gather(
+                    logits, last_token_indices, axis=0
+                )
+            else:
+                # For padded tensors, use `gather_nd`.
+                # Unsqueeze since `gather_nd` expects a static last dim.
+                valid_lengths: TensorValueLike = kwargs["valid_lengths"]
+                last_token_logits = ops.gather_nd(
+                    logits,
+                    indices=ops.unsqueeze(valid_lengths - 1, -1),  # type: ignore
+                    batch_dims=1,
+                )
+            return (last_token_logits, logits)
         else:
-            # For padded tensors, use `gather_nd`.
-            # Unsqueeze since `gather_nd` expects a static last dim.
-            valid_lengths: TensorValueLike = kwargs["valid_lengths"]
-            last_token = ops.gather_nd(
-                h,
-                indices=ops.unsqueeze(valid_lengths - 1, -1),  # type: ignore
-                batch_dims=1,
-            )
+            # Otherwise, only return the logits for the last non-pad token
+            # (right-padded).
+            if "input_row_offsets" in kwargs:
+                # For ragged tensors gather the last tokens from packed dim 0.
+                input_row_offsets = kwargs["input_row_offsets"]
+                last_token_indices = input_row_offsets[1:] - 1  # type: ignore
+                # Should be: last_token = h[last_token_indices]
+                last_token = ops.gather(h, last_token_indices, axis=0)
+            else:
+                # For padded tensors, use `gather_nd`.
+                # Unsqueeze since `gather_nd` expects a static last dim.
+                valid_lengths = kwargs["valid_lengths"]
+                last_token = ops.gather_nd(
+                    h,
+                    indices=ops.unsqueeze(valid_lengths - 1, -1),  # type: ignore
+                    batch_dims=1,
+                )
 
-        # Always return float32 logits, no matter the activation type
-        return ops.cast(self.output(self.norm(last_token)), DType.float32)
+            # Always return float32 logits, no matter the activation type
+            return (
+                ops.cast(self.output(self.norm(last_token)), DType.float32),
+            )

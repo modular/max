@@ -162,6 +162,7 @@ def _transformer(
             theta=params.huggingface_config.text_config.rope_theta,
             max_seq_len=params.max_length,
             rope_scaling=None,
+            interleaved=False,
         )
 
         layers = [
@@ -182,14 +183,14 @@ def _transformer(
                 attention_norm=rms_norm(
                     params.huggingface_config.text_config.hidden_size,
                     params.huggingface_config.text_config.rms_norm_eps,
-                    weights.language_model.model.layers[
-                        i
-                    ].post_attention_layernorm,
+                    weights.language_model.model.layers[i].input_layernorm,
                 ),
                 mlp_norm=rms_norm(
                     params.huggingface_config.text_config.hidden_size,
                     params.huggingface_config.text_config.rms_norm_eps,
-                    weights.language_model.model.layers[i].input_layernorm,
+                    weights.language_model.model.layers[
+                        i
+                    ].post_attention_layernorm,
                 ),
             )
             for i in range(
@@ -204,7 +205,12 @@ def _transformer(
             weights.language_model.model.embed_tokens,
         )
 
-        output = Linear(embedding_layer.weights)
+        output = linear(
+            params.dtype,
+            params.huggingface_config.text_config.vocab_size,
+            params.huggingface_config.text_config.hidden_size,
+            weights.language_model.lm_head,
+        )
 
         kv_collection_cls = FetchContinuousBatchingKVCacheCollection
 

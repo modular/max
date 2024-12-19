@@ -65,7 +65,7 @@ class PixtralModel(PipelineModel):
             # Get first image in first batch and permute the order to (HWC).
             # Pixtral processor returns CHW images.
             image = np.transpose(context_batch[0].pixel_values[0], (1, 2, 0))
-            pixel_values = Tensor.from_dlpack(image).to(
+            pixel_values = Tensor.from_numpy(image).to(
                 self.pipeline_config.device
             )
         else:

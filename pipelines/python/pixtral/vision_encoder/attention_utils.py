@@ -16,11 +16,14 @@ from __future__ import annotations
 from typing import List
 
 import numpy as np
-from max.graph import ops
+from max.graph import StaticDim, TensorValue, ops
 
 
 def causal_attention_mask_2d_from_imgs(
-    imgs: List[np.ndarray], patch_size, batch_size, fill_val=-10000.0
+    imgs: List[np.ndarray],
+    patch_size: int,
+    batch_size: int,
+    fill_val: float = -10000.0,
 ):
     """Generates a 2D mask to ensure different blocks of patches (images) can only attend
     to patches within their respective block (image).
@@ -66,7 +69,9 @@ def causal_attention_mask_2d_from_imgs(
     return fill_matrix
 
 
-def causal_attention_mask_2d(num_patches_list, patch_embeds):
+def causal_attention_mask_2d(
+    num_patches_list: list[int], patch_embeds: TensorValue
+):
     """Generates a 2D mask to ensure different blocks of patches (images) can only attend
     to patches within their respective block (image).
 
@@ -83,7 +88,8 @@ def causal_attention_mask_2d(num_patches_list, patch_embeds):
     attention mask for the blocks of patches attended to by the transformer.
     """
     # The total number of patches for all image in the batch.
-    seq_len = int(patch_embeds.shape[1])
+    # TODO: change this to take a dim not an int.
+    seq_len = int(patch_embeds.shape[1])  # type: ignore
     mask_shape = (seq_len, seq_len)
 
     # TODO(KERN-782): This should be -inf but softmax saturates with NaNs.
@@ -104,13 +110,15 @@ def causal_attention_mask_2d(num_patches_list, patch_embeds):
     # Expand the mask dimensions to match the expected transformer input shape.
     fill_matrix = np.expand_dims(fill_matrix, axis=(0, 1))  # Add two new axes
     fill_matrix = np.broadcast_to(
-        fill_matrix, (int(patch_embeds.shape[0]), 1, seq_len, seq_len)
+        fill_matrix,
+        (int(patch_embeds.shape[0]), 1, seq_len, seq_len),  # type: ignore
     )
     return fill_matrix
 
 
-def rotate_half(x):
+def rotate_half(x: TensorValue):
     """Rotates half the hidden dims of the input."""
-    x1 = x[..., : int(x.shape[-1]) // 2]
-    x2 = x[..., int(x.shape[-1]) // 2 :]
+    # TODO: change this to take a dim not an int.
+    x1 = x[..., : int(StaticDim(x.shape[-1])) // 2]
+    x2 = x[..., int(StaticDim(x.shape[-1])) // 2 :]
     return ops.concat((-x2, x1), axis=-1)

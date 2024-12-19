@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import List
 
 from max.dtype import DType
-from max.graph import TensorValue, ops
+from max.graph import StaticDim, TensorValue, ops
 from nn.conv import Conv2D
 from nn.layer import Layer
 from nn.norm import RMSNorm
@@ -86,12 +86,17 @@ class VisionEncoder(Layer):
         # Generate attention mask for patches in images.
         # p.shape = batch_size, patches_per_height, patches_per_width, hidden_size
         attention_mask = causal_attention_mask_2d(
-            [p.shape[1] * p.shape[2] for p in patch_embeds_list],
+            [
+                int(StaticDim(p.shape[1])) * int(StaticDim(p.shape[2]))
+                for p in patch_embeds_list
+            ],
             patch_embeds,
         )
 
         encoder_output = self.transformer(
-            patch_embeds, attention_mask, position_embedding
+            patch_embeds=patch_embeds,
+            attention_mask=attention_mask,
+            position_embeddings=position_embedding,
         )
 
         return encoder_output

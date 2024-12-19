@@ -14,7 +14,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Tuple
 
 from max.graph import TensorValue, TensorValueLike, ops
 from nn.layer import Layer
@@ -94,7 +93,7 @@ class Attention(Layer):
         self,
         x: TensorValue,
         attention_mask: TensorValueLike,
-        position_embeddings: Tuple[TensorValue, TensorValue],
+        position_embeddings: tuple[TensorValue, TensorValue],
     ) -> TensorValue:
         """Computes attention on x.
 
@@ -106,15 +105,22 @@ class Attention(Layer):
 
         Returns the result of multi-headed self attention on the input.
         """
-        batch_size, seq_len = x.shape[0], x.shape[1]
+
+        batch_size, n_patches = x.shape[0], x.shape[1]
         # matmul weights
         xq = self.wq(x)
         xk = self.wk(x)
         xv = self.wv(x)
 
-        xq = ops.reshape(xq, [batch_size, seq_len, self.n_heads, self.head_dim])
-        xk = ops.reshape(xk, [batch_size, seq_len, self.n_heads, self.head_dim])
-        xv = ops.reshape(xv, [batch_size, seq_len, self.n_heads, self.head_dim])
+        xq = ops.reshape(
+            xq, [batch_size, n_patches, self.n_heads, self.head_dim]
+        )
+        xk = ops.reshape(
+            xk, [batch_size, n_patches, self.n_heads, self.head_dim]
+        )
+        xv = ops.reshape(
+            xv, [batch_size, n_patches, self.n_heads, self.head_dim]
+        )
 
         cos, sin = position_embeddings
         xq, xk = self.apply_rotary_embedding(xq, xk, cos, sin, unsqueeze_dim=0)
@@ -122,6 +128,6 @@ class Attention(Layer):
         output = (
             self.attention(xq, xk, xv, attention_mask)
             .transpose(1, 2)
-            .reshape([batch_size, seq_len, -1])
+            .reshape([batch_size, n_patches, -1])
         )
         return self.wo(output)

@@ -41,12 +41,11 @@ class LlavaConditionalGeneration(Layer):
     def __call__(
         self,
         input_ids: TensorValue,  # Shape (batch_size, sequence_length). Indices of input sequence tokens in the vocabulary. Indices can be obtained from language model tokenizer.
-        pixel_values: TensorValue,  # (height, width, num_channels).
         kv_cache_inputs: tuple[
             TensorValue, TensorValue, TensorValue, TensorValue
         ],
         **kwargs,
-    ) -> TensorValue:
+    ) -> tuple[TensorValue, ...]:
         """
         Args:
             input_ids (ragged `TensorValue` of shape `(batch_size * sequence_length for each batch)`):
@@ -57,20 +56,17 @@ class LlavaConditionalGeneration(Layer):
                 The maximum number of image tokens in one sequence (prompt) =
                     (input_ids == self.image_token_index).sum(1).max())
                 Padding will be ignored by default should you provide it.
-            pixel_values (`TensorValue` of shape `(batch_size, image_height, image_width, num_channels)):
-                The tensors corresponding to the input images. Pixel values can be obtained using ImageProcessor
+            pixel_values (list`TensorValue` of length batch_size
+                The tensors corresponding to the input image are of shape `(image_height, image_width, num_channels)):
+                Pixel values can be obtained using ImageProcessor.
         """
-        # TODO: if the input is a list, change vision_encoder input to pixel_values
-        # Obtains image embeddings from the vision encoder.  Output shape = (num_images=batch_size, num_patches_in_image, vision_encoder_hidden_dim)
-        # TODO: Works now for batch_size=1, Maybe convert to a ragged tensor to be compatible with input embeds?
-        # Apply multimodal projection to  hidden states from the vision encoder. Output shape = (num_images, num_patches_in_image, language_model_hidden_dim)
+        # TODO: If input pixel_values is a list of images, don't wrap it in a list.
+        pixel_values: list[TensorValue] = []
+        if "pixel_values" in kwargs:
+            pixel_values = [kwargs["pixel_values"]]
 
         image_embeds = self.multi_modal_projector(
-            self.vision_encoder(
-                [
-                    pixel_values,
-                ]
-            )
+            self.vision_encoder(pixel_values)
         )
         # inputs_embeds shape (total_sequence_length=text_and_image_tokens_length for all seqs,
         #   language_model_hidden_dim)
