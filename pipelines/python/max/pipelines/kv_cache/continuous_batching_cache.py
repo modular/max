@@ -218,9 +218,10 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
 
             cache_len = self.cache_lengths[seq_id]
 
-            if cache_len + num_tokens + num_steps - 1 > self.max_seq_len:
-                msg = f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} with {num_tokens} new tokens for {num_steps} steps. Existing length: {cache_len}"
-                raise ValueError(msg)
+            assert cache_len + num_tokens + num_steps - 1 <= self.max_seq_len, (
+                f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} "
+                f"with {num_tokens} new tokens and {num_steps} steps. Existing length: {cache_len}"
+            )
 
             cache_lengths_np[i] = cache_len
 

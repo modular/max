@@ -244,11 +244,10 @@ class PagedKVCacheManager(KVCacheManager):
             if curr_seq_len > max_seq_len_in_batch:
                 max_seq_len_in_batch = curr_seq_len
 
-            if curr_seq_len <= self.max_seq_len:
-                continue
-
-            msg = f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} with {num_tokens} new tokens. Existing length: {self.cache_lengths[seq_id]}"
-            raise ValueError(msg)
+            assert curr_seq_len <= self.max_seq_len, (
+                f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} "
+                f"with {num_tokens} new tokens. Existing length: {self.cache_lengths[seq_id] }"
+            )
 
         max_num_pages = ceildiv(max_seq_len_in_batch, self.page_size)
 
