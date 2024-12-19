@@ -23,6 +23,7 @@ from .pixtral import PixtralModel
 
 pixtral_arch = SupportedArchitecture(
     name="LlavaForConditionalGeneration",
+    example_repo_ids=["mistral-community/pixtral-12b"],
     default_encoding=SupportedEncoding.bfloat16,
     supported_encodings={
         SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS]

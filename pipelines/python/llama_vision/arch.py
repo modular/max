@@ -23,6 +23,7 @@ from .llama_vision import LlamaVision
 
 llama_vision_arch = SupportedArchitecture(
     name="MllamaForConditionalGeneration",
+    example_repo_ids=["meta-llama/Llama-3.2-11B-Vision-Instruct"],
     default_encoding=SupportedEncoding.bfloat16,
     supported_encodings={
         SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS]

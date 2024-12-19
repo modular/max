@@ -23,6 +23,7 @@ from .model import MistralModel
 
 mistral_arch = SupportedArchitecture(
     name="MistralForCausalLM",
+    example_repo_ids=["mistralai/Mistral-Nemo-Instruct-2407"],
     default_encoding=SupportedEncoding.bfloat16,
     supported_encodings={
         SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS]

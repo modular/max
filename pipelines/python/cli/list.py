@@ -20,12 +20,18 @@ def list_pipelines_to_console():
     for arch in PIPELINE_REGISTRY.architectures.values():
         print()
         print(f"    Architecture: {arch.name}")
+        print()
+        print("         Example Huggingface Repo Ids: ")
+        for repo_id in arch.example_repo_ids:
+            print(f"              {repo_id}")
+
+        print()
         for (
             encoding_name,
             kv_cache_strategies,
         ) in arch.supported_encodings.items():
             print(
-                f"        Encoding Supported: {encoding_name}, with Cache Strategies: {kv_cache_strategies}"
+                f"         Encoding Supported: {encoding_name}, with Cache Strategies: {kv_cache_strategies}"
             )
 
     print()

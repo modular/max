@@ -23,6 +23,9 @@ from .model import ReplitModel
 
 replit_arch = SupportedArchitecture(
     name="MPTForCausalLM",
+    example_repo_ids=[
+        "modularai/replit-code-1.5",
+    ],
     default_encoding=SupportedEncoding.bfloat16,
     supported_encodings={
         SupportedEncoding.float32: [KVCacheStrategy.CONTINUOUS],

@@ -24,6 +24,14 @@ from .safetensor_converter import LlamaSafetensorWeights
 
 llama_arch = SupportedArchitecture(
     name="LlamaForCausalLM",
+    example_repo_ids=[
+        "modularai/llama-3.1",
+        "meta-llama/Llama-3.1-8B-Instruct",
+        "meta-llama/Llama-Guard-3-8B",
+        "meta-llama/Llama-3.2-1B-Instruct",
+        "meta-llama/Llama-3.2-3B-Instruct",
+        "deepseek-ai/deepseek-coder-6.7b-instruct",
+    ],
     default_encoding=SupportedEncoding.q4_k,
     supported_encodings={
         SupportedEncoding.q4_k: [KVCacheStrategy.NAIVE],

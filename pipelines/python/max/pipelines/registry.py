@@ -37,6 +37,7 @@ class SupportedArchitecture:
     def __init__(
         self,
         name: str,
+        example_repo_ids: list[str],
         default_encoding: SupportedEncoding,
         supported_encodings: dict[SupportedEncoding, list[KVCacheStrategy]],
         pipeline_model: Type[PipelineModel],
@@ -51,6 +52,7 @@ class SupportedArchitecture:
 
         args:
             name: Architecture name.
+            example_repo_ids: HuggingFace repo_id which runs this architecture.
             default_encoding: Default encoding for the model.
             supported_encodings: Alternate encodings supported.
             pipeline_model: PipelineModel class that defines the model graph
@@ -61,6 +63,7 @@ class SupportedArchitecture:
                 input checkpoint has a different format than the default.
         """
         self.name = name
+        self.example_repo_ids = example_repo_ids
         self.default_encoding = default_encoding
         self.supported_encodings = supported_encodings
         self.pipeline_model = pipeline_model
