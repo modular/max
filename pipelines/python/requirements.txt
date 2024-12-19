@@ -4,10 +4,10 @@ gguf >= 0.10.0
 sentencepiece >= 0.2.0
 requests >= 2.32.3
 tokenizers >= 0.19.1
-# PyTorch 2.4.1 with cuda support
-torch == 2.4.1
-torchvision == 0.19.1
-torchaudio == 2.4.1
+# PyTorch 2.5.1 with cuda support
+torch == 2.5.1
+torchvision == 0.20.1
+torchaudio == 2.5.1
 transformers >= 4.44.2
 safetensors >= 0.4.5
 psutil
