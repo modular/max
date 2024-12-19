@@ -78,6 +78,7 @@ class Transformer(Layer):
         ],
         **kwargs,
     ) -> tuple[TensorValue, ...]:
+        # TODO: Split into a ragged and non-ragged version.
         h = self.embedding(tokens)
 
         kv_collection = self.kv_collection_constructor(*kv_cache_inputs)
@@ -85,47 +86,24 @@ class Transformer(Layer):
         for _, layer in enumerate(self.layers):
             h = layer(h, kv_collection, **kwargs)
 
-        if self.all_logits:
-            # When echo is enabled, the logits of the input tokens are
-            # returned.
-            logits = ops.cast(self.output(self.norm(h)), DType.float32)
-            if "input_row_offsets" in kwargs:
-                # For ragged tensors gather the last tokens from packed dim 0.
-                input_row_offsets: TensorValueLike = kwargs["input_row_offsets"]
-                last_token_indices = input_row_offsets[1:] - 1  # type: ignore
-                last_token_logits = ops.gather(
-                    logits, last_token_indices, axis=0
-                )
-            else:
-                # For padded tensors, use `gather_nd`.
-                # Unsqueeze since `gather_nd` expects a static last dim.
-                valid_lengths: TensorValueLike = kwargs["valid_lengths"]
-                last_token_logits = ops.gather_nd(
-                    logits,
-                    indices=ops.unsqueeze(valid_lengths - 1, -1),  # type: ignore
-                    batch_dims=1,
-                )
-            return (last_token_logits, logits)
-        else:
-            # Otherwise, only return the logits for the last non-pad token
-            # (right-padded).
-            if "input_row_offsets" in kwargs:
-                # For ragged tensors gather the last tokens from packed dim 0.
-                input_row_offsets = kwargs["input_row_offsets"]
-                last_token_indices = input_row_offsets[1:] - 1  # type: ignore
-                # Should be: last_token = h[last_token_indices]
-                last_token = ops.gather(h, last_token_indices, axis=0)
-            else:
-                # For padded tensors, use `gather_nd`.
-                # Unsqueeze since `gather_nd` expects a static last dim.
-                valid_lengths = kwargs["valid_lengths"]
-                last_token = ops.gather_nd(
-                    h,
-                    indices=ops.unsqueeze(valid_lengths - 1, -1),  # type: ignore
-                    batch_dims=1,
-                )
+        normalized = self.norm(h)
 
-            # Always return float32 logits, no matter the activation type
-            return (
-                ops.cast(self.output(self.norm(last_token)), DType.float32),
-            )
+        if "input_row_offsets" in kwargs:
+            # Ragged inputs/activations
+            last_indices = kwargs["input_row_offsets"][1:] - 1
+            last_tokens = ops.gather(normalized, last_indices, axis=0)
+        else:
+            # Dense padded inputs/activations
+            valid_lengths = kwargs["valid_lengths"]
+            # TODO: Remove once `gather_nd` works with nonstatic last dims.
+            indices = ops.unsqueeze(valid_lengths - 1, -1)
+            last_tokens = ops.gather_nd(normalized, indices, batch_dims=1)
+
+        # Always return float32 logits, no matter the activation type.
+        last_token_logits = ops.cast(self.output(last_tokens), DType.float32)
+
+        if self.all_logits:
+            all_logits = ops.cast(self.output(normalized), DType.float32)
+            return (last_token_logits, all_logits)
+
+        return (last_token_logits,)
