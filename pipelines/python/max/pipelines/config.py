@@ -29,7 +29,7 @@ from huggingface_hub import (
 )
 from huggingface_hub.hf_api import ModelInfo
 from huggingface_hub.utils import SafetensorsRepoMetadata
-from max.driver import CPU, Accelerator, Device, DeviceSpec, accelerator_count
+from max.driver import CPU, Accelerator, Device, DeviceSpec
 from max.dtype import DType
 from max.graph.quantization import QuantizationEncoding
 from max.graph.weights import (
@@ -540,9 +540,7 @@ class PipelineConfig:
         """Initialize and return a list of devices, given a list of device specs."""
         if self._devices:
             return self._devices
-        num_devices_available = accelerator_count()
         for device_spec in self.device_specs:
-            assert device_spec.id < num_devices_available
             self._devices.append(
                 CPU(device_spec.id)
                 if device_spec.device_type == "cpu"
@@ -553,6 +551,7 @@ class PipelineConfig:
     @property
     def device(self) -> Device:
         """Initialize and return a singular device, given a singular device spec."""
+        assert len(self.device_specs) == 1
         return self.devices[0]
 
     @property

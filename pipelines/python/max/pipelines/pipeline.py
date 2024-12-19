@@ -254,7 +254,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         self._eos_token_id = eos_token_id
 
         # Initialize Session.
-        session = InferenceSession(devices=self._pipeline_config.devices)
+        session = InferenceSession(devices=[self._pipeline_config.device])
 
         # Load model.
         self._pipeline_model = pipeline_model(
@@ -342,12 +342,8 @@ class TextGenerationPipeline(TokenGenerator[T]):
         tracer.next(f"multistep_execution_loop_{num_steps}_steps")
         for i in range(num_steps):
             tracer.push(f"step_{i}")
-            # Extract the kv-cache inputs and flatten before pushing to execute
-            kv_cache_inputs_tuple = [
-                inp
-                for kv_cache_input in kv_cache_inputs
-                for inp in kv_cache_input
-            ]
+            # Assuming 1 device, get first KVCache
+            kv_cache_inputs_tuple = kv_cache_inputs[0]
             # Execute the model and get next tokens.
             model_outputs = self._pipeline_model.execute(
                 *curr_step_inputs, *kv_cache_inputs_tuple
