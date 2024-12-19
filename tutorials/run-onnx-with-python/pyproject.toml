@@ -17,7 +17,7 @@ platforms = ["linux-64", "osx-arm64"]
 onnx_tutorial = { path = ".", editable = true }
 
 [tool.pixi.dependencies]
-max = "~=24.5"
+max = "~=24.6"
 pytorch = "==2.4.0"
 numpy = "<2.0"
 onnx = "==1.16.0"

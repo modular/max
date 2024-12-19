@@ -25,7 +25,7 @@ isort = "isort src/max_ops/addition.py tests/test_addition.py"
 
 
 [tool.pixi.dependencies]
-max = "~=24.5"
+max = "~=24.6"
 numpy = "<2.0"
 pytest = ">=8.3.3,<9"
 black = ">=24.10.0,<25"

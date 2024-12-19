@@ -17,7 +17,7 @@ platforms = ["linux-64", "osx-arm64"]
 torchscript_tutorial = { path = ".", editable = true }
 
 [tool.pixi.dependencies]
-max = "~=24.5"
+max = "~=24.6"
 pytorch = "==2.4.0"
 transformers = "==4.40.1"
 
