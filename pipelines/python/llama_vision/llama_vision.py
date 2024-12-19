@@ -296,26 +296,67 @@ class LlamaVision(PipelineModel):
             msg = "Llama Vision only supports continuous batching"
             raise ValueError(msg)
 
+        # Input validation - check if the sequence of contexts in this batch
+        # all have images, or none altogether.
+        has_images = -1
+        for context in context_batch:
+            if has_images == -1:
+                has_images = context.pixel_values is not None
+            elif (context.pixel_values is not None and has_images == 0) or (
+                context.pixel_values is None and has_images == 1
+            ):
+                raise RuntimeError(
+                    "Expected the context batch to all have images, or no images "
+                    "at all. At least one context in this batch has an image and "
+                    "another does not."
+                )
+            else:
+                has_images = 0 if context.pixel_values is None else 1
+
         # Marshal out hyperparameters.
         batch_size = len(context_batch)
         height = self.vision_config.image_size
         width = self.vision_config.image_size
-        num_channels = self.vision_config.num_channels
+        num_concurrent_media = 1
         max_num_tiles = self.vision_config.max_num_tiles
         patch_size = self.vision_config.patch_size
+        num_patches = (height // patch_size) * (width // patch_size) + 1
         # TODO(bduke): account for the actual instead of max number of tiles.
         image_seq_len = max_num_tiles * (height * width) // patch_size**2
 
-        pixel_values = Tensor.zeros(
-            shape=[batch_size, 1, max_num_tiles, height, width, num_channels],
-            dtype=DType.float32,
-        ).to(self.pipeline_config.device)
-        aspect_ratio_ids = Tensor.zeros(
-            shape=[batch_size, 1], dtype=DType.int64
-        ).to(self.pipeline_config.device)
-        aspect_ratio_mask = Tensor.zeros(
-            shape=[batch_size, 1, max_num_tiles], dtype=DType.int64
-        ).to(self.pipeline_config.device)
+        res = []
+        if has_images:
+            images = []
+            for context in context_batch:
+                # Get first image in first batch and permute the order to (HWC).
+                image = np.transpose(context.pixel_values, (0, 1, 3, 4, 2))
+
+                # Add batch_size, num_concurrent_media, and max_num_tiles dimensions
+                # [1, num_concurrent_media, max_num_tiles, H, W, C]
+                image = np.expand_dims(image, axis=(0))
+                images.append(image)
+
+            # Convert the list into a single NumPy array with shape
+            # (batch_size, 1, max_num_tiles, H, W, C).
+            final_images = np.concatenate(images, axis=0)
+
+            pixel_values = Tensor.from_dlpack(final_images).to(
+                self.pipeline_config.device
+            )
+
+            # TODO: Shapes are correct but what should these values be?
+            aspect_ratio_ids = Tensor.zeros(
+                shape=[batch_size, 1], dtype=DType.int64
+            ).to(self.pipeline_config.device)
+            aspect_ratio_mask = Tensor.zeros(
+                shape=[batch_size, 1, max_num_tiles], dtype=DType.int64
+            ).to(self.pipeline_config.device)
+
+            res = [
+                pixel_values,
+                aspect_ratio_ids,
+                aspect_ratio_mask,
+            ]
 
         # Input row offset type: ["input_row_offsets_len"], UInt32
         input_id_row_offsets = Tensor.from_numpy(
@@ -344,13 +385,13 @@ class LlamaVision(PipelineModel):
             self.pipeline_config.device
         )
 
-        return (
-            pixel_values,
-            aspect_ratio_ids,
-            aspect_ratio_mask,
-            input_id_values,
-            pixel_row_offsets,
-            input_id_row_offsets,
+        return tuple(
+            res
+            + [
+                input_id_values,
+                pixel_row_offsets,
+                input_id_row_offsets,
+            ]
         )
 
     def prepare_next_token_inputs(
