@@ -266,13 +266,13 @@ class LlamaVision(PipelineModel):
         input_row_offsets_type = TensorType(
             DType.uint32, shape=["input_row_offsets_len"]
         )
+        cross_row_offsets_type = input_row_offsets_type
 
         input_types = [
             cross_attention_states_type,
             input_ids_type,
-            # Pass 2 sets of offsets for hidden and cross attn states.
             input_row_offsets_type,
-            input_row_offsets_type,
+            cross_row_offsets_type,
             *self.kv_manager.input_symbols()[0],
         ]
         self.language_graph_input_size = len(input_types)
@@ -433,10 +433,17 @@ class LlamaVision(PipelineModel):
 
         model_input_list = list(model_inputs)
 
+        # batch_size * num_concurrent_media * max_num_tiles * num_patches
+        # are set to 0 here to imitate a dummy tensor (used in text-only mode).
+        cross_attention_states = Tensor.zeros(
+            shape=[0, self.text_config.hidden_size],
+            dtype=self.pipeline_config.dtype,
+        ).to(self.pipeline_config.device)
+
         # Vision model has 3 more inputs.
         # pixel_values(1), aspect_ratio_ids(1), aspect_ratio_mask(1)
         if len(model_input_list) >= self.vision_graph_input_size:
-            cross_attention_states = vision_model.execute(
+            cross_attention_states = vision_model.execute(  # type: ignore
                 *model_input_list[: self.vision_graph_input_size],
                 copy_inputs_to_device=False,
             )[0]
@@ -445,7 +452,7 @@ class LlamaVision(PipelineModel):
         # Insert vision model output to be fed as input to the subsequent
         # language model. This assumes cross_attention_states is the first input
         # since the list needs to be ordered.
-        model_input_list.insert(0, cross_attention_states)  # type: ignore
+        model_input_list.insert(0, cross_attention_states)
 
         # Language model has 8 inputs.
         # kv_cache_inputs (4), input_ids(1), hidden_input_row_offsets(1),
