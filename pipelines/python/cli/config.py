@@ -18,7 +18,7 @@ import pathlib
 from dataclasses import MISSING, Field, fields
 from enum import Enum
 from pathlib import Path
-from typing import Any, Union, get_args, get_origin
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import click
 from max.driver import DeviceSpec
@@ -45,17 +45,17 @@ def is_optional(type_hint: Union[type, str, Any]):
     return get_origin(type_hint) is Union and type(None) in type_hint.__args__  # type: ignore
 
 
-def is_flag(dataclass_field: Field):
-    return dataclass_field.type is bool
+def is_flag(field_type: Any):
+    return field_type is bool
 
 
-def validate_field(dataclass_field: Field):
-    if is_optional(dataclass_field.type):
-        test_type = get_args(dataclass_field.type)[0]
-    elif get_origin(dataclass_field.type) is list:
-        test_type = get_interior_type(dataclass_field.type)
+def validate_field_type(field_type: Any):
+    if is_optional(field_type):
+        test_type = get_args(field_type)[0]
+    elif get_origin(field_type) is list:
+        test_type = get_interior_type(field_type)
     else:
-        test_type = dataclass_field.type
+        test_type = field_type
 
     for valid_type in VALID_CONFIG_TYPES:
         if valid_type == test_type:
@@ -64,20 +64,18 @@ def validate_field(dataclass_field: Field):
         if get_origin(valid_type) is None and inspect.isclass(test_type):
             if issubclass(test_type, valid_type):
                 return True
-
     msg = f"type '{test_type}' not supported in config."
     raise ValueError(msg)
 
 
-def get_field_type(dataclass_field: Field):
-    validate_field(dataclass_field)
+def get_field_type(field_type: Any):
+    validate_field_type(field_type)
 
     # Get underlying core field type, is Optional or list.
-    field_type = dataclass_field.type
-    if is_optional(dataclass_field.type):
-        field_type = get_interior_type(dataclass_field.type)
-    elif get_origin(dataclass_field.type) is list:
-        field_type = get_interior_type(dataclass_field.type)
+    if is_optional(field_type):
+        field_type = get_interior_type(field_type)
+    elif get_origin(field_type) is list:
+        field_type = get_interior_type(field_type)
 
     # Update the field_type to be format specific.
     if field_type == Path:
@@ -100,13 +98,14 @@ def get_default(dataclass_field: Field):
     return default
 
 
-def is_multiple(dataclass_field: Field):
-    return get_origin(dataclass_field.type) is list
+def is_multiple(field_type: Any):
+    return get_origin(field_type) is list
 
 
 def create_click_option(
     help_for_fields: dict[str, str],
     dataclass_field: Field,
+    field_type: Any,
 ) -> click.option:  # type: ignore
     # Get name.
     normalized_name = dataclass_field.name.lower().replace("_", "-")
@@ -119,10 +118,10 @@ def create_click_option(
         f"--{normalized_name}",
         show_default=True,
         help=help_text,
-        is_flag=is_flag(dataclass_field),
+        is_flag=is_flag(field_type),
         default=get_default(dataclass_field),
-        multiple=is_multiple(dataclass_field),
-        type=get_field_type(dataclass_field),
+        multiple=is_multiple(field_type),
+        type=get_field_type(field_type),
     )
 
 
@@ -132,14 +131,14 @@ def config_to_flag(cls):
         help_text = cls.help()
     else:
         help_text = {}
+    field_types = get_type_hints(cls)
     for _field in fields(cls):
         if _field.name.startswith("_"):
             # Skip private config fields.
             continue
 
         new_option = create_click_option(
-            help_text,
-            _field,
+            help_text, _field, field_types[_field.name]
         )
         options.append(new_option)
 

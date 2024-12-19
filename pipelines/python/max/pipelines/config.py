@@ -5,13 +5,15 @@
 # ===----------------------------------------------------------------------=== #
 """Standardized config for Pipeline Inference."""
 
+from __future__ import annotations
+
 import datetime
 import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, Optional, Union, cast
+from typing import Any, Iterable, Optional, Union, cast
 
 import torch
 from huggingface_hub import (
@@ -455,6 +457,12 @@ class PipelineConfig:
         self.huggingface_repo = HuggingFaceRepo(
             self.huggingface_repo_id, trust_remote_code=self.trust_remote_code
         )
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Override `__getstate__` to exclude the HuggingFace config."""
+        state = self.__dict__.copy()
+        state.pop("_huggingface_config")
+        return state
 
     def update_architecture(self) -> None:
         if self.architecture is None:
