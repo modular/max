@@ -236,6 +236,14 @@ class LlamaVision(PipelineModel):
         )
 
     def _llama3_vision_language_graph(self) -> Graph:
+        # Pre-allocate a buffer for input_row_offsets in multistep execution.
+        # We do this to avoid materializing and copying a buffer with each multistep step
+        self._input_row_offsets_prealloc = Tensor.from_numpy(
+            np.arange(
+                self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
+            )
+        ).to(self.pipeline_config.devices[0])
+
         input_ids_type = TensorType(DType.int64, shape=["total_seq_len"])
         # image_size = self.vision_config.image_size
         # patch_size = self.vision_config.patch_size
@@ -347,7 +355,29 @@ class LlamaVision(PipelineModel):
         next_tokens: Tensor,
         prev_model_inputs: tuple[Tensor, ...],
     ) -> tuple[Tensor, ...]:
-        raise NotImplementedError("not yet implemented.")
+        # Next token inputs always go to the language model.
+        # - input ids
+        # - input max seq lengths
+        # - hidden input row offsets
+        input_id_max_seq_len: Tensor
+        old_row_offsets: Tensor
+        if len(prev_model_inputs) == 7:
+            # If the previous inputs include the pixel values
+            input_id_max_seq_len = prev_model_inputs[4]
+            old_row_offsets = prev_model_inputs[6]
+        else:
+            # If no pixel values were included
+            assert len(prev_model_inputs) == 3
+            input_id_max_seq_len = prev_model_inputs[1]
+            old_row_offsets = prev_model_inputs[2]
+        row_offsets_size = old_row_offsets.shape[0]
+        next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
+        next_token_inputs = (
+            next_tokens,
+            input_id_max_seq_len,
+            next_row_offsets,
+        )
+        return next_token_inputs
 
     def execute(self, *model_inputs: Tensor) -> ModelOutputs:
         assert isinstance(
