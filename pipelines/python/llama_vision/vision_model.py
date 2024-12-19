@@ -235,6 +235,11 @@ class VisionModel(Layer):
             num_channels,
         ) = pixel_values.shape
 
+        # Pixel values isn't always guaranteed to be the same dtype as configured
+        # at the pipeline config level. We insert an explicit cast here to account
+        # for it.
+        pixel_values = ops.cast(pixel_values, self.dtype)
+
         pixel_values = pixel_values.reshape(
             (
                 batch_size * num_concurrent_media * num_tiles,

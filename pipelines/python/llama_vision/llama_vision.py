@@ -198,7 +198,10 @@ class LlamaVision(PipelineModel):
     def _llama3_vision_vision_graph(self) -> Graph:
         # Inserted a manual CHW -> HWC transpose here.
         pixel_values_type = TensorType(
-            self.pipeline_config.dtype,
+            # This has to be of type float32 as we construct tensors from a numpy
+            # array (which has no notion of some dtypes like bfloat16). Explicit
+            # casting will happen inside the graph.
+            DType.float32,
             shape=[
                 "batch_size",
                 "num_concurrent_media",
@@ -305,7 +308,7 @@ class LlamaVision(PipelineModel):
 
         pixel_values = Tensor.zeros(
             shape=[batch_size, 1, max_num_tiles, height, width, num_channels],
-            dtype=self.pipeline_config.dtype,
+            dtype=DType.float32,
         ).to(self.pipeline_config.device)
         aspect_ratio_ids = Tensor.zeros(
             shape=[batch_size, 1], dtype=DType.int64
