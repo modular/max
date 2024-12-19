@@ -11,9 +11,11 @@ import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional, Union, cast
 
+import torch
 from huggingface_hub import (
+    HfFileSystem,
     file_exists,
     get_hf_file_metadata,
     get_safetensors_metadata,
@@ -115,9 +117,10 @@ class WeightsFormat(str, Enum):
 @dataclass
 class HuggingFaceRepo:
     repo_id: str
+    trust_remote_code: bool = False
     _info: Optional[ModelInfo] = None
     _formats_available: list[WeightsFormat] = field(default_factory=list)
-    _supported_encodings: list[SupportedEncoding] = field(default_factory=list)
+    _supported_encodings: set[SupportedEncoding] = field(default_factory=set)
     _gguf_architecture: Optional[str] = None
     _files: Iterable[str] = field(default_factory=list)
     _safetensors_metadata: Optional[SafetensorsRepoMetadata] = None
@@ -170,21 +173,37 @@ class HuggingFaceRepo:
                 for file_name in self.files:
                     encoding = SupportedEncoding.parse_from_file_name(file_name)
                     if encoding:
-                        self._supported_encodings.append(encoding)
+                        self._supported_encodings.add(encoding)
 
             if WeightsFormat.safetensors in self.formats_available:
                 if safetensors_info := self.info.safetensors:
                     for params in safetensors_info.parameters:
                         if "BF16" in params:
-                            self._supported_encodings.append(
+                            self._supported_encodings.add(
                                 SupportedEncoding.bfloat16
                             )
                         elif "F32" in params:
-                            self._supported_encodings.append(
+                            self._supported_encodings.add(
                                 SupportedEncoding.float32
                             )
 
-        return self._supported_encodings
+            if WeightsFormat.pytorch in self.formats_available:
+                cfg = AutoConfig.from_pretrained(
+                    self.repo_id, trust_remote_code=self.trust_remote_code
+                )
+
+                if torch_dtype := getattr(cfg, "torch_dtype", None):
+                    if torch_dtype == torch.float32:
+                        self._supported_encodings.add(SupportedEncoding.float32)
+                    elif torch_dtype == torch.bfloat16:
+                        self._supported_encodings.add(
+                            SupportedEncoding.bfloat16
+                        )
+                else:
+                    msg = "torch_dtype not available, cant infer encoding from config.json"
+                    logging.warning(msg)
+
+        return list(self._supported_encodings)
 
     def _get_gguf_files_for_encoding(
         self, encoding: SupportedEncoding
@@ -219,6 +238,48 @@ class HuggingFaceRepo:
         else:
             return {}
 
+    def _get_pytorch_files_for_encoding(
+        self,
+        encoding: SupportedEncoding,
+    ) -> dict[WeightsFormat, list[Path]]:
+        if encoding not in self.supported_encodings:
+            return {}
+
+        fs = HfFileSystem()
+        pytorch_bin = cast(list[str], fs.glob(f"{self.repo_id}/*.bin"))
+        return {
+            WeightsFormat.pytorch: [
+                Path(x.replace(f"{self.repo_id}/", "")) for x in pytorch_bin
+            ]
+        }
+
+    def files_for_encoding(
+        self,
+        encoding: SupportedEncoding,
+        weights_format: Optional[WeightsFormat] = None,
+    ) -> dict[WeightsFormat, list[Path]]:
+        if weights_format == WeightsFormat.pytorch:
+            msg = (
+                "cannot infer encoding from .bin files, returning all bin files"
+            )
+            logging.warning(msg)
+            return self._get_pytorch_files_for_encoding(encoding)
+
+        if weights_format is WeightsFormat.gguf:
+            return self._get_gguf_files_for_encoding(encoding)
+        elif weights_format == WeightsFormat.safetensors:
+            return self._get_safetensor_files_for_encoding(encoding)
+
+        gguf_files = self._get_gguf_files_for_encoding(encoding)
+
+        safetensor_files = self._get_safetensor_files_for_encoding(encoding)
+        gguf_files.update(safetensor_files)
+
+        pytorch_files = self._get_pytorch_files_for_encoding(encoding)
+        gguf_files.update(pytorch_files)
+
+        return gguf_files
+
     def file_exists(self, filename: str) -> bool:
         return file_exists(self.repo_id, filename)
 
@@ -228,22 +289,6 @@ class HuggingFaceRepo:
                 self.repo_id, filename, force_download=force_download
             )
         )
-
-    def files_for_encoding(
-        self,
-        encoding: SupportedEncoding,
-        weights_format: Optional[WeightsFormat] = None,
-    ) -> dict[WeightsFormat, list[Path]]:
-        if weights_format is WeightsFormat.gguf:
-            return self._get_gguf_files_for_encoding(encoding)
-        elif weights_format == WeightsFormat.safetensors:
-            return self._get_safetensor_files_for_encoding(encoding)
-
-        gguf_files = self._get_gguf_files_for_encoding(encoding)
-        safetensor_files = self._get_safetensor_files_for_encoding(encoding)
-
-        gguf_files.update(safetensor_files)
-        return gguf_files
 
     @property
     def gguf_architecture(self) -> Optional[str]:
@@ -264,6 +309,12 @@ class HuggingFaceRepo:
             if getattr(self.info, "safetensors", None):
                 self._formats_available.append(WeightsFormat.safetensors)
 
+            # Check for pytorch bins.
+            fs = HfFileSystem()
+            pytorch_bin = cast(list[str], fs.glob(f"{self.repo_id}/*.bin"))
+            if pytorch_bin:
+                self._formats_available.append(WeightsFormat.pytorch)
+
         return self._formats_available
 
     def encoding_for_file(self, file: Union[str, Path]) -> SupportedEncoding:
@@ -277,8 +328,11 @@ class HuggingFaceRepo:
 
             msg = f"gguf file, but encoding not found in file name: {file}"
             raise ValueError(msg)
+        elif str(file).endswith(".bin"):
+            # If this file is pytorch, return the first encoding, as Pytorch repos only likely have one.
+            return self.supported_encodings[0]
         else:
-            msg = f"weight path: {file} not gguf or safetensors"
+            msg = f"weight path: {file} not gguf or safetensors, cannot infer encoding from file."
             raise ValueError(msg)
 
 
@@ -401,7 +455,39 @@ class PipelineConfig:
         self.weight_path = weight_paths
 
         # Validate that the repo exists.
-        self.huggingface_repo = HuggingFaceRepo(self.huggingface_repo_id)
+        self.huggingface_repo = HuggingFaceRepo(
+            self.huggingface_repo_id, trust_remote_code=self.trust_remote_code
+        )
+
+    def update_architecture(self) -> None:
+        if self.architecture is None:
+            # Retrieve architecture from huggingface_repo_id.
+            # This is done without using the huggingface config, to reduce the
+            # memory stored in this object, before it reaches the model worker.
+            hf_config = AutoConfig.from_pretrained(
+                self.huggingface_repo_id,
+                trust_remote_code=self.trust_remote_code,
+            )
+
+            # If we cannot get an architecture from the huggingface_repo_id,
+            # we cannot map the model to an internal architecture, and cannot
+            # be run using the MAX engine.
+
+            architectures = getattr(hf_config, "architectures", [])
+            if len(architectures) > 1:
+                msg = (
+                    "more than one architecture listed in HuggingFace config,"
+                    " using the first one."
+                )
+                logging.warning(msg)
+
+            if architectures:
+                self.architecture = architectures[0]
+            else:
+                msg = "architectures not listed in HuggingFace config, trying with general `huggingface` engine"
+                logging.warning(msg)
+
+                self.engine = PipelineEngine.HUGGINGFACE
 
     @property
     def huggingface_config(self) -> AutoConfig:
@@ -484,6 +570,10 @@ class PipelineConfig:
             ]
         ):
             return WeightsFormat.safetensors
+        elif all(
+            [weight_path.suffix == ".bin" for weight_path in self.weight_path]
+        ):
+            return WeightsFormat.pytorch
         else:
             msg = f"weights type cannot be inferred from {self.weight_path}"
             raise ValueError(msg)

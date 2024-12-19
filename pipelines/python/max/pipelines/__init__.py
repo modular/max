@@ -21,7 +21,7 @@ from .interfaces import (
     TokenGeneratorRequestMessage,
 )
 from .pipeline import ModelOutputs, PipelineModel, TextGenerationPipeline
-from .registry import PIPELINE_REGISTRY, SupportedArchitecture, SupportedVersion
+from .registry import PIPELINE_REGISTRY, SupportedArchitecture
 from .response import LogProbabilities, TextResponse
 from .tokenizer import (
     IdentityPipelineTokenizer,
@@ -38,7 +38,6 @@ __all__ = [
     "PIPELINE_REGISTRY",
     "SupportedArchitecture",
     "SupportedEncoding",
-    "SupportedVersion",
     "TokenGenerator",
     "TokenGeneratorContext",
     "TokenGeneratorRequest",

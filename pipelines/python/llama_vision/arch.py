@@ -12,10 +12,8 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
-    HuggingFaceFile,
     SupportedArchitecture,
     SupportedEncoding,
-    SupportedVersion,
     TextAndVisionTokenizer,
     WeightsFormat,
 )
@@ -29,40 +27,6 @@ llama_vision_arch = SupportedArchitecture(
     supported_encodings={
         SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS]
     },
-    versions=[
-        SupportedVersion(
-            name="3.2",
-            encodings={
-                SupportedEncoding.bfloat16: (
-                    [
-                        HuggingFaceFile(
-                            "meta-llama/Llama-3.2-11B-Vision-Instruct",
-                            "model-00001-of-00005.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "meta-llama/Llama-3.2-11B-Vision-Instruct",
-                            "model-00002-of-00005.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "meta-llama/Llama-3.2-11B-Vision-Instruct",
-                            "model-00003-of-00005.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "meta-llama/Llama-3.2-11B-Vision-Instruct",
-                            "model-00004-of-00005.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "meta-llama/Llama-3.2-11B-Vision-Instruct",
-                            "model-00005-of-00005.safetensors",
-                        ),
-                    ],
-                    [KVCacheStrategy.CONTINUOUS],
-                )
-            },
-            default_encoding=SupportedEncoding.bfloat16,
-        )
-    ],
-    default_version="3.2",
     pipeline_model=LlamaVision,
     tokenizer=TextAndVisionTokenizer,
     default_weights_format=WeightsFormat.safetensors,

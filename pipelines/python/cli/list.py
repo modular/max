@@ -12,32 +12,20 @@
 # ===----------------------------------------------------------------------=== #
 """Utilities for exploring supported pipelines."""
 
-from max.pipelines import PIPELINE_REGISTRY, HuggingFaceFile
+from max.pipelines import PIPELINE_REGISTRY
 
 
 def list_pipelines_to_console():
     print()
-    for _, arch in PIPELINE_REGISTRY.architectures.items():
-        print(f"    {arch.name}")
-        for version_name, version in arch.versions.items():
-            print(f"        Version: {version_name}")
-            for encoding_name, enc_and_strat in version.encodings.items():
-                encoding, _ = enc_and_strat
-                if isinstance(encoding, HuggingFaceFile):
-                    print(f"            {encoding_name}: {encoding.repo_id}")
-                elif isinstance(encoding, list):
-                    first_encoding = encoding
-                    if isinstance(first_encoding, HuggingFaceFile):
-                        print(
-                            f"            {encoding_name}: {first_encoding.repo_id}"
-                        )
-                    elif isinstance(first_encoding, list):
-                        print(
-                            f"            {encoding_name}: {first_encoding[0].repo_id}"
-                        )
-                    else:
-                        print(f"            {encoding_name}: {first_encoding}")
-                else:
-                    print(f"            {encoding_name}: {first_encoding}")
+    for arch in PIPELINE_REGISTRY.architectures.values():
         print()
+        print(f"    Architecture: {arch.name}")
+        for (
+            encoding_name,
+            kv_cache_strategies,
+        ) in arch.supported_encodings.items():
+            print(
+                f"        Encoding Supported: {encoding_name}, with Cache Strategies: {kv_cache_strategies}"
+            )
+
     print()

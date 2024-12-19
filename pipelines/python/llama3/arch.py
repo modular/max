@@ -12,10 +12,8 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
-    HuggingFaceFile,
     SupportedArchitecture,
     SupportedEncoding,
-    SupportedVersion,
     TextTokenizer,
     WeightsFormat,
 )
@@ -42,114 +40,6 @@ llama_arch = SupportedArchitecture(
             KVCacheStrategy.NAIVE,
         ],
     },
-    versions=[
-        SupportedVersion(
-            name="3",
-            encodings={
-                SupportedEncoding.float32: (
-                    HuggingFaceFile("modularai/llama-3", "llama-3-8b-f32.gguf"),
-                    [
-                        KVCacheStrategy.PAGED,
-                        KVCacheStrategy.CONTINUOUS,
-                        KVCacheStrategy.NAIVE,
-                    ],
-                ),
-                SupportedEncoding.bfloat16: (
-                    HuggingFaceFile(
-                        "modularai/llama-3",
-                        "llama-3-8b-instruct-bf16.gguf",
-                    ),
-                    [
-                        KVCacheStrategy.PAGED,
-                        KVCacheStrategy.CONTINUOUS,
-                        KVCacheStrategy.NAIVE,
-                    ],
-                ),
-                SupportedEncoding.q4_0: (
-                    HuggingFaceFile(
-                        "modularai/llama-3",
-                        "llama-3-8b-instruct-q4_0.gguf",
-                    ),
-                    [KVCacheStrategy.NAIVE],
-                ),
-                SupportedEncoding.q4_k: (
-                    HuggingFaceFile(
-                        "modularai/llama-3",
-                        "llama-3-8b-instruct-q4_k_m.gguf",
-                    ),
-                    [KVCacheStrategy.NAIVE],
-                ),
-                SupportedEncoding.q6_k: (
-                    HuggingFaceFile(
-                        "modularai/llama-3",
-                        "llama-3-8b-instruct-q6_k.gguf",
-                    ),
-                    [KVCacheStrategy.NAIVE],
-                ),
-            },
-            default_encoding=SupportedEncoding.q4_k,
-        ),
-        SupportedVersion(
-            name="3.1",
-            encodings={
-                SupportedEncoding.float32: (
-                    [
-                        HuggingFaceFile(
-                            "modularai/llama-3.1",
-                            "llama-3.1-8b-instruct-f32.gguf",
-                        )
-                    ],
-                    [
-                        KVCacheStrategy.PAGED,
-                        KVCacheStrategy.CONTINUOUS,
-                        KVCacheStrategy.NAIVE,
-                    ],
-                ),
-                SupportedEncoding.bfloat16: (
-                    [
-                        HuggingFaceFile(
-                            "modularai/llama-3.1",
-                            "llama-3.1-8b-instruct-bf16.gguf",
-                        )
-                    ],
-                    [
-                        KVCacheStrategy.PAGED,
-                        KVCacheStrategy.CONTINUOUS,
-                        KVCacheStrategy.NAIVE,
-                    ],
-                ),
-                SupportedEncoding.q4_0: (
-                    [
-                        HuggingFaceFile(
-                            "modularai/llama-3.1",
-                            "llama-3.1-8b-instruct-q4_0.gguf",
-                        )
-                    ],
-                    [KVCacheStrategy.NAIVE],
-                ),
-                SupportedEncoding.q4_k: (
-                    [
-                        HuggingFaceFile(
-                            "modularai/llama-3.1",
-                            "llama-3.1-8b-instruct-q4_k_m.gguf",
-                        )
-                    ],
-                    [KVCacheStrategy.NAIVE],
-                ),
-                SupportedEncoding.q6_k: (
-                    [
-                        HuggingFaceFile(
-                            "modularai/llama-3.1",
-                            "llama-3.1-8b-instruct-q6_k.gguf",
-                        )
-                    ],
-                    [KVCacheStrategy.NAIVE],
-                ),
-            },
-            default_encoding=SupportedEncoding.q4_k,
-        ),
-    ],
-    default_version="3.1",
     pipeline_model=Llama3Model,
     tokenizer=TextTokenizer,
     default_weights_format=WeightsFormat.gguf,

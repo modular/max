@@ -12,10 +12,8 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
-    HuggingFaceFile,
     SupportedArchitecture,
     SupportedEncoding,
-    SupportedVersion,
     TextAndVisionTokenizer,
     WeightsFormat,
 )
@@ -29,44 +27,6 @@ pixtral_arch = SupportedArchitecture(
     supported_encodings={
         SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS]
     },
-    versions=[
-        SupportedVersion(
-            name="pixtral12b",
-            encodings={
-                SupportedEncoding.bfloat16: (
-                    [
-                        HuggingFaceFile(
-                            "mistral-community/pixtral-12b",
-                            "model-00001-of-00006.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "mistral-community/pixtral-12b",
-                            "model-00002-of-00006.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "mistral-community/pixtral-12b",
-                            "model-00003-of-00006.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "mistral-community/pixtral-12b",
-                            "model-00004-of-00006.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "mistral-community/pixtral-12b",
-                            "model-00005-of-00006.safetensors",
-                        ),
-                        HuggingFaceFile(
-                            "mistral-community/pixtral-12b",
-                            "model-00006-of-00006.safetensors",
-                        ),
-                    ],
-                    [KVCacheStrategy.CONTINUOUS],
-                )
-            },
-            default_encoding=SupportedEncoding.bfloat16,
-        )
-    ],
-    default_version="pixtral12b",
     pipeline_model=PixtralModel,
     tokenizer=TextAndVisionTokenizer,
     default_weights_format=WeightsFormat.safetensors,

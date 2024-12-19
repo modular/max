@@ -12,10 +12,8 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
-    HuggingFaceFile,
     SupportedArchitecture,
     SupportedEncoding,
-    SupportedVersion,
     TextTokenizer,
     WeightsFormat,
 )
@@ -30,33 +28,6 @@ replit_arch = SupportedArchitecture(
         SupportedEncoding.float32: [KVCacheStrategy.CONTINUOUS],
         SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS],
     },
-    versions=[
-        SupportedVersion(
-            name="1.5",
-            encodings={
-                SupportedEncoding.float32: (
-                    [
-                        HuggingFaceFile(
-                            "modularai/replit-code-1.5",
-                            "replit-code-v1_5-3b-f32.gguf",
-                        )
-                    ],
-                    [KVCacheStrategy.CONTINUOUS],
-                ),
-                SupportedEncoding.bfloat16: (
-                    [
-                        HuggingFaceFile(
-                            "modularai/replit-code-1.5",
-                            "replit-code-v1_5-3b-bf16.gguf",
-                        )
-                    ],
-                    [KVCacheStrategy.CONTINUOUS],
-                ),
-            },
-            default_encoding=SupportedEncoding.float32,
-        )
-    ],
-    default_version="1.5",
     pipeline_model=ReplitModel,
     tokenizer=TextTokenizer,
     default_weights_format=WeightsFormat.gguf,

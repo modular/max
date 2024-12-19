@@ -12,10 +12,8 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
-    HuggingFaceFile,
     SupportedArchitecture,
     SupportedEncoding,
-    SupportedVersion,
     TextTokenizer,
     WeightsFormat,
 )
@@ -29,30 +27,6 @@ mistral_arch = SupportedArchitecture(
     supported_encodings={
         SupportedEncoding.bfloat16: [KVCacheStrategy.CONTINUOUS]
     },
-    versions=[
-        SupportedVersion(
-            name="default",
-            encodings={
-                SupportedEncoding.bfloat16: (
-                    [
-                        HuggingFaceFile(
-                            "mistralai/Mistral-Nemo-Instruct-2407", f
-                        )
-                        for f in [
-                            "model-00001-of-00005.safetensors",
-                            "model-00002-of-00005.safetensors",
-                            "model-00003-of-00005.safetensors",
-                            "model-00004-of-00005.safetensors",
-                            "model-00005-of-00005.safetensors",
-                        ]
-                    ],
-                    [KVCacheStrategy.CONTINUOUS],
-                )
-            },
-            default_encoding=SupportedEncoding.bfloat16,
-        )
-    ],
-    default_version="default",
     pipeline_model=MistralModel,
     tokenizer=TextTokenizer,
     default_weights_format=WeightsFormat.safetensors,
