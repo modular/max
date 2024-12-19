@@ -139,9 +139,9 @@ class NaiveKVCacheManager(KVCacheManager):
 
     def input_symbols(
         self,
-    ) -> List[tuple[TensorType, TensorType, TensorType, TensorType]]:
+    ) -> List[tuple[BufferType, BufferType, TensorType, TensorType]]:
         return [
-            (  # type: ignore
+            (
                 # k_cache
                 BufferType(
                     self.params.dtype,

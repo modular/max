@@ -29,7 +29,7 @@ from .device_options import DevicesOptionType
 VALID_CONFIG_TYPES = [str, bool, Enum, Path, DeviceSpec, int, float]
 
 
-def get_interior_type(type_hint: Union[type, str, Any]):
+def get_interior_type(type_hint: Union[type, str, Any]) -> type[Any]:
     interior_args = set(get_args(type_hint)) - set([type(None)])
     if len(interior_args) > 1:
         msg = (
@@ -41,15 +41,15 @@ def get_interior_type(type_hint: Union[type, str, Any]):
     return get_args(type_hint)[0]
 
 
-def is_optional(type_hint: Union[type, str, Any]):
-    return get_origin(type_hint) is Union and type(None) in type_hint.__args__  # type: ignore
+def is_optional(type_hint: Union[type, str, Any]) -> bool:
+    return get_origin(type_hint) is Union and type(None) in get_args(type_hint)
 
 
-def is_flag(field_type: Any):
+def is_flag(field_type: Any) -> bool:
     return field_type is bool
 
 
-def validate_field_type(field_type: Any):
+def validate_field_type(field_type: Any) -> bool:
     if is_optional(field_type):
         test_type = get_args(field_type)[0]
     elif get_origin(field_type) is list:
@@ -82,12 +82,12 @@ def get_field_type(field_type: Any):
         field_type = click.Path(path_type=pathlib.Path)
     elif inspect.isclass(field_type):
         if issubclass(field_type, Enum):
-            field_type = click.Choice(field_type)  # type: ignore
+            field_type = click.Choice(list(field_type))
 
     return field_type
 
 
-def get_default(dataclass_field: Field):
+def get_default(dataclass_field: Field) -> Any:
     if dataclass_field.default_factory != MISSING:
         default = dataclass_field.default_factory()
     elif dataclass_field.default != MISSING:
@@ -98,7 +98,7 @@ def get_default(dataclass_field: Field):
     return default
 
 
-def is_multiple(field_type: Any):
+def is_multiple(field_type: Any) -> bool:
     return get_origin(field_type) is list
 
 

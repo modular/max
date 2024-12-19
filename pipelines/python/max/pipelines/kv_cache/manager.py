@@ -6,12 +6,12 @@
 """Abstract base class for KVCacheManager for KV Cache."""
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Sequence
 
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
-from max.graph import DeviceRef, Graph, TensorType
+from max.graph import DeviceRef, Graph, TensorType, TensorValue, Type
 
 from .cache_params import KVCacheParams
 
@@ -70,7 +70,7 @@ class KVCacheManager(ABC):
     @abstractmethod
     def input_symbols(
         self,
-    ) -> List[tuple[TensorType, TensorType, TensorType, TensorType]]: ...
+    ) -> Sequence[tuple[Type, Type, TensorType, TensorType]]: ...
 
     def claim(self, n: int) -> List[int]:
         """Claims `n` blocks of memory in the cache for incoming requests.
@@ -200,9 +200,11 @@ class KVCacheManager(ABC):
 
         # Return our updated batch.
         for i in range(len(self.devices)):
-            kv_cache_inputs[i] = (  # type: ignore
+            updated_cache_length = updated_cache_lengths[i]
+            assert isinstance(updated_cache_length, Tensor)
+            kv_cache_inputs[i] = (
                 blocks[i],
-                updated_cache_lengths[i],
+                updated_cache_length,
                 lookup_table[i],
                 updated_max_lengths,
             )
@@ -221,11 +223,13 @@ class KVCacheManager(ABC):
         This should also not update the cache lengths in our manager, this batch is
         still considered in-progress.
         """
-        k_cache, v_cache, start_pos, _ = kv_cache_inputs
+        assert len(kv_cache_inputs) == 1
+        k_cache, v_cache, start_pos, _ = kv_cache_inputs[0]
         tokens, _ = prev_model_inputs
 
-        new_start_pos = self.increment_cache_lengths_model(start_pos, tokens)  # type: ignore
-        return [(k_cache, v_cache, new_start_pos, new_start_pos)]  # type: ignore
+        new_start_pos = self.increment_cache_lengths_model(start_pos, tokens)
+        assert isinstance(new_start_pos, Tensor)
+        return [(k_cache, v_cache, new_start_pos, new_start_pos)]
 
     def _create_increment_cache_lengths_graph(self) -> Graph:
         """Constructs a graph to increment the cache_lengths argument during multi-step inference.
@@ -245,7 +249,9 @@ class KVCacheManager(ABC):
             "update_start_pos", input_types=[start_pos_type, tokens_type]
         ) as graph:
             start_pos, tokens = graph.inputs
-            graph.output(start_pos + tokens.shape[1])  # type: ignore
+            assert isinstance(start_pos, TensorValue)
+            assert isinstance(tokens, TensorValue)
+            graph.output(start_pos + tokens.shape[1])
 
         return graph
 
@@ -265,27 +271,31 @@ class KVCacheManager(ABC):
             input_types=[input_row_offsets_type, *cache_lengths_types],
         ) as graph:
             inp_row_offset, *cache_lengths = graph.inputs
+            assert isinstance(inp_row_offset, TensorValue)
             # broadcast the inp_row_offset to all devices (naive)
             # get rid of this if statement after #51465 merges
             if len(self.devices) > 1:
                 input_row_offsets = [
-                    inp_row_offset.to(DeviceRef(d.label, d.id))  # type: ignore
+                    inp_row_offset.to(DeviceRef(d.label, d.id))
                     for d in self.devices
                 ]
             else:
                 input_row_offsets = [inp_row_offset]
             outputs = []
             for i in range(len(self.devices)):
+                cache_length = cache_lengths[i]
+                assert isinstance(cache_length, TensorValue)
                 right_slice = input_row_offsets[i][1:].rebind(
-                    cache_lengths[i].shape  # type: ignore
+                    cache_length.shape
                 )
-                left_slice = input_row_offsets[i][
-                    : input_row_offsets[i].shape[0] - 1
-                ].rebind(
-                    cache_lengths[i].shape  # type: ignore
-                )
+                left_slice = input_row_offsets[
+                    i
+                ][
+                    : input_row_offsets[i].shape[0]
+                    - 1  # type: ignore
+                ].rebind(cache_length.shape)
                 increment_amount = right_slice - left_slice
-                outputs.append(cache_lengths[i] + increment_amount)
+                outputs.append(cache_length + increment_amount)
             graph.output(*outputs)
 
         return graph

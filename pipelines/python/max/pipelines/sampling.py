@@ -8,7 +8,7 @@
 from typing import Optional
 
 from max.dtype import DType
-from max.graph import Dim, Graph, Shape, TensorType, ops
+from max.graph import Dim, Graph, Shape, TensorType, TensorValue, ops
 
 
 def token_sampler(top_k: Optional[int], in_dtype: DType, out_dtype: DType):
@@ -27,11 +27,12 @@ def token_sampler(top_k: Optional[int], in_dtype: DType, out_dtype: DType):
                 [ops.constant(top_k, dtype=DType.int64), logits],
                 [TensorType(DType.int64, shape)],
             )[0]
+            assert isinstance(tokens, TensorValue)
         else:
             tokens = ops.argmax(logits)
 
-        all_tokens = ops.concat([prev_tokens, tokens], -1)  # type: ignore
-        tokens = ops.squeeze(tokens, -1)  # type: ignore
+        all_tokens = ops.concat([prev_tokens, tokens], -1)
+        tokens = ops.squeeze(tokens, -1)
         graph.output(tokens, all_tokens)
 
         return graph

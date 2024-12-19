@@ -350,10 +350,12 @@ class TextGenerationPipeline(TokenGenerator[T]):
             )
             next_token_logits = model_outputs.next_token_logits
             tracer.next("sample_next_token")
-            new_tokens, generated_tokens = self._sampler(  # type: ignore
+            new_tokens, new_generated_tokens = self._sampler(
                 next_token_logits, generated_tokens
             )[:2]
             assert isinstance(new_tokens, Tensor)
+            assert isinstance(new_generated_tokens, Tensor)
+            generated_tokens = new_generated_tokens
 
             if compute_log_probabilities:
                 try:
@@ -419,8 +421,10 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
                 # Set up TextResponse
                 log_probs: Optional[LogProbabilities] = None
-                if compute_log_probabilities and batch_log_probabilities[step]:
-                    log_probs = batch_log_probabilities[step][batch_index]  # type: ignore
+                if compute_log_probabilities and (
+                    log_probs_for_step := batch_log_probabilities[step]
+                ):
+                    log_probs = log_probs_for_step[batch_index]
 
                 # Removing the positional arguments here, go about 100us faster.
                 res[step][request_id] = TextResponse(next_token, log_probs)
