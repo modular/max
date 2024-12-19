@@ -317,10 +317,8 @@ class LlamaVision(PipelineModel):
         batch_size = len(context_batch)
         height = self.vision_config.image_size
         width = self.vision_config.image_size
-        num_concurrent_media = 1
         max_num_tiles = self.vision_config.max_num_tiles
         patch_size = self.vision_config.patch_size
-        num_patches = (height // patch_size) * (width // patch_size) + 1
         # TODO(bduke): account for the actual instead of max number of tiles.
         image_seq_len = max_num_tiles * (height * width) // patch_size**2
 

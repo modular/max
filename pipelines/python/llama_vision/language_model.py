@@ -73,6 +73,9 @@ class TextModel(Layer):
             # For text-only path we should skip cross attention layers.
             # Let's check if the layer is cross attention layer and if we have
             # cross attention states.
+            # TODO: cross_attention_states is never None. It might be a dummy
+            # tensor though if this is a text-only forward pass. Change this to
+            # match invariants for this input case.
             if (
                 idx in self.cross_attention_layers
                 and cross_attention_states is None
