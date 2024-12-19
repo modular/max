@@ -347,9 +347,6 @@ class PipelineConfig:
     architecture: Optional[str] = None
     """Model architecture to run."""
 
-    version: Optional[str] = None
-    """Name of the model version to run."""
-
     weight_path: list[Path] = field(default_factory=list)
     """Optional path or url of the model weights to use."""
 
@@ -656,7 +653,6 @@ class PipelineConfig:
             "trust_remote_code": "Indicate whether to allow custom modelling files from Huggingface repositories. Set this to true with caution, as it may introduce security risks.",
             "force_download": "Specify whether to forcefully download a file even if it already exists in local cache. Set this to true if you want to ensure you have the latest version.",
             "architecture": "Deprecated - Please set `huggingface-repo-id` instead. Define the model architecture to run. This should match one of the supported architectures for your selected engine.",
-            "version": "Deprecated - Please set `huggingface-repo-id` instead. Indicate the specific version of the model to run. If not specified, the default version will be used.",
             "serialized_model_path": "If specified, this flag attempts to load a serialized MEF model from the given path. This is useful for reusing previously saved models.",
             "save_to_serialized_model_path": "If specified, this flag attempts to save the current model state to a serialized format at the given path for later use.",
         }
