@@ -13,7 +13,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence, Type, TypeVar
 
-import numpy as np
 from max.driver import CPU, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model, MultimodalModel
@@ -334,10 +333,12 @@ class TextGenerationPipeline(TokenGenerator[T]):
         )
 
         # Multistep execution loop.
-        tracer.next("Tensor.from_numpy")
-        generated_tokens = Tensor.from_numpy(
-            np.zeros((len(context_batch), 0), dtype=np.int64)
-        ).to(self._pipeline_config.device)
+        tracer.next("allocate_generated_tokens")
+        generated_tokens = Tensor.zeros(
+            (len(context_batch), 0),
+            dtype=DType.int64,
+            device=self._pipeline_config.device,
+        )
 
         curr_step_inputs = model_inputs
         batch_log_probabilities = []
