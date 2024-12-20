@@ -15,12 +15,10 @@
 from max.pipelines import PIPELINE_REGISTRY
 
 from .arch import llama_arch
-from .config import get_llama_huggingface_file
 from .model import Llama3Model
 
 __all__ = [
     "Llama3Model",
-    "get_llama_huggingface_file",
 ]
 
 PIPELINE_REGISTRY.register(llama_arch)
