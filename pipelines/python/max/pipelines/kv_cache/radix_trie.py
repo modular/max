@@ -6,16 +6,16 @@
 
 import heapq
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+import numpy as np
 
 TokenId = Any
 BlockId = Any
 SeqId = int
 
 
-def _token_prefix_match_len(
-    tokens0: List[TokenId], tokens1: List[TokenId]
-) -> int:
+def _token_prefix_match_len(tokens0: np.ndarray, tokens1: np.ndarray) -> int:
     """computes the length of maximum shared prefix of two tokens
     e.g: _token_prefix_match_len(["i", "like", "dogs"], ["i", "like", "cats"]) => 2
          _token_prefix_match_len(["i", "like", "dogs"], ["we", "like", "cats"]) => 0
@@ -27,14 +27,14 @@ def _token_prefix_match_len(
     return min(len(tokens0), len(tokens1))
 
 
-def _starts_with(tokens: List[TokenId], prefix: List[TokenId]) -> bool:
+def _starts_with(tokens: np.ndarray, prefix: np.ndarray) -> bool:
     """checks if tokens begins with prefix
     e.g: _starts_with(["i", "like", "dogs"], ["i", "like"]) => True
          _starts_with(["i", "like", "dogs"], ["we", "like"]) => False
     """
     if len(prefix) > len(tokens):
         return False
-    return prefix == tokens[: len(prefix)]
+    return (prefix == tokens[: len(prefix)]).all()
 
 
 class TrieNode:
@@ -45,7 +45,7 @@ class TrieNode:
         # To avoid collision with KV cache terminology, we call them tokens and blocks.
         #
         # Only the root should have empty tokens/blocks
-        self.tokens: List[TokenId] = []
+        self.tokens: np.ndarray = np.array([])
         self.blocks: List[BlockId] = []
         # Only the root should have a null parent
         self.parent: Optional[TrieNode] = None
@@ -59,6 +59,9 @@ class TrieNode:
         """Comparison function for use by heapq"""
         return self.last_access_time < other.last_access_time
 
+    def is_leaf(self) -> bool:
+        return len(self.children) == 0
+
 
 class RadixTrie:
     def __init__(self) -> None:
@@ -68,22 +71,22 @@ class RadixTrie:
     def _check_node_valid(self, node: TrieNode):
         """Rudimentary checks of data structure invariants for TrieNode."""
         if self.root == node:
-            assert not node.tokens
-            assert not node.blocks
+            assert len(node.tokens) == 0
+            assert len(node.blocks) == 0
             assert not node.parent
         else:
-            assert node.tokens
-            assert node.blocks
+            assert len(node.tokens) > 0
+            assert len(node.blocks) > 0
             assert node.parent
             assert len(node.tokens) == len(node.blocks)
 
         for tok, child in node.children.items():
-            assert child.tokens
+            assert len(child.tokens) > 0
             assert child.tokens[0] == tok
 
     def insert(
         self,
-        tokens: List[TokenId],
+        tokens: Union[np.ndarray, List[TokenId]],
         blocks: List[BlockId],
         node: Optional[TrieNode] = None,
     ) -> TrieNode:
@@ -95,27 +98,20 @@ class RadixTrie:
         Args:
             tokens: Tokens to insert into trie
             blocks: KV cache block for each token
-            node: Node to begin insertion at. By default, insertion begins
-                  at root node
+            node: Node to begin insertion at. If this is not a leaf node, blocks
+                  in the tree are overwritten.
         Return:
-
             trie_node: Node corresponding to end of the sequence where future
                        generated tokens can be inserted
         """
 
-        def insert_helper(
-            prev: TrieNode, tokens: List[TokenId], blocks: List[BlockId]
-        ):
-            if len(tokens) == 0:
-                return prev
+        if isinstance(tokens, list):
+            tokens = np.array(tokens)
 
-            if (
-                prev != self.root
-                and len(prev.active_seqs) == 0
-                and len(prev.children) == 0
-            ):
-                prev.tokens.extend(tokens)
-                prev.blocks.extend(tokens)
+        def insert_helper(
+            prev: TrieNode, tokens: np.ndarray, blocks: List[BlockId]
+        ) -> TrieNode:
+            if len(tokens) == 0:
                 return prev
 
             if tokens[0] not in prev.children:
@@ -130,7 +126,7 @@ class RadixTrie:
             prefix_len = _token_prefix_match_len(curr.tokens, tokens)
 
             if prefix_len == len(curr.tokens) and prefix_len == len(tokens):
-                assert curr.tokens == tokens
+                assert (curr.tokens == tokens).all()
                 return curr
 
             unmatched_tokens = tokens[prefix_len:]
@@ -156,26 +152,36 @@ class RadixTrie:
             msg = "Insertion failed: Attempted to insert 0 tokens into trie. Please provide at least one token to insert."
             raise ValueError(msg)
 
+        # clone to avoid mutating the original lists
+        tokens = tokens.copy()
+        blocks = blocks.copy()
+
         if node is None:
             node = self.root
         return insert_helper(node, tokens, blocks)
 
     def match_prefix(
-        self, tokens: List[TokenId]
+        self,
+        tokens: Union[np.ndarray, List[TokenId]],
+        node: Optional[TrieNode] = None,
     ) -> Tuple[TrieNode, List[BlockId]]:
         """Matches the input `tokens` with the contents of the trie.
 
         Args:
             tokens: tokens to search the trie for
+            node: Node to begin matching at.
         Return:
             Tuple containing:
                 - trie_node: Node corresponding to end of matched prefix where
-                             future generated tokens can be inserted
+                             future generated tokens can be inserted. This is
+                             a leaf node.
                 - block_list: KV cache blocks for matched prefix
         """
+        if isinstance(tokens, list):
+            tokens = np.array(tokens)
 
         def match_prefix_helper(
-            prev: TrieNode, tokens: List[TokenId], blocks: List[BlockId]
+            prev: TrieNode, tokens: np.ndarray, blocks: List[BlockId]
         ) -> TrieNode:
             if len(tokens) == 0:
                 return prev
@@ -201,8 +207,10 @@ class RadixTrie:
             raise ValueError(msg)
 
         blocks: List[BlockId] = []
-        node = match_prefix_helper(self.root, tokens, blocks)
-        return node, blocks
+        if node is None:
+            node = self.root
+        leaf_node = match_prefix_helper(node, tokens, blocks)
+        return leaf_node, blocks
 
     def _split_node(
         self, node: TrieNode, split_len: int
@@ -328,15 +336,23 @@ class RadixTrie:
 
         return evicted_blocks
 
-    def pretty_format(self) -> List[str]:
+    def pretty_format(self, print_blocks: bool = False) -> List[str]:
         """Formats the contents of the trie."""
 
         def helper(node: TrieNode, indent: int, lines: List[str]):
             for _, child in node.children.items():
                 tokens = child.tokens
-                lines.append(f"{'-' * indent}{tokens}")
+                token_list = tokens.tolist()
+                if print_blocks:
+                    lines.append(f"{'-' * indent}{token_list} : {child.blocks}")
+                else:
+                    lines.append(f"{'-' * indent}{token_list}")
                 helper(child, indent + 2, lines)
 
         lines: List[str] = []
         helper(self.root, 0, lines)
         return lines
+
+    def pretty_print(self, print_blocks: bool = True):
+        for line in self.pretty_format(print_blocks):
+            print(line)
