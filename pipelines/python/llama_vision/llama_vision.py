@@ -346,8 +346,8 @@ class LlamaVision(PipelineModel):
                     msg = "aspect_ratio_ids is required for image / vision model input"
                     raise ValueError(msg)
 
-                if "aspect_ratio_ids" not in context.extra_model_args:
-                    msg = "aspect_ratio_ids is required for image / vision model input"
+                if "aspect_ratio_mask" not in context.extra_model_args:
+                    msg = "aspect_ratio_mask is required for image / vision model input"
                     raise ValueError(msg)
 
                 aspect_ratio_ids_list.append(
