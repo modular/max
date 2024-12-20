@@ -9,6 +9,7 @@ from functools import reduce
 from operator import mul
 from typing import List
 
+import numpy as np
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
@@ -100,12 +101,12 @@ class NaiveKVCacheManager(KVCacheManager):
         ]
 
     def fetch(
-        self, seq_ids_and_lengths: dict[int, int], num_steps: int = 1
+        self,
+        seq_ids_and_prompts: dict[int, np.ndarray],
+        num_steps: int = 1,
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
         existing_keys = list(self.cache_lengths.keys())
-        for i, (seq_id, num_new_tokens) in enumerate(
-            seq_ids_and_lengths.items()
-        ):
+        for i, (seq_id, prompt) in enumerate(seq_ids_and_prompts.items()):
             if existing_keys[i] != seq_id:
                 msg = (
                     "seq_ids passed, are different than current inflight"
@@ -115,11 +116,11 @@ class NaiveKVCacheManager(KVCacheManager):
                 raise ValueError(msg)
 
             total_length = (
-                self.cache_lengths[seq_id] + num_new_tokens + num_steps - 1
+                self.cache_lengths[seq_id] + len(prompt) + num_steps - 1
             )
             assert total_length <= self.max_seq_len, (
                 f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} "
-                f"with {num_new_tokens} new tokens and {num_steps} steps. Existing length: {self.cache_lengths[seq_id]}"
+                f"with {len(prompt)} new tokens and {num_steps} steps. Existing length: {self.cache_lengths[seq_id]}"
             )
         return [
             (

@@ -170,7 +170,9 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         return size * len(devices)
 
     def fetch(
-        self, seq_ids_and_lengths: dict[int, int], num_steps: int = 1
+        self,
+        seq_ids_and_prompts: dict[int, np.ndarray],
+        num_steps: int = 1,
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
         """Fetches the KV cache state for the given sequence IDs.
 
@@ -179,8 +181,8 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         previously cached key/value pairs.
 
         Args:
-            seq_ids_and_lengths: Dictionary of sequence IDs to fetch cache state for and the
-                number of new tokens we plan to add to the cache. Each ID must be within
+            seq_ids_and_prompts: Dictionary of sequence IDs to fetch cache state for and the
+                new prompt we plan to add to the cache. Each ID must be within
                 the max_cache_batch_size and must exist in the current cache.
             num_steps: Number of steps to run for multi-step scheduling.
 
@@ -194,18 +196,18 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         Raises:
             ValueError: If any seq_id exceeds max_cache_batch_size or doesn't exist in cache
         """
-        active_batch_size = len(seq_ids_and_lengths)
+        active_batch_size = len(seq_ids_and_prompts)
 
         # Lookup table and seq_ids are redundant identical tensors.
         lookup_table_tensor = Tensor.from_numpy(
-            np.array(list(seq_ids_and_lengths.keys()), np.uint32)
+            np.array(list(seq_ids_and_prompts.keys()), np.uint32)
         )
         cache_lengths_np = np.zeros(active_batch_size, np.uint32)
 
         max_seq_length = 0
         max_cache_length = 0
 
-        for i, (seq_id, num_tokens) in enumerate(seq_ids_and_lengths.items()):
+        for i, (seq_id, prompt) in enumerate(seq_ids_and_prompts.items()):
             if seq_id > self.max_cache_batch_size:
                 msg = (
                     f"seq_id: {seq_id}, beyond max_cache_batch_size, you may"
@@ -218,15 +220,17 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
 
             cache_len = self.cache_lengths[seq_id]
 
-            assert cache_len + num_tokens + num_steps - 1 <= self.max_seq_len, (
+            assert (
+                cache_len + len(prompt) + num_steps - 1 <= self.max_seq_len
+            ), (
                 f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} "
-                f"with {num_tokens} new tokens and {num_steps} steps. Existing length: {cache_len}"
+                f"with {len(prompt)} new tokens and {num_steps} steps. Existing length: {cache_len}"
             )
 
             cache_lengths_np[i] = cache_len
 
             # Update the maximum lengths seen so far.
-            max_seq_length = max(max_seq_length, num_tokens)
+            max_seq_length = max(max_seq_length, len(prompt))
             max_cache_length = max(max_cache_length, cache_len)
 
         cache_lengths = [

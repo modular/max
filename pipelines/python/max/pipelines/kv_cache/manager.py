@@ -8,6 +8,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Sequence
 
+import numpy as np
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
@@ -63,7 +64,7 @@ class KVCacheManager(ABC):
     @abstractmethod
     def fetch(
         self,
-        seq_ids_and_lengths: dict[int, int],
+        seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]: ...
 
@@ -97,7 +98,9 @@ class KVCacheManager(ABC):
             self.cache_lengths[seq_id] = 0
 
     def step(
-        self, seq_ids_and_lengths: dict[int, int], num_steps: int = 1
+        self,
+        seq_ids_and_prompts: dict[int, np.ndarray],
+        num_steps: int = 1,
     ) -> None:
         """Update the `cache_lengths` objects to not that a new
         kv projection step has occurred, and that the underlying memory
@@ -106,11 +109,11 @@ class KVCacheManager(ABC):
         be used in the kernels.
         """
 
-        for id, length in seq_ids_and_lengths.items():
+        for id, prompt in seq_ids_and_prompts.items():
             if id not in self.cache_lengths:
                 raise ValueError(f"seq_id: {id} not in cache.")
 
-            self.cache_lengths[id] += length + num_steps - 1
+            self.cache_lengths[id] += len(prompt) + num_steps - 1
 
     def release(self, seq_id: int) -> None:
         """Release `seq_id` provided, marking this sequence as complete.
@@ -298,4 +301,5 @@ class KVCacheManager(ABC):
                 outputs.append(cache_length + increment_amount)
             graph.output(*outputs)
 
+        return graph
         return graph

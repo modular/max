@@ -225,28 +225,32 @@ class PagedKVCacheManager(KVCacheManager):
 
     def fetch(
         self,
-        seq_ids_and_lengths: Dict[int, int],
+        seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
     ) -> list[tuple[Tensor, Tensor, Tensor, Tensor]]:
         """This method identifies available blocks to service the given requests and marks them as inflight.
-        They're assigned to the request as "in-flight" until step is called."""
+        They're assigned to the request as "in-flight" until step is called.
 
-        batch_size = len(seq_ids_and_lengths)
+        Generally the prompt length is n for prefill, and 1 for decode step. Additionally, there is not a
+        kv entry associated with each token in the prompt.
+        """
+
+        batch_size = len(seq_ids_and_prompts)
 
         max_seq_len_in_batch = -1
         # before we start making any changes, validate that we won't over-write the cache
-        for batch_idx, (seq_id, num_tokens) in enumerate(
-            seq_ids_and_lengths.items()
+        for batch_idx, (seq_id, prompt) in enumerate(
+            seq_ids_and_prompts.items()
         ):
             curr_seq_len = (
-                self.cache_lengths[seq_id] + num_tokens + num_steps - 1
+                self.cache_lengths[seq_id] + len(prompt) + num_steps - 1
             )
             if curr_seq_len > max_seq_len_in_batch:
                 max_seq_len_in_batch = curr_seq_len
 
             assert curr_seq_len <= self.max_seq_len, (
                 f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} "
-                f"with {num_tokens} new tokens. Existing length: {self.cache_lengths[seq_id] }"
+                f"with {len(prompt)} new tokens. Existing length: {self.cache_lengths[seq_id] }"
             )
 
         max_num_pages = ceildiv(max_seq_len_in_batch, self.page_size)
@@ -259,8 +263,8 @@ class PagedKVCacheManager(KVCacheManager):
         max_cache_length = 0
 
         # Iterate over requests in the batch.
-        for batch_idx, (seq_id, num_tokens) in enumerate(
-            seq_ids_and_lengths.items()
+        for batch_idx, (seq_id, prompt) in enumerate(
+            seq_ids_and_prompts.items()
         ):
             # Ensure we've called claim for this sequence id.
             if seq_id not in self.active_requests:
@@ -280,7 +284,7 @@ class PagedKVCacheManager(KVCacheManager):
             cache_lengths_np[batch_idx] = cache_length
 
             # Compute the total sequence length and the number of pages required to store it.
-            total_sequence_length = cache_length + num_tokens + num_steps - 1
+            total_sequence_length = cache_length + len(prompt) + num_steps - 1
             num_pages_required = ceildiv(total_sequence_length, self.page_size)
 
             # Compute the number of *new* pages we need to allocate.
@@ -308,7 +312,7 @@ class PagedKVCacheManager(KVCacheManager):
                 lut_table_np[batch_idx, i] = block_idx
 
             # Update the maximum lengths seen so far.
-            max_seq_length = max(max_seq_length, num_tokens)
+            max_seq_length = max(max_seq_length, len(prompt))
             max_cache_length = max(max_cache_length, cache_length)
 
         # Build a tensor of maximum lengths. Each step slices the first row to
@@ -404,7 +408,9 @@ class PagedKVCacheManager(KVCacheManager):
         del self.active_requests[seq_id]
 
     def step(
-        self, seq_ids_and_lengths: dict[int, int], num_steps: int = 1
+        self,
+        seq_ids_and_prompts: dict[int, np.ndarray],
+        num_steps: int = 1,
     ) -> None:
         """Update the `cache_lengths` objects to not that a new
         kv projection step has occurred, and that the underlying memory
@@ -412,14 +418,14 @@ class PagedKVCacheManager(KVCacheManager):
         downstream in `fetch` to track what section of memory should
         be used in the kernels.
         """
-        for seq_id, length in seq_ids_and_lengths.items():
+        for seq_id, prompts in seq_ids_and_prompts.items():
             if seq_id not in self.active_requests:
                 raise ValueError(f"seq_id: {seq_id} not in active requests.")
 
             request_metadata = self.active_requests[seq_id]
 
             expected_num_pages = ceildiv(
-                length + self.cache_lengths[seq_id] + num_steps - 1,
+                len(prompts) + self.cache_lengths[seq_id] + num_steps - 1,
                 self.page_size,
             )
 
@@ -437,4 +443,4 @@ class PagedKVCacheManager(KVCacheManager):
             )
             request_metadata.inflight_blocks.clear()
 
-        super().step(seq_ids_and_lengths, num_steps)
+        super().step(seq_ids_and_prompts, num_steps)
