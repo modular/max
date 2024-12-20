@@ -5,7 +5,7 @@
 # ===----------------------------------------------------------------------=== #
 """Standardized context object for Pipeline Inference."""
 
-from typing import Protocol, Sequence, Union, runtime_checkable
+from typing import Any, Protocol, Sequence, Union, runtime_checkable
 
 import numpy as np
 
@@ -135,6 +135,7 @@ class TextAndVisionContext:
         max_length: int,
         next_tokens: np.ndarray,
         pixel_values: Union[np.ndarray, list[np.ndarray]],
+        extra_model_args: dict[str, Any],
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
     ) -> None:
@@ -146,6 +147,7 @@ class TextAndVisionContext:
         self.pixel_values = pixel_values
         self.current_length = self._next_tokens.shape[-1]
         self.active_length = self.current_length
+        self.extra_model_args = extra_model_args
 
         self.log_probabilities = log_probabilities
         self.log_probabilities_echo = log_probabilities_echo

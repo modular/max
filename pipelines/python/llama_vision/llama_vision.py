@@ -331,6 +331,8 @@ class LlamaVision(PipelineModel):
         res = []
         if has_images:
             images = []
+            aspect_ratio_ids_list = []
+            aspect_ratio_mask_list = []
             for context in context_batch:
                 # Get first image in first batch and permute the order to (HWC).
                 image = np.transpose(context.pixel_values, (0, 1, 3, 4, 2))
@@ -340,6 +342,21 @@ class LlamaVision(PipelineModel):
                 image = np.expand_dims(image, axis=(0))
                 images.append(image)
 
+                if "aspect_ratio_ids" not in context.extra_model_args:
+                    msg = "aspect_ratio_ids is required for image / vision model input"
+                    raise ValueError(msg)
+
+                if "aspect_ratio_ids" not in context.extra_model_args:
+                    msg = "aspect_ratio_ids is required for image / vision model input"
+                    raise ValueError(msg)
+
+                aspect_ratio_ids_list.append(
+                    context.extra_model_args["aspect_ratio_ids"]
+                )
+                aspect_ratio_mask_list.append(
+                    context.extra_model_args["aspect_ratio_mask"]
+                )
+
             # Convert the list into a single NumPy array with shape
             # (batch_size, 1, max_num_tiles, H, W, C).
             final_images = np.concatenate(images, axis=0)
@@ -348,13 +365,21 @@ class LlamaVision(PipelineModel):
                 self.pipeline_config.device
             )
 
-            # TODO: Shapes are correct but what should these values be?
-            aspect_ratio_ids = Tensor.zeros(
-                shape=[batch_size, 1], dtype=DType.int64
-            ).to(self.pipeline_config.device)
-            aspect_ratio_mask = Tensor.zeros(
-                shape=[batch_size, 1, max_num_tiles], dtype=DType.int64
-            ).to(self.pipeline_config.device)
+            final_aspect_ratio_ids = np.concatenate(
+                aspect_ratio_ids_list, axis=0
+            )
+
+            aspect_ratio_ids = Tensor.from_numpy(final_aspect_ratio_ids).to(
+                self.pipeline_config.device
+            )
+
+            final_aspect_ratio_mask = np.concatenate(
+                aspect_ratio_mask_list, axis=0
+            )
+
+            aspect_ratio_mask = Tensor.from_numpy(final_aspect_ratio_mask).to(
+                self.pipeline_config.device
+            )
 
             res = [
                 pixel_values,

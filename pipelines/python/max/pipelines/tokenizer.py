@@ -385,6 +385,7 @@ class TextAndVisionTokenizer(
             text=prompt,
             images=images,
         )
+
         if "input_ids" not in inputs:
             msg = "input_ids not provided in AutoProcessor output, please ensure you are using the correct processor for multi-modal inputs."
             raise ValueError(msg)
@@ -398,6 +399,8 @@ class TextAndVisionTokenizer(
             else self.config.max_new_tokens,
         )
 
+        extra_model_args = dict()
+
         if images is not None:
             if "pixel_values" not in inputs:
                 msg = "pixel_values not provided in AutoProcessor output, please ensure you are using the correct processor for multi-modal inputs."
@@ -408,12 +411,17 @@ class TextAndVisionTokenizer(
                     tensor.numpy() if torch.is_tensor(tensor) else tensor
                     for tensor in pixel_values
                 ]
+            if "aspect_ratio_ids" in inputs:
+                extra_model_args["aspect_ratio_ids"] = inputs.aspect_ratio_ids
+            if "aspect_ratio_mask" in inputs:
+                extra_model_args["aspect_ratio_mask"] = inputs.aspect_ratio_mask
         else:
             pixel_values = []
 
         context = TextAndVisionContext(
             prompt=prompt,
             pixel_values=pixel_values,
+            extra_model_args=extra_model_args,
             cache_seq_id=request.index,
             next_tokens=encoded_prompt,
             max_length=encoded_prompt.shape[0] + max_gen_tokens,
