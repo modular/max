@@ -33,6 +33,8 @@ class NaiveKVCacheManager(KVCacheManager):
         assert (
             params.n_devices == 1
         ), "Naive caching only supports a single device."
+        if params.enable_prefix_caching:
+            raise ValueError("Prefix caching is not supported for naive cache.")
         super().__init__(
             params=params,
             max_cache_batch_size=max_cache_batch_size,

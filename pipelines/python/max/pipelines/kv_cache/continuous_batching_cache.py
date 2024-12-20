@@ -60,6 +60,10 @@ class ContinuousBatchingKVCacheCollection(_OpaqueValue):
 
 class FetchContinuousBatchingKVCacheCollection:
     def __init__(self, kv_params: KVCacheParams) -> None:
+        if kv_params.enable_prefix_caching:
+            raise ValueError(
+                "Prefix caching is not supported for continuous batching cache."
+            )
         self.kv_params = kv_params
 
     def __call__(

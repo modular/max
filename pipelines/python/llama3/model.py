@@ -166,6 +166,7 @@ class Llama3Model(PipelineModel):
             // self.pipeline_config.huggingface_config.num_attention_heads,
             cache_strategy=self.pipeline_config.cache_strategy,
             n_devices=len(self.pipeline_config.devices),
+            enable_prefix_caching=self.pipeline_config.enable_prefix_caching,
         )
 
     def load_kv_manager(

@@ -394,6 +394,9 @@ class PipelineConfig:
     kv_cache_page_size: int = 512
     """The number of tokens in a single page in the KVCache."""
 
+    enable_prefix_caching: bool = False
+    """Whether to enable prefix caching for the paged attention KVCache."""
+
     gpu_memory_utilization: float = 0.9
     """The fraction of available device memory that the process should consume.
 

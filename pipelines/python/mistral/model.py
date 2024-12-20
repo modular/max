@@ -83,6 +83,7 @@ class MistralModel(PipelineModel):
             n_kv_heads=self.pipeline_config.huggingface_config.num_key_value_heads,
             head_dim=self.pipeline_config.huggingface_config.head_dim,
             cache_strategy=self.pipeline_config.cache_strategy,
+            enable_prefix_caching=self.pipeline_config.enable_prefix_caching,
         )
 
     def load_kv_manager(

@@ -47,6 +47,7 @@ class KVCacheParams:
         dtype: DType,
         n_kv_heads: int,
         head_dim: int,
+        enable_prefix_caching: bool = False,
         cache_strategy: KVCacheStrategy = KVCacheStrategy.CONTINUOUS,
         n_devices: int = 1,
     ):
@@ -57,6 +58,7 @@ class KVCacheParams:
         self.cache_strategy = cache_strategy
         self.n_devices = n_devices
         self.n_kv_heads_per_device = n_kv_heads // n_devices
+        self.enable_prefix_caching = enable_prefix_caching
         # Validate inputs.
         if (
             cache_strategy == KVCacheStrategy.CONTINUOUS
@@ -71,6 +73,10 @@ class KVCacheParams:
                 "Unsupported KV Cache Configuration: got dtype:"
                 f" {self.dtype_shorthand}, n_kv_heads: {n_kv_heads}, head_dim:"
                 f" {head_dim}"
+            )
+        if enable_prefix_caching and cache_strategy != KVCacheStrategy.PAGED:
+            raise ValueError(
+                "Prefix caching is only supported for PAGED cache strategy"
             )
 
     @property

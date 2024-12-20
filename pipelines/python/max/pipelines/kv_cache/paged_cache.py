@@ -151,6 +151,9 @@ class PagedKVCacheManager(KVCacheManager):
         cache_memory: int,
         page_size: int = 512,
     ) -> None:
+        if params.enable_prefix_caching:
+            raise NotImplementedError("Prefix caching is not yet implemented")
+
         self.page_size = page_size
         single_page_size_bytes = (
             2
