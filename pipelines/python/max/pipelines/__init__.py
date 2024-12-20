@@ -12,6 +12,7 @@ from .config import (
     WeightsFormat,
 )
 from .context import InputContext, TextAndVisionContext, TextContext
+from .hf_utils import HuggingFaceFile
 from .interfaces import (
     PipelineTokenizer,
     TokenGenerator,
@@ -30,8 +31,10 @@ from .tokenizer import (
 )
 
 __all__ = [
+    "HuggingFaceFile",
     "PipelineConfig",
     "PipelineEngine",
+    "HuggingFaceFile",
     "PIPELINE_REGISTRY",
     "SupportedArchitecture",
     "SupportedEncoding",

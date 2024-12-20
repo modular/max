@@ -17,6 +17,7 @@ from pathlib import Path
 
 import streamlit as st
 import torch
+from llama3.config import get_llama_huggingface_file
 from max.driver import CPU, Accelerator
 from max.pipelines import (
     PIPELINE_REGISTRY,
@@ -59,6 +60,7 @@ def start_llama3(
     config = PipelineConfig(
         architecture="LlamaForCausalLM",
         device=Accelerator() if use_gpu else CPU(),
+        weight_path=[Path(weight_path)],
         quantization_encoding=quantization,
         max_length=max_length,
         max_new_tokens=max_new_tokens,
@@ -105,19 +107,8 @@ max_length = st.sidebar.number_input(
 )
 max_new_tokens = st.sidebar.number_input("Max output tokens", 0, 24_000, 6000)
 
-repo_id = "modularai/llama-3.1"
-if encoding == SupportedEncoding.bfloat16:
-    filename = "llama-3.1-8b-instruct-bf16.gguf"
-elif encoding == SupportedEncoding.float32:
-    filename = "llama-3.1-8b-instruct-f32.gguf"
-elif encoding == SupportedEncoding.q4_k:
-    filename = "llama-3.1-8b-instruct-q4_k_m.gguf"
-elif encoding == SupportedEncoding.q4_0:
-    filename = "llama-3.1-8b-instruct-q4_0.gguf"
-elif encoding == SupportedEncoding.q6_k:
-    filename = "llama-3.1-8b-instruct-q6_k.gguf"
-
-weights = hf_streamlit_download(repo_id, filename)
+hf_file = get_llama_huggingface_file("3.1", encoding)
+weights = hf_streamlit_download(hf_file.repo_id, hf_file.filename)
 
 button_state = st.empty()
 model_state = st.empty()
