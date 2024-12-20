@@ -296,14 +296,20 @@ class LlamaVision(PipelineModel):
             msg = "Llama Vision only supports continuous batching"
             raise ValueError(msg)
 
+        def has_image(pixel_values) -> bool:
+            if isinstance(pixel_values, list):
+                return len(pixel_values) > 0
+            return pixel_values is not None
+
         # Input validation - check if the sequence of contexts in this batch
         # all have images, or none altogether.
         has_images = -1
         for context in context_batch:
+            is_curr_image = has_image(context.pixel_values)
             if has_images == -1:
-                has_images = context.pixel_values is not None
-            elif (context.pixel_values is not None and has_images == 0) or (
-                context.pixel_values is None and has_images == 1
+                has_images = is_curr_image
+            elif (is_curr_image and has_images == 0) or (
+                is_curr_image == False and has_images == 1
             ):
                 raise RuntimeError(
                     "Expected the context batch to all have images, or no images "
@@ -311,7 +317,7 @@ class LlamaVision(PipelineModel):
                     "another does not."
                 )
             else:
-                has_images = 0 if context.pixel_values is None else 1
+                has_images = 0 if is_curr_image else 1
 
         # Marshal out hyperparameters.
         batch_size = len(context_batch)
