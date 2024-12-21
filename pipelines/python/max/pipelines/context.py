@@ -47,12 +47,20 @@ class InputContext(Protocol):
         """
         ...
 
+    @property
+    def next_tokens(self) -> np.ndarray:
+        """The next prompt tokens to be input during this iteration.
+
+        This should be a 1D array of tokens of length seq_len.
+        """
+        ...
+
     def update(
         self,
         new_token: int,
         num_steps: int = 1,
     ) -> None:
-        """Updates the next_tokens and extens existing tokens to include all generated tokens."""
+        """Updates the next_tokens and extends existing tokens to include all generated tokens."""
         ...
 
     # TODO: AIPIPE248 - Remove is_done interface and implementations

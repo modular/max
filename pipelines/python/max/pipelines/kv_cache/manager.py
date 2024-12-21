@@ -302,4 +302,3 @@ class KVCacheManager(ABC):
             graph.output(*outputs)
 
         return graph
-        return graph

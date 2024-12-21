@@ -318,7 +318,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         # Get cache seq ids for batch.
         seq_ids_and_prompts = {}
         for ctx in context_batch:
-            prompt = ctx.next_tokens  # type: ignore
+            prompt = ctx.next_tokens
             assert len(prompt) == ctx.seq_len
             seq_ids_and_prompts[ctx.cache_seq_id] = prompt
 
