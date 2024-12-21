@@ -38,6 +38,13 @@ def _starts_with(tokens: np.ndarray, prefix: np.ndarray) -> bool:
 
 
 class TrieNode:
+    """A TrieNode consists of a list of tokens and blocks.
+
+    - Tokens are the ids of the tokens in the sequence.
+    - Blocks are the offsets into the KVCache region that back the KV entries
+      for a given token. I.e: the page index
+    """
+
     def __init__(self) -> None:
         """Constructs a TrieNode."""
         self.children: Dict[TokenId, TrieNode] = {}
@@ -59,11 +66,28 @@ class TrieNode:
         """Comparison function for use by heapq"""
         return self.last_access_time < other.last_access_time
 
-    def is_leaf(self) -> bool:
-        return len(self.children) == 0
-
 
 class RadixTrie:
+    """This RadixTrie is specially designed for prefix caching in paged attention.
+
+    The RadixTrie allows for efficient insertion and matching of sequences. It
+    matches each prefix of tokens in a sequence to its corresponding blocks.
+    Compared to a naive trie, the RadixTrie allows storing multiple tokens in a
+    single node for less indirection and faster access.
+
+    Blocks in the RadixTrie should be immutable and committed. If it is in the
+    RadixTrie, it is eligible for sharing. An inflight or uncommitted block that
+    is being written to by a sequence should not be in the RadixTrie.
+
+    The RadixTrie allows for an LRU eviction policy for its leaves. We only allow
+    evictions if no active sequences are using the node.
+
+    Currently, the RadixTrie assumes that the paged KVCache page size is 1.
+
+    This implementation is based off of SGLang:
+        - https://github.com/sgl-project/sglang/blob/337fe53ac41c68d6f171ef3b446f55eb0e98f77c/python/sglang/srt/mem_cache/radix_cache.py#L58
+    """
+
     def __init__(self) -> None:
         """Constructs a RadixTrie."""
         self.root = TrieNode()
@@ -354,5 +378,6 @@ class RadixTrie:
         return lines
 
     def pretty_print(self, print_blocks: bool = True):
+        """Prints the contents of the trie."""
         for line in self.pretty_format(print_blocks):
             print(line)
