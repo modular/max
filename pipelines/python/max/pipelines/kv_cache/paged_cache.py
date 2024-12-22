@@ -28,6 +28,8 @@ from .cache_params import KVCacheParams
 from .manager import KVCacheManager
 from .radix_trie import RadixTrie, TrieNode
 
+PERCENTAGE_BLOCKS_TO_EVICT = 0.05
+
 
 def ceildiv(n: int, d: int) -> int:
     """Compute ceil(n/d) using strictly integer arithmetic."""
@@ -210,6 +212,18 @@ class PagedKVCacheManager(KVCacheManager):
             self.radix_trie = RadixTrie()
 
     def alloc_block(self) -> int:
+        if len(self.available_blocks) == 0 and self.radix_trie is not None:
+            # Evict a percentage of all blocks according to a LRU policy on the
+            # trie leaves.
+            unused_blocks = self.radix_trie.evict_blocks(
+                desired_num_evicted=int(
+                    max(1, self.total_num_blocks * PERCENTAGE_BLOCKS_TO_EVICT)
+                )
+            )
+            for block in unused_blocks:
+                assert block not in self.available_blocks
+                self.available_blocks.add(block)
+
         if len(self.available_blocks) == 0:
             raise RuntimeError(
                 "Available KVCache pages have been exhausted! You must restart your process"
@@ -340,6 +354,11 @@ class PagedKVCacheManager(KVCacheManager):
                 prompt = prompt[len(prefix_blocks) :]
                 seq_ids_and_prompts[seq_id] = prompt
 
+                # Mark the prefix blocks we retrieved from the radix trie cache as
+                # in use by this sequence so they don't get evicted prematurely.
+                assert inflight_metadata.node is not None
+                self.radix_trie.mark_in_use_by(inflight_metadata.node, seq_id)
+
             # Get the existing cache length for this sequence.
             cache_length = self.cache_lengths[seq_id]
             cache_lengths_np[batch_idx] = cache_length
@@ -457,6 +476,13 @@ class PagedKVCacheManager(KVCacheManager):
         """
         super().release(seq_id)
         request_metadata = self.active_requests[seq_id]
+
+        if self.radix_trie is not None:
+            # mark the prefix blocks as not in use by this sequence so they can
+            # potentially be evicted when we need more memory
+            assert request_metadata.node is not None
+            self.radix_trie.mark_not_in_use_by(request_metadata.node, seq_id)
+
         for block in request_metadata.all_assigned_blocks:
             self.release_block(block, is_committed=True)
         del self.active_requests[seq_id]
@@ -515,6 +541,11 @@ class PagedKVCacheManager(KVCacheManager):
                         uncommitted_blocks,
                         node=request_metadata.node,
                     )
+
+                # Mark the recently committed blocks as in use by this sequence
+                # so they don't get evicted prematurely.
+                assert request_metadata.node is not None
+                self.radix_trie.mark_in_use_by(request_metadata.node, seq_id)
 
             expected_num_pages = ceildiv(
                 len(prompts) + self.cache_lengths[seq_id] + num_steps - 1,
