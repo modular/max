@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import Dict, Iterator
+from typing import Dict, Iterator, Optional
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -26,6 +26,7 @@ from max.graph import (
 
 from .cache_params import KVCacheParams
 from .manager import KVCacheManager
+from .radix_trie import RadixTrie, TrieNode
 
 
 def ceildiv(n: int, d: int) -> int:
@@ -131,8 +132,16 @@ class FetchPagedKVCacheCollection:
 
 @dataclass
 class _PagedCacheMetadata:
+    # Committed blocks are part of the radix trie and can be shared by many sequences.
+    # They are used by the current sequence and possibly other sequences.
     committed_blocks: list[int] = field(default_factory=list)
+    # Inflight blocks are not part of the radix trie and are not shared.
+    # They are only used by the current sequence.
     inflight_blocks: list[int] = field(default_factory=list)
+
+    # This is a pointer into the radix trie indicating which prefix of the sequence
+    # has been cached and committed into the radix trie.
+    node: Optional[TrieNode] = None
 
     @property
     def all_assigned_blocks(self) -> Iterator[int]:
@@ -151,8 +160,11 @@ class PagedKVCacheManager(KVCacheManager):
         cache_memory: int,
         page_size: int = 512,
     ) -> None:
-        if params.enable_prefix_caching:
-            raise NotImplementedError("Prefix caching is not yet implemented")
+        if params.enable_prefix_caching and page_size != 1:
+            raise ValueError(
+                "Prefix caching is only supported with a page size of 1. Found"
+                f" page size: {page_size}"
+            )
 
         self.page_size = page_size
         single_page_size_bytes = (
@@ -192,6 +204,29 @@ class PagedKVCacheManager(KVCacheManager):
             )
 
         self.active_requests: Dict[int, _PagedCacheMetadata] = {}
+
+        self.radix_trie: Optional[RadixTrie] = None
+        if params.enable_prefix_caching:
+            self.radix_trie = RadixTrie()
+
+    def alloc_block(self) -> int:
+        if len(self.available_blocks) == 0:
+            raise RuntimeError(
+                "Available KVCache pages have been exhausted! You must restart your process"
+                " and set a smaller batch size or max seq len."
+            )
+
+        block = self.available_blocks.pop()
+        return block
+
+    def release_block(self, block: int, is_committed: bool = False) -> None:
+        """We can release a block if prefix caching is disabled or if it is not committed.
+
+        If it is committed, it may be in the radix tree and in use by other sequences.
+        This means it can't be safely released without further checks.
+        """
+        if self.radix_trie is None or not is_committed:
+            self.available_blocks.add(block)
 
     @classmethod
     def estimated_memory_size(
@@ -236,6 +271,10 @@ class PagedKVCacheManager(KVCacheManager):
 
         Generally the prompt length is n for prefill, and 1 for decode step. Additionally, there is not a
         kv entry associated with each token in the prompt.
+
+        When prefix caching is enabled, and KV entries can be retrieved for some tokens in the prompt, the
+        input `seq_ids_and_prompts` will be modified. Each prompt will be shortened to only include the tokens
+        for which we do not have a cached KV entry. Note that we will never return a empty prompt.
         """
 
         batch_size = len(seq_ids_and_prompts)
@@ -282,6 +321,25 @@ class PagedKVCacheManager(KVCacheManager):
                     f"seq_id: {seq_id} already has inflight blocks."
                 )
 
+            # Extend the kv cache for given request with any cached prefixes.
+            if self.radix_trie is not None and len(prompt) > 1:
+                # Attempt to match all but the last token in the prompt. This is
+                # because the model expects a prompt of length at least 1.
+                inflight_metadata.node, prefix_blocks = (
+                    self.radix_trie.match_prefix(
+                        prompt[:-1], node=inflight_metadata.node
+                    )
+                )
+
+                # Add the prefix blocks to the request's cached blocks.
+                inflight_metadata.committed_blocks.extend(prefix_blocks)
+                self.cache_lengths[seq_id] += len(prefix_blocks)
+
+                # Shorten the prompt to only include tokens that were not cached
+                # by mutating the input dict.
+                prompt = prompt[len(prefix_blocks) :]
+                seq_ids_and_prompts[seq_id] = prompt
+
             # Get the existing cache length for this sequence.
             cache_length = self.cache_lengths[seq_id]
             cache_lengths_np[batch_idx] = cache_length
@@ -298,14 +356,7 @@ class PagedKVCacheManager(KVCacheManager):
 
             # Assign some new pages to this request.
             for _ in range(num_new_pages):
-                try:
-                    next_block = self.available_blocks.pop()
-                except KeyError:
-                    raise RuntimeError(
-                        "Available KVCache pages have been exhausted! You must restart your process"
-                        " and set a smaller batch size or max seq len."
-                    )
-
+                next_block = self.alloc_block()
                 inflight_metadata.inflight_blocks.append(next_block)
 
             # Populate the lookup table with the new pages.
@@ -407,7 +458,7 @@ class PagedKVCacheManager(KVCacheManager):
         super().release(seq_id)
         request_metadata = self.active_requests[seq_id]
         for block in request_metadata.all_assigned_blocks:
-            self.available_blocks.add(block)
+            self.release_block(block, is_committed=True)
         del self.active_requests[seq_id]
 
     def step(
@@ -426,6 +477,44 @@ class PagedKVCacheManager(KVCacheManager):
                 raise ValueError(f"seq_id: {seq_id} not in active requests.")
 
             request_metadata = self.active_requests[seq_id]
+
+            # Now that we wrote to the inflight blocks, we will try to commit
+            # them to the radix trie.
+            if self.radix_trie is not None:
+                # Match the prefix of the prompt that is already cached in the
+                # radix trie
+                prompt = seq_ids_and_prompts[seq_id]
+                request_metadata.node, existing_blocks = (
+                    self.radix_trie.match_prefix(
+                        prompt, node=request_metadata.node
+                    )
+                )
+
+                # If we computed a kv entry for a token that was already cached,
+                # we will just release that block we just computed.
+                for b0, b1 in zip(
+                    existing_blocks, request_metadata.inflight_blocks
+                ):
+                    if b0 != b1:
+                        self.release_block(b1, is_committed=False)
+
+                # Replace the inflight blocks with the existing prefix blocks.
+                request_metadata.inflight_blocks[: len(existing_blocks)] = (
+                    existing_blocks
+                )
+
+                # Commit the rest of the tokens in the trie for use by future
+                # sequences.
+                uncommitted_blocks = request_metadata.inflight_blocks[
+                    len(existing_blocks) :
+                ]
+                uncommitted_prompt = prompt[len(existing_blocks) :]
+                if len(uncommitted_prompt) > 0:
+                    request_metadata.node = self.radix_trie.insert(
+                        uncommitted_prompt,
+                        uncommitted_blocks,
+                        node=request_metadata.node,
+                    )
 
             expected_num_pages = ceildiv(
                 len(prompts) + self.cache_lengths[seq_id] + num_steps - 1,

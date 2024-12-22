@@ -315,21 +315,32 @@ class TextGenerationPipeline(TokenGenerator[T]):
                     [context.cache_seq_id]
                 )
 
-        # Get cache seq ids for batch.
-        seq_ids_and_prompts = {}
+        seq_ids_and_prompts = {
+            ctx.cache_seq_id: ctx.next_tokens for ctx in context_batch
+        }
+        seq_ids_and_untrimmed_lengths = {
+            ctx.cache_seq_id: len(ctx.next_tokens) for ctx in context_batch
+        }
+
+        # `fetch` mutates the seq_ids_and_prompts input in place when tokens are
+        # retrieved from the cache. This shortens the prompt in the event that
+        # some tokens have backing KV cache entries.
+        tracer.next("fetch_kv_cache")
+        kv_cache_inputs = self._pipeline_model.kv_manager.fetch(
+            seq_ids_and_prompts, num_steps
+        )
+
+        # Update the context with the new possibly shortened prompt.
         for ctx in context_batch:
-            prompt = ctx.next_tokens
-            assert len(prompt) == ctx.seq_len
-            seq_ids_and_prompts[ctx.cache_seq_id] = prompt
+            seq_id = ctx.cache_seq_id
+            untrimmed_length = seq_ids_and_untrimmed_lengths[seq_id]
+            trimmed_length = len(seq_ids_and_prompts[seq_id])
+            ctx.trim_prompt(untrimmed_length - trimmed_length)
 
         tracer.next("prepare_initial_token_inputs")
         # Prepare inputs for the first token in multistep execution.
         model_inputs = self._pipeline_model.prepare_initial_token_inputs(
             context_batch
-        )
-        tracer.next("fetch_kv_cache")
-        kv_cache_inputs = self._pipeline_model.kv_manager.fetch(
-            seq_ids_and_prompts, num_steps
         )
 
         # Multistep execution loop.
