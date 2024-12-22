@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import List
 
 import numpy as np
-from max.graph import StaticDim, TensorValue, ops
+from max.graph import TensorValue, ops
 
 
 def causal_attention_mask_2d_from_imgs(
@@ -89,7 +89,7 @@ def causal_attention_mask_2d(
     """
     # The total number of patches for all image in the batch.
     # TODO: change this to take a dim not an int.
-    seq_len = int(patch_embeds.shape[1])  # type: ignore
+    seq_len = int(patch_embeds.shape[1])
     mask_shape = (seq_len, seq_len)
 
     # TODO(KERN-782): This should be -inf but softmax saturates with NaNs.
@@ -111,14 +111,13 @@ def causal_attention_mask_2d(
     fill_matrix = np.expand_dims(fill_matrix, axis=(0, 1))  # Add two new axes
     fill_matrix = np.broadcast_to(
         fill_matrix,
-        (int(patch_embeds.shape[0]), 1, seq_len, seq_len),  # type: ignore
+        (int(patch_embeds.shape[0]), 1, seq_len, seq_len),
     )
     return fill_matrix
 
 
 def rotate_half(x: TensorValue):
     """Rotates half the hidden dims of the input."""
-    # TODO: change this to take a dim not an int.
-    x1 = x[..., : int(StaticDim(x.shape[-1])) // 2]
-    x2 = x[..., int(StaticDim(x.shape[-1])) // 2 :]
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
     return ops.concat((-x2, x1), axis=-1)

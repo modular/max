@@ -291,11 +291,8 @@ class KVCacheManager(ABC):
                 right_slice = input_row_offsets[i][1:].rebind(
                     cache_length.shape
                 )
-                left_slice = input_row_offsets[
-                    i
-                ][
-                    : input_row_offsets[i].shape[0]
-                    - 1  # type: ignore
+                left_slice = input_row_offsets[i][
+                    : input_row_offsets[i].shape[0] - 1
                 ].rebind(cache_length.shape)
                 increment_amount = right_slice - left_slice
                 outputs.append(cache_length + increment_amount)
