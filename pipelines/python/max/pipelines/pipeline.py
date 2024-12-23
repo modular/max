@@ -113,7 +113,6 @@ class PipelineModel(ABC):
                 f"\n\t    Weights:                {to_mib(weights_size)} MiB"
             )
 
-        total_estimated_str = ""
         if free_memory:
             free_memory_str = f" / {to_mib(free_memory)} MiB free"
         logging_str = (

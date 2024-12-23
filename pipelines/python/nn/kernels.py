@@ -435,13 +435,17 @@ def flash_attention_ragged(
     layer_idx: TensorValue,
     mask_variant: MaskVariant,
 ) -> TensorValue:
-    """Computes flash attention provided the mo.opaque KV Cache.
+    """Computes flash (self) attention provided the `!mo.opaque` KV Cache.
 
     Notably, this materializes the attention mask (dependent on MaskVariant)
     within the kernel.
     `input` and `input_row_offsets` are used together to implement the ragged
     tensor.
     `input_row_offsets` indicates where each batch starts and ends in `input`
+
+    Note that this is self attention and the KV sequence length is
+    assumed to be equal to the Q sequence length.
+    For KV sequence length != Q sequence length, use `cross_attention_ragged`.
     """
     input_rank_expected = 3
     if input.rank != input_rank_expected:
@@ -469,22 +473,105 @@ def flash_attention_ragged(
     elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
         cache_strategy_str = "paged"
     else:
-        msg = f"unsupported cache strategy for fused_qk_ragged_rope: {kv_params.cache_strategy}"
+        msg = f"unsupported cache strategy for flash_attention_ragged: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
     op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_{str(mask_variant)}_{cache_strategy_str}_ragged"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
+
     return ops.inplace_custom(
         op_name,
-        values=[input, input_row_offsets, kv_collection, layer_idx, scale],  # type: ignore
+        values=[input, input_row_offsets, kv_collection, layer_idx, scale],
         out_types=[
             TensorType(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
-    )[0]
+    )[0].tensor
+
+
+def cross_attention_ragged(
+    kv_params: KVCacheParams,
+    input: TensorValue,
+    input_row_offsets: TensorValue,
+    kv_collection: ContinuousBatchingKVCacheCollection,
+    layer_idx: TensorValue,
+    mask_variant: MaskVariant,
+    kv_input_row_offsets: TensorValue,
+    q_max_seq_len: TensorValue,
+) -> TensorValue:
+    """Computes cross attention provided the `!mo.opaque` KV Cache.
+
+    Notably, this materializes the attention mask (dependent on MaskVariant)
+    within the kernel.
+    `input` and `input_row_offsets` are used together to implement the ragged
+    tensor.
+    `input_row_offsets` indicates where each batch starts and ends in `input`
+
+    attention, `kv_input_row_offsets` represents the KV sequence length.
+    """
+    input_rank_expected = 3
+    if input.rank != input_rank_expected:
+        msg = (
+            f"expected input of rank {input_rank_expected} but got {input.rank}"
+        )
+        raise ValueError(msg)
+
+    if input.dtype != kv_params.dtype:
+        msg = (
+            f"expected input to be dtype: {kv_params.dtype}, got {input.dtype}"
+        )
+        raise ValueError(msg)
+
+    if layer_idx.dtype != DType.uint32:
+        msg = f"expected uint32 layer_idx but got {layer_idx.dtype}"
+        raise ValueError(msg)
+
+    if input_row_offsets.dtype != DType.uint32:
+        msg = f"expected uint32 input_row_offsets but got {input_row_offsets.dtype}"
+        raise ValueError(msg)
+
+    if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
+        cache_strategy_str = "cont_batch"
+    elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        cache_strategy_str = "paged"
+    else:
+        msg = f"unsupported cache strategy for flash_attention_ragged: {kv_params.cache_strategy}"
+        raise ValueError(msg)
+
+    if q_max_seq_len and (q_max_seq_len.dtype != DType.uint32):
+        msg = (
+            "expected q_max_seq_len to be uint32 but got {q_max_seq_len.dtype}"
+        )
+        raise ValueError(msg)
+
+    op_name = f"cross_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_{str(mask_variant)}_{cache_strategy_str}_ragged"
+
+    # NOTE: The scale argument to flash attention is constrained to float32.
+    scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
+
+    return ops.inplace_custom(
+        op_name,
+        values=[
+            input,
+            input_row_offsets,
+            # Plumb in the query max sequence length for cross attention.
+            # For self attention this is the same as the KV max seq len stored
+            # on the kv_collection, but that isn't the case for cross attention.
+            q_max_seq_len,
+            kv_input_row_offsets,
+            kv_collection,
+            layer_idx,
+            scale,
+        ],
+        out_types=[
+            TensorType(
+                dtype=input.dtype, shape=input.shape, device=input.device
+            )
+        ],
+    )[0].tensor
 
 
 def swish_glu(

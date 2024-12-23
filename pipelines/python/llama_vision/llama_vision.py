@@ -165,6 +165,7 @@ class LlamaVisionLanguageModel(Layer):
         cross_attention_states: TensorValue,
         input_ids: TensorValue,
         hidden_input_row_offsets: TensorValue,
+        hidden_max_seq_len: TensorValue,
         cross_input_row_offsets: TensorValue,
         *kv_cache_inputs: TensorValue,
     ) -> TensorValue:
@@ -172,6 +173,7 @@ class LlamaVisionLanguageModel(Layer):
             kv_cache_inputs=kv_cache_inputs,
             input_ids=input_ids,
             hidden_input_row_offsets=hidden_input_row_offsets,
+            hidden_max_seq_len=hidden_max_seq_len,
             cross_attention_states=cross_attention_states,
             cross_input_row_offsets=cross_input_row_offsets,
         )
@@ -263,6 +265,7 @@ class LlamaVision(PipelineModel):
                 self.text_config.hidden_size,
             ],
         )
+        input_ids_max_seq_len_type = TensorType(DType.uint32, [1])
         input_row_offsets_type = TensorType(
             DType.uint32, shape=["input_row_offsets_len"]
         )
@@ -272,6 +275,7 @@ class LlamaVision(PipelineModel):
             cross_attention_states_type,
             input_ids_type,
             input_row_offsets_type,
+            input_ids_max_seq_len_type,
             cross_row_offsets_type,
             *self.kv_manager.input_symbols()[0],
         ]
@@ -320,7 +324,6 @@ class LlamaVision(PipelineModel):
                 has_images = 0 if is_curr_image else 1
 
         # Marshal out hyperparameters.
-        batch_size = len(context_batch)
         height = self.vision_config.image_size
         width = self.vision_config.image_size
         max_num_tiles = self.vision_config.max_num_tiles
@@ -413,14 +416,18 @@ class LlamaVision(PipelineModel):
         input_id_values = Tensor.from_numpy(tokens).to(
             self.pipeline_config.device
         )
+        input_id_max_seq_len = Tensor.from_numpy(
+            np.array(
+                [max(ctx.seq_len for ctx in context_batch)], dtype=np.uint32
+            )
+        )
 
-        return tuple(
-            res
-            + [
-                input_id_values,
-                pixel_row_offsets,
-                input_id_row_offsets,
-            ]
+        return (
+            *res,
+            input_id_values,
+            input_id_row_offsets,
+            input_id_max_seq_len,
+            pixel_row_offsets,
         )
 
     def prepare_next_token_inputs(

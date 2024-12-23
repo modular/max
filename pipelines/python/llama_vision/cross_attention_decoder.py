@@ -26,7 +26,7 @@ from max.pipelines.kv_cache import (
 from nn import MLP, RMSNorm
 from nn.kernels import (
     MaskVariant,
-    flash_attention_ragged,
+    cross_attention_ragged,
     matmul_kv_cache_ragged,
     rms_norm_key_cache,
 )
@@ -67,6 +67,7 @@ class CrossSdpaAttention(Layer):
         self,
         hidden_states: TensorValue,
         hidden_input_row_offsets: TensorValue,
+        hidden_max_seq_len: TensorValue,
         cross_attention_states: TensorValue,
         cross_input_row_offsets: TensorValue,
         kv_collection: ContinuousBatchingKVCacheCollection,
@@ -109,7 +110,7 @@ class CrossSdpaAttention(Layer):
         )
 
         # Calculate Flash Attention.
-        attn_out = flash_attention_ragged(
+        attn_out = cross_attention_ragged(
             self.kv_params,
             input=query_states,
             kv_collection=kv_collection,
@@ -117,6 +118,8 @@ class CrossSdpaAttention(Layer):
             input_row_offsets=hidden_input_row_offsets,
             # Use the null mask to attend to all vision tokens.
             mask_variant=MaskVariant.NULL_MASK,
+            kv_input_row_offsets=cross_input_row_offsets,
+            q_max_seq_len=hidden_max_seq_len,
         )
 
         # Reshape back to (hidden total seq len, hidden size).
@@ -140,6 +143,7 @@ class CrossAttentionDecoderLayer(Layer):
         self,
         hidden_states: TensorValue,
         hidden_input_row_offsets: TensorValue,
+        hidden_max_seq_len: TensorValue,
         cross_attention_states: TensorValue,
         cross_input_row_offsets: TensorValue,
         kv_collection: ContinuousBatchingKVCacheCollection,
@@ -150,6 +154,7 @@ class CrossAttentionDecoderLayer(Layer):
         hidden_states = self.cross_attn(
             hidden_states,
             hidden_input_row_offsets,
+            hidden_max_seq_len,
             cross_attention_states,
             cross_input_row_offsets,
             kv_collection,

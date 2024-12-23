@@ -60,6 +60,7 @@ class TextModel(Layer):
         kv_cache_inputs: tuple[TensorValue, ...],
         input_ids: TensorValue,
         hidden_input_row_offsets: TensorValue,
+        hidden_max_seq_len: TensorValue,
         cross_attention_states: TensorValue,
         cross_input_row_offsets: TensorValue,
     ) -> TensorValue:
@@ -91,6 +92,7 @@ class TextModel(Layer):
                 hidden_states = decoder_layer(
                     hidden_states,
                     hidden_input_row_offsets,
+                    hidden_max_seq_len,
                     cross_attention_states,
                     cross_input_row_offsets,
                     kv_collection,
@@ -121,6 +123,7 @@ class CausalLanguageModel(Layer):
         kv_cache_inputs: tuple[TensorValue, ...],
         input_ids: TensorValue,
         hidden_input_row_offsets: TensorValue,
+        hidden_max_seq_len: TensorValue,
         cross_attention_states: TensorValue,
         cross_input_row_offsets: TensorValue,
     ) -> TensorValue:
@@ -128,6 +131,7 @@ class CausalLanguageModel(Layer):
             kv_cache_inputs,
             input_ids,
             hidden_input_row_offsets,
+            hidden_max_seq_len,
             cross_attention_states,
             cross_input_row_offsets,
         )
