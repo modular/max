@@ -313,7 +313,7 @@ class LlamaVision(PipelineModel):
             if has_images == -1:
                 has_images = is_curr_image
             elif (is_curr_image and has_images == 0) or (
-                is_curr_image == False and has_images == 1
+                not is_curr_image and has_images == 1
             ):
                 raise RuntimeError(
                     "Expected the context batch to all have images, or no images "
@@ -364,7 +364,7 @@ class LlamaVision(PipelineModel):
             # (batch_size, 1, max_num_tiles, H, W, C).
             final_images = np.concatenate(images, axis=0)
 
-            pixel_values = Tensor.from_dlpack(final_images).to(
+            pixel_values = Tensor.from_numpy(final_images).to(
                 self.pipeline_config.device
             )
 
