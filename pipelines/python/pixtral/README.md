@@ -81,15 +81,15 @@ The easiest way to try out this pipeline is with our Magic command-line tool.
    curl -N http://localhost:8000/v1/chat/completions \
    -H "Content-Type: application/json" \
    -d '{
-       "model": "mistral-community/pixtral-12b",
-       "stream": true,
-       "messages": [
-           {"role": "system", "content": "You are a helpful assistant."},
-           {"role": "user", "content": [
-               {"type": "text", "text": "What is in this image?"},
-               {"type": "image_url", "image_url": {"url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"},},
-           ]
-       ]
+        "model": "mistral-community/pixtral-12b",
+        "stream": true,
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": [
+                {"type": "text", "text": "What is in this image?"},
+                {"type": "image_url", "image_url": {"url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"}}
+            ]}
+        ]
    }'
    ```
 
