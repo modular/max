@@ -204,6 +204,19 @@ class TextAndVisionContext:
 
         self.active_length = 1
 
+    def trim_prompt(self, trim_len: int) -> None:
+        """Trims the current prompt by the given number of tokens."""
+        if trim_len == 0:
+            return
+
+        assert trim_len < len(self.next_tokens)
+        next_tokens = self.next_tokens
+        new_prompt = next_tokens[trim_len:]
+        self._next_tokens = new_prompt
+        self.current_length += trim_len
+        self.active_length = len(new_prompt)
+        assert self.active_length > 0
+
     def is_done(self, eos: int) -> bool:
         """Returns true if token gen for this context completed, else false."""
         test_token = (
