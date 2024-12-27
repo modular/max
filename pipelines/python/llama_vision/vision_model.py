@@ -538,11 +538,17 @@ def instantiate_vision_model(
         weights.vision_model.layernorm_pre.weight.allocate(
             dtype, [hidden_size]
         ),
+        bias=weights.vision_model.layernorm_pre.bias.allocate(
+            dtype, [hidden_size]
+        ),
         eps=norm_eps,
     )
 
     layernorm_post = LPLayerNorm(
         weights.vision_model.layernorm_post.weight.allocate(
+            dtype, [hidden_size]
+        ),
+        bias=weights.vision_model.layernorm_post.bias.allocate(
             dtype, [hidden_size]
         ),
         eps=norm_eps,
@@ -576,10 +582,16 @@ def instantiate_vision_model(
                     curr_layer_weight.input_layernorm.weight.allocate(
                         dtype, [hidden_size]
                     ),
+                    bias=curr_layer_weight.input_layernorm.bias.allocate(
+                        dtype, [hidden_size]
+                    ),
                     eps=norm_eps,
                 ),
                 post_attention_layernorm=LPLayerNorm(
                     curr_layer_weight.post_attention_layernorm.weight.allocate(
+                        dtype, [hidden_size]
+                    ),
+                    bias=curr_layer_weight.post_attention_layernorm.bias.allocate(
                         dtype, [hidden_size]
                     ),
                     eps=norm_eps,
