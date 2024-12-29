@@ -654,24 +654,34 @@ def instantiate_vision_model(
                             dtype,
                             [intermediate_size, hidden_size],
                         ),
-                        bias=None,
+                        bias=curr_layer_weight.mlp.fc1.bias.allocate(
+                            dtype, [intermediate_size]
+                        ),
                     ),
                     Linear(
                         curr_layer_weight.mlp.fc2.weight.allocate(
                             dtype,
                             [hidden_size, intermediate_size],
                         ),
-                        bias=None,
+                        bias=curr_layer_weight.mlp.fc2.bias.allocate(
+                            dtype, [hidden_size]
+                        ),
                     ),
                 ),
                 input_layernorm=LPLayerNorm(
                     curr_layer_weight.input_layernorm.weight.allocate(
                         dtype, [hidden_size]
                     ),
+                    bias=curr_layer_weight.input_layernorm.bias.allocate(
+                        dtype, [hidden_size]
+                    ),
                     eps=norm_eps,
                 ),
                 post_attention_layernorm=LPLayerNorm(
                     curr_layer_weight.post_attention_layernorm.weight.allocate(
+                        dtype, [hidden_size]
+                    ),
+                    curr_layer_weight.post_attention_layernorm.bias.allocate(
                         dtype, [hidden_size]
                     ),
                     eps=norm_eps,
