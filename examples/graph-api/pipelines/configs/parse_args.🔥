@@ -56,7 +56,7 @@ def parse_args() -> List[String]:
         # we must only split when the argument string starts with a '--' and a '=' is provided
         # this indicates that both a key and value are provided and must be split
         # we then split, at most once, seperating the key from the value.
-        if "=" in args[index] and StringSlice(args[index]).startswith("--"):
+        if "=" in args[index] and args[index].startswith("--"):
             user_args.extend(str(args[index]).split("=", 1))
         else:
             user_args.append(String(args[index]))

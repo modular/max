@@ -108,7 +108,7 @@ def read_input() -> String:
     if len(argv) != 2:
         raise Error("\nPlease enter a prompt." + "\n" + USAGE)
 
-    return sys.argv()[1]
+    return String(sys.argv()[1])
 
 
 def main():

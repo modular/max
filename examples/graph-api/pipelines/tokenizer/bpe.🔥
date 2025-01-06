@@ -186,8 +186,8 @@ struct BPETokenizer:
         for line in lines(data):
             if not len(line.as_bytes()):
                 continue
-            splt = split(line, " ", 1)
-            token = b64decode(splt.__next__())
+            splt = split(String(line), String(" "), 1)
+            token = b64decode(String(splt.__next__()))
             rank = int(splt.__next__())  # always exactly lineno as well
             model.add_token(token, rank)
 

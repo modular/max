@@ -103,15 +103,15 @@ def main():
 
     for i in range(1, len(argv), 2):
         if argv[i] == "--prompt":
-            prompt = argv[i + 1]
+            prompt = String(argv[i + 1])
         elif argv[i] == "--negative-prompt":
-            negative_prompt = argv[i + 1]
+            negative_prompt = String(argv[i + 1])
         elif argv[i] == "--num-steps":
             num_steps = atol(argv[i + 1])
         elif argv[i] == "--seed":
             seed(atol(argv[i + 1]))
         elif argv[i] == "-o" or argv[i] == "--output":
-            output = argv[i + 1]
+            output = String(argv[i + 1])
         else:
             print(USAGE)
             raise Error(str("Unknown option: ") + argv[i])
