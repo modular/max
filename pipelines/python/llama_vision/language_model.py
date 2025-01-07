@@ -70,18 +70,11 @@ class TextModel(Layer):
 
         before_attention_blocks_shape = hidden_states.shape
 
-        for idx, decoder_layer in enumerate(self.layers):
+        for decoder_layer in self.layers:
             # For text-only path we should skip cross attention layers.
-            # Let's check if the layer is cross attention layer and if we have
-            # cross attention states.
-            # TODO: cross_attention_states is never None. It might be a dummy
-            # tensor though if this is a text-only forward pass. Change this to
-            # match invariants for this input case.
-            if (
-                idx in self.cross_attention_layers
-                and cross_attention_states is None
-            ):
-                continue
+            # We expect cross_attention_states to be zeroes if it's a text-only path.
+            # The underlying implementation should be a no-op when a zeroed out cross
+            # attention states is passed in.
 
             kv_collection_constructor = (
                 FetchContinuousBatchingKVCacheCollection(self.kv_params)
