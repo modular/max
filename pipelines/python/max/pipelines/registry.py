@@ -217,9 +217,18 @@ class PipelineRegistry:
                     msg = f"encoding cannot be inferred from weights file: {pipeline_config.weight_path[0]}, please pass a quantization_encoding explictly."
                     raise ValueError(msg)
         elif not pipeline_config.quantization_encoding:
-            msg = f"encoding not provided, using default encoding of {arch.default_encoding}"
-            logging.info(msg)
-            pipeline_config.quantization_encoding = arch.default_encoding
+            # Check if the repo only has one quantization_encoding.
+            supported_encodings = (
+                pipeline_config.huggingface_repo.supported_encodings
+            )
+            if len(supported_encodings) == 1:
+                msg = f"huggingface repo only has '{supported_encodings[0]}' weights, using '{supported_encodings[0]}'"
+                logging.info(msg)
+                pipeline_config.quantization_encoding = supported_encodings[0]
+            else:
+                msg = f"encoding not provided, using default encoding of {arch.default_encoding}"
+                logging.info(msg)
+                pipeline_config.quantization_encoding = arch.default_encoding
 
         # by this point, the quantization_encoding must be provided. verify it is supported.
         if (
