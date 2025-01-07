@@ -32,6 +32,14 @@ from .pipeline import (
 )
 from .tokenizer import TextAndVisionTokenizer, TextTokenizer
 
+# Store a map of checkpoint encodings that can be cast to another dtype while
+# keeping similar results. Maps the requested encoding to an acceptable
+# alternate checkpoint encoding.
+_ALTERNATE_ENCODINGS = {
+    SupportedEncoding.float32: SupportedEncoding.bfloat16,
+    SupportedEncoding.bfloat16: SupportedEncoding.float32,
+}
+
 
 class SupportedArchitecture:
     def __init__(
@@ -231,8 +239,17 @@ class PipelineRegistry:
         # If no weight_path is provided, we should grab the default.
         if not pipeline_config.weight_path:
             # Retrieve the default files for each weights format.
+
+            # Get alternate encoding (e.g. if float32 is requested and there are
+            # only bfloat16 weights, allow retrieving the bfloat16 weights
+            # because they can be cast to float32).
+            alternate_encoding = _ALTERNATE_ENCODINGS.get(
+                pipeline_config.quantization_encoding
+            )
+
             weight_files = pipeline_config.huggingface_repo.files_for_encoding(
-                encoding=pipeline_config.quantization_encoding
+                encoding=pipeline_config.quantization_encoding,
+                alternate_encoding=alternate_encoding,
             )
 
             if default_weight_files := weight_files.get(
@@ -252,7 +269,7 @@ class PipelineRegistry:
                         break
 
         if not pipeline_config.weight_path:
-            msg = f"compatabile weights cannot be found for '{pipeline_config.quantization_encoding}' in '{arch.default_weights_format}' format, or any convertible format: '{', '.join([converter for converter in arch.weight_converters.keys()])}'."
+            msg = f"compatible weights cannot be found for '{pipeline_config.quantization_encoding}' in '{arch.default_weights_format}' format, or any convertible format: '{', '.join([converter for converter in arch.weight_converters.keys()])}'."
             raise ValueError(msg)
 
         # Check supported_cache_strategy
