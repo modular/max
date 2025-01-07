@@ -21,7 +21,12 @@ import numpy as np
 from max.driver import Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
-from max.pipelines import ModelOutputs, PipelineModel, TextContext
+from max.pipelines import (
+    ModelOutputs,
+    PipelineConfig,
+    PipelineModel,
+    TextContext,
+)
 from max.pipelines.kv_cache import (
     KVCacheManager,
     KVCacheParams,
@@ -33,6 +38,12 @@ from .graph import _build_graph
 
 
 class MistralModel(PipelineModel):
+    def __init__(
+        self, pipeline_config: PipelineConfig, session: InferenceSession
+    ) -> None:
+        super().__init__(pipeline_config, session)
+        self.model = self.load_model(session)
+
     def execute(self, *model_inputs: Tensor) -> ModelOutputs:
         """Runs the graph."""
         model_outputs = self.model.execute(

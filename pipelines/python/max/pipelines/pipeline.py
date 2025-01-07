@@ -15,7 +15,7 @@ from typing import Any, Optional, Sequence, Type, TypeVar
 
 from max.driver import CPU, Tensor
 from max.dtype import DType
-from max.engine import InferenceSession, Model, MultimodalModel
+from max.engine import InferenceSession
 from max.profiler import Tracer, traced
 
 from .config import PipelineConfig
@@ -55,7 +55,6 @@ class PipelineModel(ABC):
         self.kv_manager = self.load_kv_manager(
             session, self.available_cache_memory
         )
-        self.model = self.load_model(session)
 
     def estimate_memory_footprint(self) -> int:
         """Calculates the estimated memory consumption of our engine and
@@ -201,14 +200,6 @@ class PipelineModel(ABC):
         """Estimates the size of the kv cache in bytes."""
         ...
 
-    @abstractmethod
-    def load_model(
-        self,
-        session: InferenceSession,
-    ) -> Model | MultimodalModel:
-        """Provided a PipelineConfig and InferenceSession, build and load the model graph(s)."""
-        ...
-
     def compute_log_probabilities(
         self,
         model_inputs: Sequence[Tensor],
@@ -264,7 +255,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
             token_sampler(
                 self._pipeline_config.top_k,
                 # Logits are at index 0 of model outputs.
-                in_dtype=self._pipeline_model.model.output_metadata[0].dtype,
+                in_dtype=self._pipeline_model.model.output_metadata[0].dtype,  # type: ignore
                 # Logits returned from the sampler are always float32 for now.
                 out_dtype=DType.float32,
             )

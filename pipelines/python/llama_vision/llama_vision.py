@@ -20,7 +20,7 @@ from collections.abc import Sequence
 import numpy as np
 from max.driver import Tensor
 from max.dtype import DType
-from max.engine import InferenceSession, MultimodalModel
+from max.engine import InferenceSession, Model
 from max.graph import Dim, Graph, TensorType, TensorValue, ops
 from max.graph.weights import Weights
 from max.pipelines import (
@@ -196,6 +196,11 @@ class LlamaVision(PipelineModel):
         self.language_graph_input_size = -1
 
         super().__init__(pipeline_config, session)
+        self.vision_model, self.language_model = self.load_model(session)
+        # Note that in a multimodal model, the language model is the last model in the
+        # pipeline. Unfortunately, self.model is still being used (and exposed)
+        # in the token generation code, so we still need to set it here.
+        self.model = self.language_model
 
     def _llama3_vision_vision_graph(self) -> Graph:
         # Inserted a manual CHW -> HWC transpose here.
@@ -460,15 +465,6 @@ class LlamaVision(PipelineModel):
         return next_token_inputs
 
     def execute(self, *model_inputs: Tensor) -> ModelOutputs:
-        assert isinstance(
-            self.model.modalities,  # type: ignore
-            tuple,
-        ), "Modalities must be a tuple"
-        assert (
-            len(self.model.modalities) == 2  # type: ignore
-        ), "Must have only vision and language modalities"
-        vision_model, language_model = self.model.modalities  # type: ignore
-
         model_input_list = list(model_inputs)
 
         # batch_size * num_concurrent_media * max_num_tiles * num_patches
@@ -481,7 +477,7 @@ class LlamaVision(PipelineModel):
         # Vision model has 3 more inputs.
         # pixel_values(1), aspect_ratio_ids(1), aspect_ratio_mask(1)
         if len(model_input_list) >= self.vision_graph_input_size:
-            cross_attention_states = vision_model.execute(  # type: ignore
+            cross_attention_states = self.vision_model.execute(  # type: ignore
                 *model_input_list[: self.vision_graph_input_size],
                 copy_inputs_to_device=False,
             )[0]
@@ -502,7 +498,7 @@ class LlamaVision(PipelineModel):
                 )
             )
 
-        model_outputs = language_model.execute(
+        model_outputs = self.language_model.execute(
             *model_input_list, copy_inputs_to_device=False
         )
         assert not self.pipeline_config.enable_echo
@@ -550,7 +546,7 @@ class LlamaVision(PipelineModel):
     def load_model(
         self,
         session: InferenceSession,
-    ) -> MultimodalModel:
+    ) -> tuple[Model, Model]:
         """
         Load the Llama vision multimodal model. Since this is a multimodal model,
         we have vision and language models (graph) loaded.
@@ -582,4 +578,4 @@ class LlamaVision(PipelineModel):
         logging.info(
             f"Compiling language model took {after - before:.6f} seconds"
         )
-        return MultimodalModel((vision_model, language_model))
+        return (vision_model, language_model)

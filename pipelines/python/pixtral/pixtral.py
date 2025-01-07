@@ -21,7 +21,12 @@ from max.driver import Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
-from max.pipelines import ModelOutputs, PipelineModel, TextAndVisionContext
+from max.pipelines import (
+    ModelOutputs,
+    PipelineConfig,
+    PipelineModel,
+    TextAndVisionContext,
+)
 from max.pipelines.kv_cache import (
     KVCacheManager,
     KVCacheParams,
@@ -34,6 +39,12 @@ from .model.graph import _build_graph
 
 class PixtralModel(PipelineModel):
     """The overall interface to the Pixtral model."""
+
+    def __init__(
+        self, pipeline_config: PipelineConfig, session: InferenceSession
+    ) -> None:
+        super().__init__(pipeline_config, session)
+        self.model = self.load_model(session)
 
     def execute(self, *model_inputs: Tensor) -> ModelOutputs:  # type: ignore
         model_outputs = self.model.execute(

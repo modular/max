@@ -26,6 +26,7 @@ from max.graph.weights import GGUFWeights
 from max.pipelines import (
     LogProbabilities,
     ModelOutputs,
+    PipelineConfig,
     PipelineModel,
     TextContext,
 )
@@ -41,6 +42,12 @@ from .graph import _build_graph
 
 
 class ReplitModel(PipelineModel):
+    def __init__(
+        self, pipeline_config: PipelineConfig, session: InferenceSession
+    ) -> None:
+        super().__init__(pipeline_config, session)
+        self.model = self.load_model(session)
+
     def execute(self, *model_inputs: Tensor) -> ModelOutputs:  # type: ignore
         model_outputs = self.model.execute(
             *model_inputs, copy_inputs_to_device=False
