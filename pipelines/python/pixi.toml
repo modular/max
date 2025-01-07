@@ -38,4 +38,3 @@ torchaudio = "==2.5.1"
 
 # Dependencies of `max`, not available through conda-forge
 prometheus-async = ">=22.2.0"
-faster-fifo = "==1.4.7"
