@@ -84,8 +84,14 @@ class Attention(Layer):
         # Note, the graph compiler currently requires the order of operands
         # to be `scores * scale` in order to pattern match the fused attention
         # operator.
+        # attn_mask and pixel_values are model inputs. scores is self-attention
+        # scores between all patches in pixel_values.
+        # attn_mask shape = ("n_images", 1, "num_patches_in_image", "num_patches_in_image")
+        # scores shape = ("n_images", "n_heads", "num_patches_in_image", "num_patches_in_image")
+        attn_mask = ops.rebind(
+            attn_mask, (scores.shape[0], 1, scores.shape[2], scores.shape[3])
+        )
         scores = ops.softmax(scores * scale + attn_mask)
-        # scores = ops.dropout(scores, p=self.dropout)
 
         return scores @ xv
 

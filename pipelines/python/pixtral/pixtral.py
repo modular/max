@@ -35,6 +35,7 @@ from max.pipelines.kv_cache import (
 )
 
 from .model.graph import _build_graph
+from .vision_encoder.attention_utils import causal_attention_mask_2d_from_imgs
 
 
 class PixtralModel(PipelineModel):
@@ -79,14 +80,29 @@ class PixtralModel(PipelineModel):
             pixel_values = Tensor.from_numpy(image).to(
                 self.pipeline_config.device
             )
+            # TODO(KERN-782): This should be -inf but softmax saturates with NaNs.
+            fill_val = -10000.0
+            attention_mask = causal_attention_mask_2d_from_imgs(
+                [image],
+                self.pipeline_config.huggingface_config.vision_config.patch_size,
+                1,
+                fill_val,
+            )
+            attention_mask = Tensor.from_numpy(attention_mask).to(
+                self.pipeline_config.device
+            )
         else:
             # Model assumes exactly one image as input. Pass an empty tensor which is never accessed.
             pixel_values = Tensor.zeros(
                 dtype=DType.float32, shape=[304, 400, 3]
             ).to(self.pipeline_config.device)
+            attention_mask = Tensor.zeros(
+                dtype=DType.float32, shape=[1, 1, 475, 475]
+            ).to(self.pipeline_config.device)
         return (
             input_ids,
             pixel_values,
+            attention_mask,
             input_row_offsets,
         )
 
@@ -95,7 +111,12 @@ class PixtralModel(PipelineModel):
         next_tokens: Tensor,
         prev_model_inputs: tuple[Tensor, ...],
     ) -> tuple[Tensor, ...]:
-        prev_input_ids, prev_pixel_values, old_row_offsets = prev_model_inputs
+        (
+            prev_input_ids,
+            prev_pixel_values,
+            prev_attention_mask,
+            old_row_offsets,
+        ) = prev_model_inputs
 
         row_offsets_size = old_row_offsets.shape[0]
         next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
@@ -103,6 +124,7 @@ class PixtralModel(PipelineModel):
         return (
             next_tokens,
             prev_pixel_values,
+            prev_attention_mask,
             next_row_offsets,
         )
 

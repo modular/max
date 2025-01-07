@@ -33,8 +33,10 @@ def causal_attention_mask_2d_from_imgs(
         num_patches_list: A list of images (blocks). Each image is of shape
         (height, width, num_channels).
 
-        patch_embeds: A tensor of shape [batch_size, num_patches, hidden_size] representing the
-        embeddings of patches in a batch of images.
+        patch_size: size of one dim of each patch in the image.
+
+        batch_size: num of images.
+
 
     Returns an ndarray of shape (batch_size, 1, seq_len, seq_len) representing the
     attention mask for the blocks of patches attended to by the transformer.

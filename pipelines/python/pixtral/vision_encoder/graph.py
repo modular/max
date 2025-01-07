@@ -223,7 +223,9 @@ def _build_graph(
 ) -> Graph:
     # Graph input types.
     # TODO: What is the image type?
-    image_type = TensorType(DType.float32, shape=[300, 400, 3])
+    image_type = TensorType(
+        DType.float32, shape=["image_height", "image_width", "num_channels"]
+    )
 
     # Initialize Graph.
     with Graph(

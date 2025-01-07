@@ -13,7 +13,7 @@
 
 from dataclasses import dataclass
 
-from max.graph import TensorValue, ops
+from max.graph import TensorValue, TensorValueLike, ops
 from nn.layer import Layer
 from pixtral.vision_encoder.vision_encoder import VisionEncoder
 
@@ -40,7 +40,9 @@ class LlavaConditionalGeneration(Layer):
     # TODO: change pixel_values type to List[TensorValue] to support multiple images.
     def __call__(
         self,
-        input_ids: TensorValue,  # Shape (batch_size, sequence_length). Indices of input sequence tokens in the vocabulary. Indices can be obtained from language model tokenizer.
+        input_ids: TensorValueLike,
+        pixel_values: TensorValueLike,
+        attention_mask: TensorValueLike,
         kv_cache_inputs: tuple[
             TensorValue, TensorValue, TensorValue, TensorValue
         ],
@@ -49,7 +51,7 @@ class LlavaConditionalGeneration(Layer):
         """
         Args:
             input_ids (ragged `TensorValue` of shape `(batch_size * sequence_length for each batch)`):
-                Indices of input sequence tokens in the vocabulary.
+                Indices of input sequence tokens in the vocabulary. Can be obtained from language model tokenizer.
                 input_ids[i] is a sequence of token ids (indices) in sequence i. Expanding inputs for
                 image tokens in LLaVa should be done in processing. Each image is represented in the
                 input_ids sequence by a sequence of patches that have index(id) = self.image_token_index.
@@ -61,12 +63,10 @@ class LlavaConditionalGeneration(Layer):
                 Pixel values can be obtained using ImageProcessor.
         """
         # TODO: If input pixel_values is a list of images, don't wrap it in a list.
-        pixel_values: list[TensorValue] = []
-        if "pixel_values" in kwargs:
-            pixel_values = [kwargs["pixel_values"]]
-
         image_embeds = self.multi_modal_projector(
-            self.vision_encoder(pixel_values)
+            self.vision_encoder(
+                imgs=[pixel_values], attention_mask=attention_mask
+            )
         )
         # inputs_embeds shape (total_sequence_length=text_and_image_tokens_length for all seqs,
         #   language_model_hidden_dim)

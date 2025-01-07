@@ -17,12 +17,11 @@ from dataclasses import dataclass
 from typing import List
 
 from max.dtype import DType
-from max.graph import StaticDim, TensorValue, ops
+from max.graph import TensorValueLike, ops
 from nn.conv import Conv2D
 from nn.layer import Layer
 from nn.norm import RMSNorm
 
-from .attention_utils import causal_attention_mask_2d
 from .rotary_embedding_2d import RotaryEmbedding2D, patch_position_ids
 from .transformer import Transformer
 
@@ -44,7 +43,9 @@ class VisionEncoder(Layer):
     patch_size: int = 16
     max_image_size: int = 1024
 
-    def __call__(self, imgs: List[TensorValue]):
+    def __call__(
+        self, imgs: List[TensorValueLike], attention_mask: TensorValueLike
+    ):
         """
         imgs: list of images of shape = (height, width, num_channels)
         """
@@ -81,16 +82,6 @@ class VisionEncoder(Layer):
         # map each position id to its corresponding embedding representing that posiiton
         position_embedding = self.patch_positional_embedding(
             patch_embeds, position_ids
-        )
-
-        # Generate attention mask for patches in images.
-        # p.shape = batch_size, patches_per_height, patches_per_width, hidden_size
-        attention_mask = causal_attention_mask_2d(
-            [
-                int(StaticDim(p.shape[1])) * int(StaticDim(p.shape[2]))
-                for p in patch_embeds_list
-            ],
-            patch_embeds,
         )
 
         encoder_output = self.transformer(

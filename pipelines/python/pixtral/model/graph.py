@@ -113,8 +113,14 @@ def _build_graph(
     # TODO: should be changed to add "batch_size", "n_images" dims when working with multiple images
     pixel_values_type = TensorType(
         DType.float32,
-        [304, 400, 3],  # ["height", "width", "num_channels"]
+        shape=["image_height", "image_width", "num_channels"],
     )
+
+    attention_mask_type = TensorType(
+        DType.float32,
+        shape=["batch_size", 1, "num_patches", "num_patches"],
+    )
+
     # Type of start and end position of each batch in the combined total_seq_len dimension.
     input_row_offsets_type = TensorType(
         DType.uint32, shape=["input_row_offsets_len"]
@@ -127,17 +133,23 @@ def _build_graph(
         input_types=[
             input_ids_type,
             pixel_values_type,
+            attention_mask_type,
             input_row_offsets_type,
             *kv_cache_types,
         ],
     ) as graph:
         model = _llava(graph, pipeline_config, weights, kv_params)
-        input_ids, pixel_values, input_row_offsets, *kv_cache_inputs = (
-            graph.inputs
-        )
+        (
+            input_ids,
+            pixel_values,
+            attention_mask,
+            input_row_offsets,
+            *kv_cache_inputs,
+        ) = graph.inputs
         outputs = model(
             input_ids=input_ids,  # type: ignore
-            pixel_values=pixel_values,
+            pixel_values=pixel_values,  # type: ignore
+            attention_mask=attention_mask,  # type: ignore
             kv_cache_inputs=kv_cache_inputs,  # type: ignore
             input_row_offsets=input_row_offsets,
         )
