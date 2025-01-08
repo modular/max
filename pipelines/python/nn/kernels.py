@@ -232,15 +232,15 @@ def fused_qk_ragged_rope(
         msg = f"expected layer_idx to have dtype uint32, was {layer_idx.dtype}"
         raise ValueError(msg)
 
-    if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
-        cache_strategy_str = "continuous_batch"
-    elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
-        cache_strategy_str = "paged"
-    else:
+    if kv_params.cache_strategy not in {
+        KVCacheStrategy.CONTINUOUS,
+        KVCacheStrategy.PAGED,
+    }:
         msg = f"unsupported cache strategy for fused_qk_ragged_rope: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
-    op_name = f"fused_qk_rope_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_bshd_{cache_strategy_str}_ragged"
+    cache_strategy_str = kv_params.cache_strategy.kernel_substring()
+    op_name = f"mo.fused_qk_rope.ragged.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
 
     return ops.inplace_custom(
         op_name,
@@ -292,7 +292,8 @@ def fused_qk_rope(
         msg = f"unsupported cache strategy for fused_qkv_matmul: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
-    op_name = f"fused_qk_rope_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_bshd_continuous_batch"
+    cache_strategy_str = kv_params.cache_strategy.kernel_substring()
+    op_name = f"mo.fused_qk_rope.padded.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
 
     return ops.inplace_custom(
         op_name,
