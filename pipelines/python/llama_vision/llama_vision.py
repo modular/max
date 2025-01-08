@@ -334,7 +334,8 @@ class LlamaVision(PipelineModel):
         max_num_tiles = self.vision_config.max_num_tiles
         patch_size = self.vision_config.patch_size
         # TODO(bduke): account for the actual instead of max number of tiles.
-        image_seq_len = max_num_tiles * (height * width) // patch_size**2
+        # num_tiles * (image_dim**2 // patch_dim**2 + 1 (cls token))
+        image_seq_len = max_num_tiles * ((height * width) // patch_size**2 + 1)
 
         res = []
         if has_images:
