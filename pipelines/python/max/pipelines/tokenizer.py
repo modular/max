@@ -8,7 +8,7 @@
 import asyncio
 import io
 import logging
-from typing import Any, Sequence, Union, cast
+from typing import Sequence, Union, cast
 
 import numpy as np
 import torch
@@ -51,7 +51,8 @@ class IdentityPipelineTokenizer(
     async def decode(
         self,
         context: TokenGeneratorContext,
-        encoded: Any,
+        encoded: str,
+        **kwargs,
     ) -> str:
         if isinstance(encoded, str):
             return encoded
@@ -101,8 +102,9 @@ class PreTrainedPipelineTokenizer(
         self,
         context: TokenGeneratorContext,
         encoded: np.ndarray,
+        **kwargs,
     ) -> str:
-        return self.delegate.decode(encoded)
+        return self.delegate.decode(encoded, **kwargs)
 
 
 def max_tokens_to_generate(

@@ -145,6 +145,7 @@ class PipelineTokenizer(
         self,
         context: TokenGeneratorContext,
         encoded: TokenizerEncoded,
+        **kwargs,
     ) -> str:
         """Decodes response tokens to text.
 
