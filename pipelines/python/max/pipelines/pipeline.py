@@ -240,7 +240,28 @@ class TextGenerationPipeline(TokenGenerator[T]):
         eos_token_id: int,
     ) -> None:
         self._pipeline_config = pipeline_config
-        self._eos_token_id = eos_token_id
+
+        # Expand eos tokens if more are provided in pipeline_config
+        if "eos_token_id" in pipeline_config.huggingface_config:
+            eos_tokens = pipeline_config.huggingface_config.eos_token_id
+            if isinstance(eos_tokens, int):
+                if eos_tokens != eos_token_id:
+                    msg = f"eos_token_id provided in huggingface config ({eos_tokens}), does not match provided eos_token_id ({eos_token_id}), using provided eos_token_id"
+                    logging.warning(msg)
+
+                self._eos_token_id = set([eos_tokens])
+            elif isinstance(eos_tokens, list):
+                if eos_token_id in eos_tokens:
+                    self._eos_token_id = set(eos_tokens)
+                else:
+                    self._eos_token_id = set([eos_token_id])
+            else:
+                msg = f"eos_token_id in huggingface_config, is neither int or list: {eos_tokens}"
+                logging.warning(msg)
+                self._eos_token_id = set([eos_token_id])
+
+        else:
+            self._eos_token_id = set([eos_token_id])
 
         # Initialize Session.
         session = InferenceSession(devices=[self._pipeline_config.device])
@@ -417,7 +438,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
                 next_token = int(generated_tokens_host[batch_index, step])
 
                 if (
-                    next_token == self._eos_token_id
+                    next_token in self._eos_token_id
                     or (context.current_length + step) >= context.max_length
                 ):
                     step += 1
