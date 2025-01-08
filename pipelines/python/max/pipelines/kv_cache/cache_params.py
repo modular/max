@@ -38,6 +38,12 @@ class KVCacheStrategy(str, Enum):
     def __repr__(self) -> str:
         return self.value
 
+    def kernel_substring(self) -> str:
+        """Returns the common substring that we include in the kernel name for this caching strategy."""
+        if self == KVCacheStrategy.CONTINUOUS:
+            return "continuous_batching"
+        return str(self.value)
+
     def uses_opaque(self) -> bool:
         return self != KVCacheStrategy.NAIVE
 
