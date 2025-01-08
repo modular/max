@@ -412,6 +412,8 @@ class PagedKVCacheManager(KVCacheManager):
                     max_lengths_host,
                 )
             )
+
+        self._update_fetch_metadata(seq_ids_and_prompts, num_steps)
         return ret_list
 
     def input_symbols(
@@ -489,8 +491,7 @@ class PagedKVCacheManager(KVCacheManager):
 
     def step(
         self,
-        seq_ids_and_prompts: dict[int, np.ndarray],
-        num_steps: int = 1,
+        seq_ids_and_new_tokens: dict[int, np.ndarray],
     ) -> None:
         """Update the `cache_lengths` objects to not that a new
         kv projection step has occurred, and that the underlying memory
@@ -498,18 +499,21 @@ class PagedKVCacheManager(KVCacheManager):
         downstream in `fetch` to track what section of memory should
         be used in the kernels.
         """
-        for seq_id, prompts in seq_ids_and_prompts.items():
+        for seq_id, new_tokens in seq_ids_and_new_tokens.items():
             if seq_id not in self.active_requests:
                 raise ValueError(f"seq_id: {seq_id} not in active requests.")
 
             request_metadata = self.active_requests[seq_id]
+            fetch_metadata = self.fetch_metadata[seq_id]
+            prompt = fetch_metadata.prompt
+            num_steps = fetch_metadata.num_steps
+            assert len(new_tokens) == num_steps
 
             # Now that we wrote to the inflight blocks, we will try to commit
             # them to the radix trie.
             if self.radix_trie is not None:
                 # Match the prefix of the prompt that is already cached in the
                 # radix trie
-                prompt = seq_ids_and_prompts[seq_id]
                 request_metadata.node, existing_blocks = (
                     self.radix_trie.match_prefix(
                         prompt, node=request_metadata.node
@@ -548,7 +552,7 @@ class PagedKVCacheManager(KVCacheManager):
                 self.radix_trie.mark_in_use_by(request_metadata.node, seq_id)
 
             expected_num_pages = ceildiv(
-                len(prompts) + self.cache_lengths[seq_id] + num_steps - 1,
+                len(prompt) + self.cache_lengths[seq_id] + num_steps - 1,
                 self.page_size,
             )
 
@@ -566,4 +570,4 @@ class PagedKVCacheManager(KVCacheManager):
             )
             request_metadata.inflight_blocks.clear()
 
-        super().step(seq_ids_and_prompts, num_steps)
+        super().step(seq_ids_and_new_tokens)

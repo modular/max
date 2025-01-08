@@ -419,14 +419,20 @@ class TextGenerationPipeline(TokenGenerator[T]):
             )
             tracer.pop()  # pops step_{i}
 
-        # Actually update the cache lengths in our kv_cache manager
-        tracer.next("kv_manager.step")  # pops multistep_execution_loop_steps
-        self._pipeline_model.kv_manager.step(seq_ids_and_prompts, num_steps)
-
         # Do the copy to host for each token generated.
-        tracer.next("generated_tokens.to(CPU())")  # pops kv_manager.step
+        tracer.next(
+            "generated_tokens.to(CPU())"
+        )  # pops multistep_execution_loop_steps
         generated_tokens_host = generated_tokens.to(CPU()).to_numpy()
-        tracer.pop()  # pops generated_tokens.to(CPU())
+
+        # Actually update the cache lengths in our kv_cache manager
+        tracer.next("kv_manager.step")  # pops generated_tokens.to(CPU())
+        seq_ids_and_new_tokens = {
+            ctx.cache_seq_id: generated_tokens_host[i]
+            for i, ctx in enumerate(context_batch)
+        }
+        self._pipeline_model.kv_manager.step(seq_ids_and_new_tokens)
+        tracer.pop()  # pops kv_manager.step
 
         # Prepare the response, pruning away completed requests as we go.
         res: list[dict[str, Any]] = [{} for _ in range(num_steps)]

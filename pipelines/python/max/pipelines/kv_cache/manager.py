@@ -6,6 +6,7 @@
 """Abstract base class for KVCacheManager for KV Cache."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import List, Sequence
 
 import numpy as np
@@ -15,6 +16,17 @@ from max.engine import InferenceSession
 from max.graph import DeviceRef, Graph, TensorType, TensorValue, Type
 
 from .cache_params import KVCacheParams
+
+
+@dataclass
+class _FetchMetadata:
+    """Metadata about sequences that are inflight.
+
+    Inflight refers to sequences that have executed `fetch` but not `step`.
+    """
+
+    prompt: np.ndarray
+    num_steps: int
 
 
 class KVCacheManager(ABC):
@@ -46,6 +58,7 @@ class KVCacheManager(ABC):
         self.increment_cache_lengths_model = session.load(
             increment_cache_lengths_graph
         )
+        self.fetch_metadata: dict[int, _FetchMetadata] = {}
 
     @classmethod
     @abstractmethod
@@ -67,6 +80,22 @@ class KVCacheManager(ABC):
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
     ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]: ...
+
+    def _update_fetch_metadata(
+        self,
+        seq_ids_and_prompts: dict[int, np.ndarray],
+        num_steps: int = 1,
+    ) -> None:
+        """This updates the fetch metadata for the given sequence ids and prompts.
+
+        Subclasses should call this method at the end of their `fetch` method.
+        """
+        for seq_id, prompt in seq_ids_and_prompts.items():
+            assert seq_id not in self.fetch_metadata
+            self.fetch_metadata[seq_id] = _FetchMetadata(
+                prompt=prompt,
+                num_steps=num_steps,
+            )
 
     @abstractmethod
     def input_symbols(
@@ -99,8 +128,7 @@ class KVCacheManager(ABC):
 
     def step(
         self,
-        seq_ids_and_prompts: dict[int, np.ndarray],
-        num_steps: int = 1,
+        seq_ids_and_new_tokens: dict[int, np.ndarray],
     ) -> None:
         """Update the `cache_lengths` objects to not that a new
         kv projection step has occurred, and that the underlying memory
@@ -109,11 +137,18 @@ class KVCacheManager(ABC):
         be used in the kernels.
         """
 
-        for id, prompt in seq_ids_and_prompts.items():
-            if id not in self.cache_lengths:
-                raise ValueError(f"seq_id: {id} not in cache.")
+        for seq_id, new_tokens in seq_ids_and_new_tokens.items():
+            if seq_id not in self.cache_lengths:
+                raise ValueError(f"seq_id: {seq_id} not in cache.")
 
-            self.cache_lengths[id] += len(prompt) + num_steps - 1
+            assert seq_id in self.fetch_metadata
+            metadata = self.fetch_metadata[seq_id]
+            del self.fetch_metadata[seq_id]
+
+            assert metadata.num_steps == len(new_tokens)
+            self.cache_lengths[seq_id] += (
+                len(metadata.prompt) + metadata.num_steps - 1
+            )
 
     def release(self, seq_id: int) -> None:
         """Release `seq_id` provided, marking this sequence as complete.

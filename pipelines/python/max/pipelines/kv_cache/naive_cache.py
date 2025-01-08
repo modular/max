@@ -124,6 +124,7 @@ class NaiveKVCacheManager(KVCacheManager):
                 f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} "
                 f"with {len(prompt)} new tokens and {num_steps} steps. Existing length: {self.cache_lengths[seq_id]}"
             )
+        self._update_fetch_metadata(seq_ids_and_prompts, num_steps)
         return [
             (
                 self.keys,

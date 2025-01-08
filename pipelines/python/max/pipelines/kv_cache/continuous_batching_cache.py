@@ -257,6 +257,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             step_max_seq_length = 1
         max_lengths_host = Tensor.from_numpy(max_lengths_np)
 
+        self._update_fetch_metadata(seq_ids_and_prompts, num_steps)
         return [
             (
                 self.blocks[i],
