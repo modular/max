@@ -539,9 +539,15 @@ class PagedKVCacheManager(KVCacheManager):
                     len(existing_blocks) :
                 ]
                 uncommitted_prompt = prompt[len(existing_blocks) :]
-                if len(uncommitted_prompt) > 0:
+                # All but the last newly generated token should have a kv block.
+                uncommitted_new_tokens = new_tokens[:-1]
+                all_uncommitted_tokens = np.concatenate(
+                    [uncommitted_prompt, uncommitted_new_tokens]
+                )
+                assert len(all_uncommitted_tokens) == len(uncommitted_blocks)
+                if len(all_uncommitted_tokens) > 0:
                     request_metadata.node = self.radix_trie.insert(
-                        uncommitted_prompt,
+                        all_uncommitted_tokens,
                         uncommitted_blocks,
                         node=request_metadata.node,
                     )
