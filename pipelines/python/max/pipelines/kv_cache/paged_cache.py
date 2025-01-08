@@ -275,7 +275,7 @@ class PagedKVCacheManager(KVCacheManager):
             params.head_dim,
         ]
 
-    def fetch(
+    def _fetch(
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
@@ -413,7 +413,6 @@ class PagedKVCacheManager(KVCacheManager):
                 )
             )
 
-        self._update_fetch_metadata(seq_ids_and_prompts, num_steps)
         return ret_list
 
     def input_symbols(
@@ -489,7 +488,7 @@ class PagedKVCacheManager(KVCacheManager):
             self.release_block(block, is_committed=True)
         del self.active_requests[seq_id]
 
-    def step(
+    def _step(
         self,
         seq_ids_and_new_tokens: dict[int, np.ndarray],
     ) -> None:
@@ -575,5 +574,3 @@ class PagedKVCacheManager(KVCacheManager):
                 request_metadata.inflight_blocks
             )
             request_metadata.inflight_blocks.clear()
-
-        super().step(seq_ids_and_new_tokens)

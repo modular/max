@@ -173,7 +173,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         size = cache_size + lengths_size + lookup_table_size
         return size * len(devices)
 
-    def fetch(
+    def _fetch(
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
@@ -257,7 +257,6 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             step_max_seq_length = 1
         max_lengths_host = Tensor.from_numpy(max_lengths_np)
 
-        self._update_fetch_metadata(seq_ids_and_prompts, num_steps)
         return [
             (
                 self.blocks[i],

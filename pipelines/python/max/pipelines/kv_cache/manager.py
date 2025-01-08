@@ -7,7 +7,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Sequence
+from typing import List, Sequence, final
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -75,27 +75,36 @@ class KVCacheManager(ABC):
         ...
 
     @abstractmethod
+    def _fetch(
+        self,
+        seq_ids_and_prompts: dict[int, np.ndarray],
+        num_steps: int = 1,
+    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+        """Used by `fetch` and should be implemented by child classes."""
+        ...
+
+    @final
     def fetch(
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]: ...
+    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+        """Returns blocks and other inputs to kv cache kernel for given
+        sequence ids and prompts."""
+        # Call into `_fetch` method implemented by child classes.
+        # This may trim the prompts in place so the fetch metadata is updated
+        # afterwards.
+        res = self._fetch(seq_ids_and_prompts, num_steps)
 
-    def _update_fetch_metadata(
-        self,
-        seq_ids_and_prompts: dict[int, np.ndarray],
-        num_steps: int = 1,
-    ) -> None:
-        """This updates the fetch metadata for the given sequence ids and prompts.
-
-        Subclasses should call this method at the end of their `fetch` method.
-        """
+        # Update the fetch metadata for the given sequence ids and prompts.
         for seq_id, prompt in seq_ids_and_prompts.items():
             assert seq_id not in self.fetch_metadata
             self.fetch_metadata[seq_id] = _FetchMetadata(
                 prompt=prompt,
                 num_steps=num_steps,
             )
+
+        return res
 
     @abstractmethod
     def input_symbols(
@@ -126,17 +135,26 @@ class KVCacheManager(ABC):
             self.available.remove(seq_id)
             self.cache_lengths[seq_id] = 0
 
-    def step(
+    def _step(
         self,
         seq_ids_and_new_tokens: dict[int, np.ndarray],
     ) -> None:
+        """Used by `step` and can optionally be overridden by child classes."""
+        ...
+
+    @final
+    def step(self, seq_ids_and_new_tokens: dict[int, np.ndarray]) -> None:
         """Update the `cache_lengths` objects to not that a new
         kv projection step has occurred, and that the underlying memory
         has been written to. This `cache_lengths` value is then used
         downstream in `fetch` to track what section of memory should
         be used in the kernels.
         """
+        # Call into `_step` method possibly overridden by child classes.
+        self._step(seq_ids_and_new_tokens)
 
+        # Update the cache lengths and delete the fetch metadata for the given
+        # sequence ids and prompts.
         for seq_id, new_tokens in seq_ids_and_new_tokens.items():
             if seq_id not in self.cache_lengths:
                 raise ValueError(f"seq_id: {seq_id} not in cache.")
