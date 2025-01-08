@@ -369,6 +369,7 @@ def instantiate_language_model(
         max_seq_len=max_seq_len,
         # TODO: Figure out how we want to pass this
         # rope_scaling=params.rope_scaling,
+        interleaved=False,
     )
 
     for layer_idx in range(
