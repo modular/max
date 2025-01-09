@@ -25,7 +25,7 @@ from max.pipelines.kv_cache import (
 )
 from nn import MLP, RMSNorm
 from nn.kernels import (
-    MaskVariant,
+    MHAMaskVariant,
     cross_attention_ragged,
     matmul_kv_cache_ragged,
     rms_norm_key_cache,
@@ -117,7 +117,7 @@ class CrossSdpaAttention(Layer):
             layer_idx=ops.constant(self.layer_idx, DType.uint32),
             input_row_offsets=hidden_input_row_offsets,
             # Use the null mask to attend to all vision tokens.
-            mask_variant=MaskVariant.NULL_MASK,
+            mask_variant=MHAMaskVariant.NULL_MASK,
             kv_input_row_offsets=cross_input_row_offsets,
             q_max_seq_len=hidden_max_seq_len,
         )

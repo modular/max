@@ -20,7 +20,7 @@ from max.graph import DeviceRef, TensorValue, ops
 from max.pipelines.kv_cache import ContinuousBatchingKVCacheCollection
 
 from ..kernels import (
-    MaskVariant,
+    MHAMaskVariant,
     flash_attention_ragged,
     fused_qk_ragged_rope,
     fused_qkv_ragged_matmul,
@@ -85,7 +85,7 @@ class AttentionWithRope(AttentionImpl):
             kv_collection=kv_collection,
             layer_idx=self.layer_idx,
             input_row_offsets=kwargs["input_row_offsets"],
-            mask_variant=MaskVariant.CAUSAL_MASK,
+            mask_variant=MHAMaskVariant.CAUSAL_MASK,
         )
 
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])
@@ -180,7 +180,7 @@ class AttentionWithRopeQKV(AttentionImplQKV):
             kv_collection=kv_collection,
             layer_idx=ops.constant(self.layer_idx, DType.uint32),
             input_row_offsets=kwargs["input_row_offsets"],
-            mask_variant=MaskVariant.CAUSAL_MASK,
+            mask_variant=MHAMaskVariant.CAUSAL_MASK,
         )
 
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])

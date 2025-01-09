@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import Union
 
@@ -347,7 +348,8 @@ def flash_attention(
         msg = f"unsupported cache strategy for flash_attention: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
-    op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_bshd_continuous_batch"
+    cache_strategy_str = kv_params.cache_strategy.kernel_substring()
+    op_name = f"mo.mha.padded.{cache_strategy_str}.tensor_mask.no_pos.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
 
     # NOTE: The scale argument to the flash attention kernel is constrained to
     # float32.
@@ -402,12 +404,12 @@ def flash_attention_with_causal_mask(
         msg = f"expected uint32 valid_lengths but got {valid_lengths.dtype}"
         raise ValueError(msg)
 
-    op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_causal_mask_continuous_batch"
     if kv_params.cache_strategy != KVCacheStrategy.CONTINUOUS:
         msg = f"unsupported cache strategy for flash_attention: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
-    op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_causal_mask_continuous_batch"
+    cache_strategy_str = kv_params.cache_strategy.kernel_substring()
+    op_name = f"mo.mha.padded.{cache_strategy_str}.causal_mask.no_pos.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
@@ -422,13 +424,43 @@ def flash_attention_with_causal_mask(
     )[0].tensor
 
 
-class MaskVariant(str, Enum):
-    CAUSAL_MASK = "causal_mask"
-    ALIBI_MASK = "alibi_mask"
-    NULL_MASK = "null_mask"
+@dataclass
+class MHAMaskConfig:
+    attention_mask_variant: AttentionMaskVariant
+    positional_encoding_variant: PositionalEncodingVariant
 
-    def __str__(self) -> str:
-        return self.value
+
+class AttentionMaskVariant(str, Enum):
+    NULL_MASK = "null_mask"
+    CAUSAL_MASK = "causal_mask"
+    TENSOR_MASK = "tensor_mask"
+
+
+class PositionalEncodingVariant(str, Enum):
+    NO_POS = "no_pos"
+    ALIBI_POS = "alibi_pos"
+
+
+class MHAMaskVariant(str, Enum):
+    CAUSAL_MASK = 0
+    CAUSAL_ALIBI_MASK = 1
+    NULL_MASK = 2
+
+
+_MHA_MASK_CONFIG_DICT = {
+    MHAMaskVariant.CAUSAL_MASK: MHAMaskConfig(
+        attention_mask_variant=AttentionMaskVariant.CAUSAL_MASK,
+        positional_encoding_variant=PositionalEncodingVariant.NO_POS,
+    ),
+    MHAMaskVariant.CAUSAL_ALIBI_MASK: MHAMaskConfig(
+        attention_mask_variant=AttentionMaskVariant.CAUSAL_MASK,
+        positional_encoding_variant=PositionalEncodingVariant.ALIBI_POS,
+    ),
+    MHAMaskVariant.NULL_MASK: MHAMaskConfig(
+        attention_mask_variant=AttentionMaskVariant.NULL_MASK,
+        positional_encoding_variant=PositionalEncodingVariant.NO_POS,
+    ),
+}
 
 
 def flash_attention_ragged(
@@ -437,11 +469,11 @@ def flash_attention_ragged(
     input_row_offsets: TensorValue,
     kv_collection: ContinuousBatchingKVCacheCollection,
     layer_idx: TensorValue,
-    mask_variant: MaskVariant,
+    mask_variant: MHAMaskVariant,
 ) -> TensorValue:
     """Computes flash (self) attention provided the `!mo.opaque` KV Cache.
 
-    Notably, this materializes the attention mask (dependent on MaskVariant)
+    Notably, this materializes the attention mask (dependent on MHAMaskVariant)
     within the kernel.
     `input` and `input_row_offsets` are used together to implement the ragged
     tensor.
@@ -472,15 +504,16 @@ def flash_attention_ragged(
         msg = f"expected uint32 input_row_offsets but got {input_row_offsets.dtype}"
         raise ValueError(msg)
 
-    if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
-        cache_strategy_str = "cont_batch"
-    elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
-        cache_strategy_str = "paged"
-    else:
+    if kv_params.cache_strategy not in {
+        KVCacheStrategy.CONTINUOUS,
+        KVCacheStrategy.PAGED,
+    }:
         msg = f"unsupported cache strategy for flash_attention_ragged: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
-    op_name = f"flash_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_{str(mask_variant)}_{cache_strategy_str}_ragged"
+    cache_strategy_str = kv_params.cache_strategy.kernel_substring()
+    mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
+    op_name = f"mo.mha.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
@@ -502,13 +535,13 @@ def cross_attention_ragged(
     input_row_offsets: TensorValue,
     kv_collection: ContinuousBatchingKVCacheCollection,
     layer_idx: TensorValue,
-    mask_variant: MaskVariant,
+    mask_variant: MHAMaskVariant,
     kv_input_row_offsets: TensorValue,
     q_max_seq_len: TensorValue,
 ) -> TensorValue:
     """Computes cross attention provided the `!mo.opaque` KV Cache.
 
-    Notably, this materializes the attention mask (dependent on MaskVariant)
+    Notably, this materializes the attention mask (dependent on MHAMaskVariant)
     within the kernel.
     `input` and `input_row_offsets` are used together to implement the ragged
     tensor.
@@ -551,7 +584,8 @@ def cross_attention_ragged(
         )
         raise ValueError(msg)
 
-    op_name = f"cross_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_{str(mask_variant)}_{cache_strategy_str}_ragged"
+    mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
+    op_name = f"cross_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_{str(mha_mask_config.attention_mask_variant.value)}_{cache_strategy_str}_ragged"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
