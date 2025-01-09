@@ -682,7 +682,8 @@ def rms_norm_key_cache(
     until cache length increment, which happens after model forward.
     So use `input_row_offsets` to do this bookkeeping.
     """
-    op_name = f"rms_norm_key_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_cont_batch"
+    cache_strategy_str = kv_params.cache_strategy.kernel_substring()
+    op_name = f"mo.rms_norm_kv_cache.ragged.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
 
     gamma_rank_expected = 1
     if gamma.rank != gamma_rank_expected:
