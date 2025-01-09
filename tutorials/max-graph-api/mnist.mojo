@@ -54,7 +54,7 @@ fn numpy_to_tensor[type: DType](array: PythonObject) raises -> Tensor[type]:
     shape = List[Int]()
     array_shape = array.shape
     for dim in array_shape:
-        shape.append(dim.__index__())
+        shape.append(dim)
 
     out = Tensor[type](shape)
     memcpy_from_numpy(array, out)
