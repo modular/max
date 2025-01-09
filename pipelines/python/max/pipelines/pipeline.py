@@ -145,7 +145,7 @@ class PipelineModel(ABC):
                     msg += f". Try reducing your --max-cache-batch-size{max_batch_size_rec_str}or reducing the value passed to --max-seq-len."
 
                 raise RuntimeError(msg)
-            elif total_size > 0.75 * free_memory:
+            elif total_size > vram_usage_limit_scale * free_memory:
                 logging.warning(
                     "Estimated model and kv cache memory use nears available memory. You may experience errors."
                 )
