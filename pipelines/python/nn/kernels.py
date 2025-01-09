@@ -189,8 +189,11 @@ def matmul_kv_cache_ragged(
         msg = f"unsupported cache strategy for fused_qkv_matmul: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
+    cache_strategy_str = kv_params.cache_strategy.kernel_substring()
+    op_name = f"mo.kv_matmul.ragged.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+
     ops.inplace_custom(
-        name=f"matmul_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_cont_batch_ragged",
+        name=op_name,
         values=[
             hidden_states,
             input_row_offsets,
