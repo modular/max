@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from max.dtype import DType
 from max.graph import TensorValue, TensorValueLike, ops
 from nn.layer import Layer
 
@@ -101,4 +102,5 @@ class Transformer(Layer):
                 **kwargs,
             )
 
-        return h
+        # Always return float32 logits, no matter the activation type
+        return ops.cast(h, DType.float32)

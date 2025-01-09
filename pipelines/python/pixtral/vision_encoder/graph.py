@@ -13,7 +13,7 @@
 
 
 from max.dtype import DType
-from max.graph import Graph, ops
+from max.graph import Graph, TensorType, ops
 from max.graph.weights import SafetensorWeights
 from max.pipelines import PipelineConfig
 from nn import Conv2D, Linear, RMSNorm
@@ -215,3 +215,27 @@ def _vision_encoder(
         patch_size=pipeline_config.huggingface_config.vision_config.patch_size,
         max_image_size=pipeline_config.huggingface_config.vision_config.image_size,
     )
+
+
+def _build_graph(
+    pipeline_config: PipelineConfig,
+    weights: SafetensorWeights,
+) -> Graph:
+    # Graph input types.
+    # TODO: What is the image type?
+    image_type = TensorType(
+        DType.float32, shape=["image_height", "image_width", "num_channels"]
+    )
+
+    # Initialize Graph.
+    with Graph(
+        "pixtral_vision_encoder",
+        input_types=[
+            image_type,
+        ],
+    ) as graph:
+        model = _vision_encoder(graph, pipeline_config, weights)
+        imgs = graph.inputs
+        logits = model(imgs)  # type: ignore
+        graph.output(logits)
+        return graph

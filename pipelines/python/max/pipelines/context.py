@@ -201,9 +201,6 @@ class TextAndVisionContext:
         """Updates the next_tokens attribute, and extends current_length if needed, based on the provided num_steps."""
         self._next_tokens = new_token
         self.current_length += num_steps
-        # Update context not to re-encode the same image in next steps. There are no image tokens
-        # expected after context encoding.
-        self.pixel_values = []
 
         self.active_length = 1
 
