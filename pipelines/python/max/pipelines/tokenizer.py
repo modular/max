@@ -8,7 +8,7 @@
 import asyncio
 import io
 import logging
-from typing import Sequence, Union, cast
+from typing import Optional, Sequence, Union, cast
 
 import numpy as np
 import torch
@@ -31,6 +31,7 @@ from .interfaces import (
     TokenGeneratorContext,
     TokenGeneratorRequest,
     TokenGeneratorRequestMessage,
+    TokenGeneratorRequestTool,
 )
 
 
@@ -153,11 +154,16 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         ) = self._llama_whitespace_fix_dummy_token
 
     def apply_chat_template(
-        self, messages: list[TokenGeneratorRequestMessage]
+        self,
+        messages: list[TokenGeneratorRequestMessage],
+        tools: Optional[list[TokenGeneratorRequestTool]],
     ) -> str:
         try:
             templated_message = self.delegate.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                tools=tools,
             )
             return cast(str, templated_message)
         except Exception:
@@ -226,7 +232,7 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         if request.prompt is not None:
             prompt = request.prompt
         elif request.messages is not None:
-            prompt = self.apply_chat_template(request.messages)
+            prompt = self.apply_chat_template(request.messages, request.tools)
         else:
             raise ValueError(f"{request} does not provide messages or prompt.")
         encoded_prompt = await self.encode(prompt)

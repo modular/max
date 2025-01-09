@@ -18,7 +18,9 @@ from .interfaces import (
     TokenGenerator,
     TokenGeneratorContext,
     TokenGeneratorRequest,
+    TokenGeneratorRequestFunction,
     TokenGeneratorRequestMessage,
+    TokenGeneratorRequestTool,
 )
 from .pipeline import ModelOutputs, PipelineModel, TextGenerationPipeline
 from .registry import PIPELINE_REGISTRY, SupportedArchitecture
@@ -42,6 +44,8 @@ __all__ = [
     "TokenGeneratorContext",
     "TokenGeneratorRequest",
     "TokenGeneratorRequestMessage",
+    "TokenGeneratorRequestTool",
+    "TokenGeneratorRequestFunction",
     "IdentityPipelineTokenizer",
     "InputContext",
     "TextContext",

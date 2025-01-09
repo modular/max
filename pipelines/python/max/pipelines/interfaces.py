@@ -21,8 +21,19 @@ from typing import (
 )
 
 
+class TokenGeneratorRequestFunction(TypedDict):
+    name: str
+    description: str
+    parameters: dict
+
+
+class TokenGeneratorRequestTool(TypedDict):
+    type: str
+    function: TokenGeneratorRequestFunction
+
+
 class TokenGeneratorRequestMessage(TypedDict):
-    role: Literal["system", "user", "assistant", "tool", "function"]
+    role: Literal["system", "user", "assistant"]
     content: Union[str, list[dict[str, Any]]]
     """Content can be simple string or a list of message parts of different
     modalities.
@@ -68,6 +79,7 @@ class TokenGeneratorRequest:
     messages: Optional[list[TokenGeneratorRequestMessage]] = None
     """Chat completion APIs work off messages."""
     images: Optional[list[bytes]] = None
+    tools: Optional[list[TokenGeneratorRequestTool]] = None
     max_new_tokens: Optional[int] = None
     req_recv_time_ns: int = 0
     request_path: str = "/"
