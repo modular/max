@@ -162,6 +162,7 @@ class PipelineRegistry:
         # and fallback to HuggingFace if needed.
 
         # If weight_path and quantization_encoding are provided, verify that they are consistent.
+        huggingface_weights_repo = pipeline_config.huggingface_weights_repo()
         if (
             pipeline_config.weight_path
             and pipeline_config.quantization_encoding
@@ -174,10 +175,8 @@ class PipelineRegistry:
                     str(pipeline_config.weight_path[0])
                 )
             else:
-                file_encoding = (
-                    pipeline_config.huggingface_repo.encoding_for_file(
-                        pipeline_config.weight_path[0]
-                    )
+                file_encoding = huggingface_weights_repo.encoding_for_file(
+                    pipeline_config.weight_path[0]
                 )
 
             if file_encoding:
@@ -204,11 +203,8 @@ class PipelineRegistry:
                     pipeline_config.quantization_encoding = encoding
 
             else:
-                if (
-                    encoding
-                    := pipeline_config.huggingface_repo.encoding_for_file(
-                        pipeline_config.weight_path[0]
-                    )
+                if encoding := huggingface_weights_repo.encoding_for_file(
+                    pipeline_config.weight_path[0]
                 ):
                     msg = f"encoding inferred from weights file: {encoding}"
                     logging.info(msg)
@@ -218,9 +214,7 @@ class PipelineRegistry:
                     raise ValueError(msg)
         elif not pipeline_config.quantization_encoding:
             # Check if the repo only has one quantization_encoding.
-            supported_encodings = (
-                pipeline_config.huggingface_repo.supported_encodings
-            )
+            supported_encodings = huggingface_weights_repo.supported_encodings
             if len(supported_encodings) == 1:
                 msg = f"huggingface repo only has '{supported_encodings[0]}' weights, using '{supported_encodings[0]}'"
                 logging.info(msg)
@@ -256,7 +250,7 @@ class PipelineRegistry:
                 pipeline_config.quantization_encoding
             )
 
-            weight_files = pipeline_config.huggingface_repo.files_for_encoding(
+            weight_files = huggingface_weights_repo.files_for_encoding(
                 encoding=pipeline_config.quantization_encoding,
                 alternate_encoding=alternate_encoding,
             )
@@ -300,7 +294,7 @@ class PipelineRegistry:
             # Check if file exists locally.
             if not os.path.exists(path):
                 # If does not exist locally, verify that it exists on Huggingface.
-                if not pipeline_config.huggingface_repo.file_exists(str(path)):
+                if not huggingface_weights_repo.file_exists(str(path)):
                     msg = (
                         f"weight_path: '{path}' does not exist locally, and"
                         f" '{pipeline_config.huggingface_repo_id}/{path}' does"
@@ -327,12 +321,19 @@ class PipelineRegistry:
             ]
         )
         factory_str = "factory" if factory else ""
+
+        weights_repo_str = (
+            f"\n            weights_repo_id:        {pipeline_config._weights_repo_id}"
+            if pipeline_config._weights_repo_id
+            else ""
+        )
+
         message = f"""
 
         Loading {tokenizer_type.__name__} and {pipeline_name}({pipeline_model}) {factory_str} for:
             engine:                 {pipeline_config.engine}
             architecture:           {pipeline_config.architecture}
-            huggingface_repo_id:    {pipeline_config.huggingface_repo_id}
+            huggingface_repo_id:    {pipeline_config.huggingface_repo_id}{weights_repo_str}
             quantization_encoding:  {pipeline_config.quantization_encoding}
             weight_path:            [
         {weight_path}

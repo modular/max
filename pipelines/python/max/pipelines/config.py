@@ -379,7 +379,7 @@ class HuggingFaceRepo:
             )
         )
 
-    @cached_property
+    @property
     def formats_available(self) -> list[WeightsFormat]:
         return list(self.weight_files.keys())
 
@@ -477,6 +477,9 @@ class PipelineConfig:
     force_download: bool = False
     """Whether to force download a given file if it’s not already present in the local cache."""
 
+    enable_echo: bool = False
+    """Whether the model should be built with echo capabilities."""
+
     _huggingface_config: Optional[AutoConfig] = None
     """The HuggingFace config associated with the huggingface repo id."""
 
@@ -486,10 +489,16 @@ class PipelineConfig:
     _weights_converter: Optional[type[WeightsConverter]] = None
     """Weight converter for the provided `weight_path`."""
 
-    enable_echo: bool = False
-    """Whether the model should be built with echo capabilities."""
+    _weights_repo_id: Optional[str] = None
+    """Huggingface Repo id to load weights from only. This should only be set by internal code."""
 
     def __post_init__(self) -> None:
+        if (not os.path.exists(self.huggingface_repo_id)) and (
+            not repo_exists(self.huggingface_repo_id)
+        ):
+            msg = f"{self.huggingface_repo_id} is not a valid HuggingFace repo, or local directory"
+            raise ValueError(msg)
+
         # Default if weight_path is passed as None
         if self.weight_path is None:
             msg = (
@@ -507,23 +516,39 @@ class PipelineConfig:
 
         weight_paths = []
         for path in self.weight_path:
-            if isinstance(path, Path):
-                weight_paths.append(path)
-            elif isinstance(path, str):
-                weight_paths.append(Path(path))
-            else:
+            if isinstance(path, str):
+                path = Path(path)
+
+            if not isinstance(path, Path):
                 msg = (
                     "weight_path provided must either be string or Path:"
                     f" '{path}'"
                 )
                 raise ValueError(msg)
 
-        self.weight_path = weight_paths
+            # If we already exist on the OS. Dont parse the path, just continue.
+            if path.is_file():
+                weight_paths.append(path)
+                continue
 
-        # Validate that the repo exists.
-        self.huggingface_repo = HuggingFaceRepo(
-            self.huggingface_repo_id, trust_remote_code=self.trust_remote_code
-        )
+            # If the path, looks like it may start with a HuggingFace repo id,
+            # check if the repo_id is the same as the one provided.
+            # If it is the same, set the weight_path to just be the file_name post repo_id
+            # If it is different, set the _weights_repo_id to be that repo_id
+            # and set the path to be the file_name without the repo_id.
+            if path_pieces := str(path).split("/"):
+                if len(path_pieces) >= 3:
+                    repo_id = f"{path_pieces[0]}/{path_pieces[1]}"
+                    file_name = "/".join(path_pieces[2:])
+                    if repo_id == self.huggingface_repo_id:
+                        path = Path(file_name)
+                    elif file_exists(repo_id, file_name):
+                        self._weights_repo_id = repo_id
+                        path = Path(file_name)
+
+            weight_paths.append(path)
+
+        self.weight_path = weight_paths
 
     def __getstate__(self) -> dict[str, Any]:
         """Override `__getstate__` to exclude the HuggingFace config."""
@@ -652,12 +677,18 @@ class PipelineConfig:
 
     def weights_size(self) -> Optional[int]:
         size = 0
+        hf_repo = HuggingFaceRepo(
+            self._weights_repo_id
+            if self._weights_repo_id
+            else self.huggingface_repo_id,
+            trust_remote_code=self.trust_remote_code,
+        )
         for file_path in self.weight_path:
             if os.path.exists(file_path):
                 size += os.path.getsize(file_path)
                 continue
 
-            next_size = self.huggingface_repo.size_of(str(file_path))
+            next_size = hf_repo.size_of(str(file_path))
 
             if next_size is None:
                 return None
@@ -672,15 +703,23 @@ class PipelineConfig:
             return
 
         start_time = datetime.datetime.now()
-        logger.info(f"Starting download of model: {self.huggingface_repo_id}")
-        for i, file_path in enumerate(self.weight_path):
-            self.weight_path[i] = self.huggingface_repo.download(
-                str(file_path),
-                force_download=self.force_download,
+        weights_repo_id = (
+            self._weights_repo_id
+            if self._weights_repo_id
+            else self.huggingface_repo_id
+        )
+        logger.info(f"Starting download of model: {weights_repo_id}")
+        for i, filename in enumerate(self.weight_path):
+            self.weight_path[i] = Path(
+                hf_hub_download(
+                    weights_repo_id,
+                    str(filename),
+                    force_download=self.force_download,
+                )
             )
 
         logger.info(
-            f"Finished download of model: {self.huggingface_repo_id} in {(datetime.datetime.now() - start_time).total_seconds()} seconds."
+            f"Finished download of model: {weights_repo_id} in {(datetime.datetime.now() - start_time).total_seconds()} seconds."
         )
 
     def load_weights(self) -> Weights:
@@ -731,3 +770,11 @@ class PipelineConfig:
             "serialized_model_path": "If specified, this flag attempts to load a serialized MEF model from the given path. This is useful for reusing previously saved models.",
             "save_to_serialized_model_path": "If specified, this flag attempts to save the current model state to a serialized format at the given path for later use.",
         }
+
+    def huggingface_weights_repo(self) -> HuggingFaceRepo:
+        return HuggingFaceRepo(
+            self._weights_repo_id
+            if self._weights_repo_id
+            else self.huggingface_repo_id,
+            trust_remote_code=self.trust_remote_code,
+        )
