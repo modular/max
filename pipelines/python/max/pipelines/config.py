@@ -303,7 +303,7 @@ class HuggingFaceRepo:
     @property
     def gguf_architecture(self) -> Optional[str]:
         if not self._gguf_architecture:
-            if hasattr(self.info, "gguf"):
+            if hasattr(self.info, "gguf") and self.info.gguf is not None:
                 gguf_info = getattr(self.info, "gguf")
                 self._gguf_architecture = gguf_info["architecture"]
 
@@ -313,7 +313,7 @@ class HuggingFaceRepo:
     def formats_available(self) -> list[WeightsFormat]:
         if not self._formats_available:
             # Retrieve formats.
-            if hasattr(self.info, "gguf"):
+            if hasattr(self.info, "gguf") and self.info.gguf is not None:
                 self._formats_available.append(WeightsFormat.gguf)
 
             if getattr(self.info, "safetensors", None):
