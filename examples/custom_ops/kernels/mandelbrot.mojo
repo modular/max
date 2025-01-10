@@ -13,6 +13,7 @@
 
 import compiler
 from complex import ComplexSIMD
+from math import iota
 from utils.index import IndexList
 from tensor_utils import ManagedTensorSlice, foreach
 from runtime.asyncrt import MojoCallContextPtr
@@ -39,6 +40,9 @@ fn mandelbrot_inner_simd[
     return iters
 
 
+alias float_dtype = DType.float32
+
+
 @compiler.register("mandelbrot", num_dps_outputs=1)
 struct Mandelbrot:
     @staticmethod
@@ -51,18 +55,26 @@ struct Mandelbrot:
         # as num_dps_outputs=1, the first argument is the "output"
         out: ManagedTensorSlice,
         # starting here are the list of inputs
+        min_x: Float32,
+        min_y: Float32,
+        scale_x: Float32,
+        scale_y: Float32,
         max_iterations: Int32,
-        cx: ManagedTensorSlice[rank = out.rank],
-        cy: ManagedTensorSlice[cx.type, out.rank],
         # the context is needed for some GPU calls
         ctx: MojoCallContextPtr,
     ):
         @parameter
         @always_inline
         fn func[width: Int](idx: IndexList[out.rank]) -> SIMD[out.type, width]:
-            c = ComplexSIMD[cx.type, width](
-                cx.load[width](idx), cy.load[width](idx)
+            var row = idx[0]
+            var col = idx[1]
+            var cx = min_x.cast[float_dtype]() + (
+                col + iota[float_dtype, width]()
+            ) * scale_x.cast[float_dtype]()
+            var cy = min_y.cast[float_dtype]() + row * SIMD[float_dtype, width](
+                scale_y.cast[float_dtype]()
             )
+            var c = ComplexSIMD[float_dtype, width](cx, cy)
             return mandelbrot_inner_simd[cx.type, out.type, width](
                 c, max_iterations.cast[out.type]()
             )

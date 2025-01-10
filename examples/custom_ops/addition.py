@@ -20,32 +20,6 @@ from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import Graph, TensorType, ops
 
-
-def create_simple_graph() -> Graph:
-    """Configure a simple, one-input, one-operation graph."""
-    dtype = DType.float32
-    with Graph(
-        "addition",
-        input_types=[
-            TensorType(dtype, shape=[5, 10]),
-        ],
-    ) as graph:
-        # Take in the single input to the graph.
-        x, *_ = graph.inputs
-
-        # The custom Mojo operation is referenced by its string name, and we
-        # need to provide inputs as a list as well as expected output types.
-        result = ops.custom(
-            name="add_one_custom",
-            values=[x],
-            out_types=[TensorType(dtype=dtype, shape=x.tensor.shape)],
-        )[0].tensor
-
-        # Return the result of the custom operation as the output of the graph.
-        graph.output(result)
-        return graph
-
-
 if __name__ == "__main__":
     # This is necessary only in specific build environments.
     if directory := os.getenv("BUILD_WORKSPACE_DIRECTORY"):
@@ -53,22 +27,44 @@ if __name__ == "__main__":
 
     path = Path(__file__).parent / "kernels.mojopkg"
 
-    # Configure our simple graph.
-    graph = create_simple_graph()
+    rows = 5
+    columns = 10
+    dtype = DType.float32
 
-    # Set up an inference session that runs the graph on a GPU, if available.
+    # Configure our simple one-operation graph.
+    graph = Graph(
+        "addition",
+        # The custom Mojo operation is referenced by its string name, and we
+        # need to provide inputs as a list as well as expected output types.
+        forward=lambda x: ops.custom(
+            name="add_one_custom",
+            values=[x],
+            out_types=[TensorType(dtype=x.dtype, shape=x.tensor.shape)],
+        )[0].tensor,
+        input_types=[
+            TensorType(dtype, shape=[rows, columns]),
+        ],
+    )
+
+    # Place the graph on a GPU, if available. Fall back to CPU if not.
+    device = CPU() if accelerator_count() == 0 else Accelerator()
+
+    # Set up an inference session for running the graph.
     session = InferenceSession(
-        devices=[CPU() if accelerator_count() == 0 else Accelerator()],
+        devices=[device],
         custom_extensions=path,
     )
+
     # Compile the graph.
     model = session.load(graph)
 
     # Fill an input matrix with random values.
-    x = np.random.uniform(size=(5, 10)).astype(np.float32)
+    x_values = np.random.uniform(size=(rows, columns)).astype(np.float32)
 
-    # Perform inference on the target device. The input NumPy array is
-    # transparently copied to the device.
+    # Create a driver tensor from this, and move it to the accelerator.
+    x = Tensor.from_numpy(x_values).to(device)
+
+    # Perform the calculation on the target device.
     result = model.execute(x)[0]
 
     # Copy values back to the CPU to be read.
@@ -80,4 +76,4 @@ if __name__ == "__main__":
     print()
 
     print("Expected result:")
-    print(x + 1)
+    print(x_values + 1)

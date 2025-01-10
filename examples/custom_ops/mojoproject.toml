@@ -2,7 +2,7 @@
 authors = ["Modular <hello@modular.com>"]
 channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
 description = "An example of extending a graph with a custom Mojo operation"
-name = "Custom Operation - Addition"
+name = "Custom Operations"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 version = "0.1.0"
 
