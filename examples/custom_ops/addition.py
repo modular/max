@@ -11,10 +11,11 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
+import os
 from pathlib import Path
 
 import numpy as np
-from max.driver import CPU, Accelerator, accelerator_count
+from max.driver import CPU, Accelerator, Tensor, accelerator_count
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import Graph, TensorType, ops
@@ -37,7 +38,7 @@ def create_simple_graph() -> Graph:
         result = ops.custom(
             name="add_one_custom",
             values=[x],
-            out_types=[TensorType(dtype=x.dtype, shape=x.shape)],
+            out_types=[TensorType(dtype=dtype, shape=x.tensor.shape)],
         )[0].tensor
 
         # Return the result of the custom operation as the output of the graph.
@@ -46,7 +47,11 @@ def create_simple_graph() -> Graph:
 
 
 if __name__ == "__main__":
-    path = Path("kernels.mojopkg")
+    # This is necessary only in specific build environments.
+    if directory := os.getenv("BUILD_WORKSPACE_DIRECTORY"):
+        os.chdir(directory)
+
+    path = Path(__file__).parent / "kernels.mojopkg"
 
     # Configure our simple graph.
     graph = create_simple_graph()
@@ -67,6 +72,7 @@ if __name__ == "__main__":
     result = model.execute(x)[0]
 
     # Copy values back to the CPU to be read.
+    assert isinstance(result, Tensor)
     result = result.to(CPU())
 
     print("Graph result:")

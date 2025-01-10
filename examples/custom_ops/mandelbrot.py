@@ -11,18 +11,17 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
+import os
 from pathlib import Path
 
 import numpy as np
-from max.driver import CPU, Accelerator, accelerator_count
+from max.driver import CPU, Accelerator, Tensor, accelerator_count
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.graph import Graph, TensorType, ops
 
 
-def create_simple_graph(
-    width: DType.int32, height: DType.int32, max_iterations: DType.int32
-) -> Graph:
+def create_simple_graph(width: int, height: int, max_iterations: int) -> Graph:
     """Configure a graph to run a Mandelbrot kernel."""
     input_dtype = DType.float32
     output_dtype = DType.int32
@@ -42,7 +41,7 @@ def create_simple_graph(
         result = ops.custom(
             name="mandelbrot",
             values=[ops.constant(max_iterations, dtype=DType.int32), cx, cy],
-            out_types=[TensorType(dtype=output_dtype, shape=cx.shape)],
+            out_types=[TensorType(dtype=output_dtype, shape=cx.tensor.shape)],
         )[0].tensor
 
         # Return the result of the custom operation as the output of the graph.
@@ -51,7 +50,11 @@ def create_simple_graph(
 
 
 if __name__ == "__main__":
-    path = Path("kernels.mojopkg")
+    # This is necessary only in specific build environments.
+    if directory := os.getenv("BUILD_WORKSPACE_DIRECTORY"):
+        os.chdir(directory)
+
+    path = Path(__file__).parent / "kernels.mojopkg"
 
     width = 15
     height = 15
@@ -89,6 +92,7 @@ if __name__ == "__main__":
     result = model.execute(cx, cy)[0]
 
     # Copy values back to the CPU to be read.
+    assert isinstance(result, Tensor)
     result = result.to(CPU())
 
     print("Iterations to escape:")
