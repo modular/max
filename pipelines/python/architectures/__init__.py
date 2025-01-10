@@ -20,7 +20,8 @@ def register_all_models():
     import llama_vision as llama_vision
     import pixtral as pixtral
     from mistral import mistral_arch
-    from replit import replit_arch
+
+    from .replit import replit_arch
 
     architectures = [replit_arch, mistral_arch]
 
