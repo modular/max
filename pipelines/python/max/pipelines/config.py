@@ -8,27 +8,28 @@
 from __future__ import annotations
 
 import datetime
+import glob
+import json
 import logging
 import os
+import struct
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
-from typing import Any, Iterable, Optional, Union, cast
+from typing import Any, Optional, Union, cast
 
 import torch
 from huggingface_hub import (
     HfFileSystem,
     file_exists,
     get_hf_file_metadata,
-    get_safetensors_metadata,
     hf_hub_download,
     hf_hub_url,
-    list_repo_files,
     model_info,
     repo_exists,
 )
 from huggingface_hub.hf_api import ModelInfo
-from huggingface_hub.utils import SafetensorsRepoMetadata
 from max.driver import CPU, Accelerator, Device, DeviceSpec, accelerator_count
 from max.dtype import DType
 from max.graph.quantization import QuantizationEncoding
@@ -116,20 +117,26 @@ class WeightsFormat(str, Enum):
     pytorch = "pytorch"
 
 
+class RepoType(str, Enum):
+    online = "online"
+    local = "local"
+
+
 @dataclass
 class HuggingFaceRepo:
     repo_id: str
     trust_remote_code: bool = False
-    _info: Optional[ModelInfo] = None
-    _formats_available: list[WeightsFormat] = field(default_factory=list)
-    _supported_encodings: set[SupportedEncoding] = field(default_factory=set)
-    _gguf_architecture: Optional[str] = None
-    _files: Iterable[str] = field(default_factory=list)
-    _safetensors_metadata: Optional[SafetensorsRepoMetadata] = None
+    repo_type: Optional[RepoType] = None
 
     def __post_init__(self) -> None:
-        # Check if repo exists.
-        if not repo_exists(self.repo_id):
+        # Get repo type.
+        if not self.repo_type:
+            if os.path.exists(self.repo_id):
+                self.repo_type = RepoType.local
+            else:
+                self.repo_type = RepoType.online
+
+        if self.repo_type == RepoType.online and not repo_exists(self.repo_id):
             msg = f"huggingface_repo_id: {self.repo_id} does not exist"
             raise ValueError(msg)
 
@@ -139,85 +146,157 @@ class HuggingFaceRepo:
     def __repr__(self) -> str:
         return self.repo_id
 
-    @property
+    @cached_property
     def info(self) -> ModelInfo:
-        if not self._info:
-            self._info = model_info(self.repo_id, files_metadata=False)
+        if self.repo_type == RepoType.local:
+            msg = "using model info, on local repos is not supported."
+            raise ValueError(msg)
+        elif self.repo_type == RepoType.online:
+            return model_info(self.repo_id, files_metadata=False)
+        else:
+            msg = f"Unsupported repo type: {self.repo_type}"
+            raise ValueError(msg)
 
-        return self._info
+    @cached_property
+    def weight_files(self) -> dict[WeightsFormat, list[str]]:
+        safetensor_search_pattern = "*.safetensors"
+        gguf_search_pattern = "*.gguf"
+        pytorch_search_pattern = "*.bin"
 
-    @property
-    def files(self) -> Iterable[str]:
-        if not self._files:
-            self._files = list_repo_files(self.repo_id)
+        weight_files = {}
+        if self.repo_type == RepoType.local:
+            safetensor_paths = glob.glob(
+                os.path.join(self.repo_id, safetensor_search_pattern)
+            )
+            gguf_paths = glob.glob(
+                os.path.join(self.repo_id, gguf_search_pattern)
+            )
+            pytorch_paths = glob.glob(
+                os.path.join(self.repo_id, pytorch_search_pattern)
+            )
+        elif self.repo_type == RepoType.online:
+            fs = HfFileSystem()
+            safetensor_paths = cast(
+                list[str],
+                fs.glob(f"{self.repo_id}/{safetensor_search_pattern}"),
+            )
+            gguf_paths = cast(
+                list[str],
+                fs.glob(f"{self.repo_id}/{gguf_search_pattern}"),
+            )
+            pytorch_paths = cast(
+                list[str],
+                fs.glob(f"{self.repo_id}/{pytorch_search_pattern}"),
+            )
+        else:
+            msg = f"Unsupported repo type: {self.repo_type}"
+            raise ValueError(msg)
 
-        return self._files
+        if safetensor_paths:
+            weight_files[WeightsFormat.safetensors] = [
+                f.replace(f"{self.repo_id}/", "") for f in safetensor_paths
+            ]
+
+        if gguf_paths:
+            weight_files[WeightsFormat.gguf] = [
+                f.replace(f"{self.repo_id}/", "") for f in gguf_paths
+            ]
+
+        if pytorch_paths:
+            weight_files[WeightsFormat.pytorch] = [
+                f.replace(f"{self.repo_id}/", "") for f in pytorch_paths
+            ]
+
+        return weight_files
 
     def size_of(self, filename: str) -> Union[int, None]:
-        url = hf_hub_url(self.repo_id, filename)
-        metadata = get_hf_file_metadata(url)
-        return metadata.size
+        if self.repo_type == RepoType.online:
+            url = hf_hub_url(self.repo_id, filename)
+            metadata = get_hf_file_metadata(url)
+            return metadata.size
+        raise NotImplementedError("not implemented for non-online repos.")
 
-    @property
-    def safetensors_metadata(self) -> Optional[SafetensorsRepoMetadata]:
-        if not self._safetensors_metadata:
-            if WeightsFormat.safetensors in self.formats_available:
-                self._safetensors_metadata = get_safetensors_metadata(
-                    repo_id=self.repo_id
-                )
-
-        return self._safetensors_metadata
-
-    @property
+    @cached_property
     def supported_encodings(self) -> list[SupportedEncoding]:
-        if not self._supported_encodings:
-            if WeightsFormat.gguf in self.formats_available:
-                for file_name in self.files:
-                    encoding = SupportedEncoding.parse_from_file_name(file_name)
-                    if encoding:
-                        self._supported_encodings.add(encoding)
+        supported_encodings = set([])
 
-            if WeightsFormat.safetensors in self.formats_available:
+        # Parse gguf file names.
+        for gguf_path in self.weight_files.get(WeightsFormat.gguf, []):
+            encoding = SupportedEncoding.parse_from_file_name(gguf_path)
+            if encoding:
+                supported_encodings.add(encoding)
+
+        # Get Safetensor Metadata.
+        if WeightsFormat.safetensors in self.weight_files:
+            if self.repo_type == RepoType.local:
+                # Safetensor repos are assumed to only have one encoding in them.
+                with open(
+                    os.path.join(
+                        self.repo_id,
+                        self.weight_files[WeightsFormat.safetensors][0],
+                    ),
+                    "rb",
+                ) as file:
+                    # Read the first 8 bytes of the file
+                    length_bytes = file.read(8)
+                    # Interpret the bytes as a little-endian unsigned 64-bit integer
+                    length_of_header = struct.unpack("<Q", length_bytes)[0]
+                    # Read length_of_header bytes
+                    header_bytes = file.read(length_of_header)
+                    # Interpret the bytes as a JSON object
+                    header = json.loads(header_bytes)
+
+                    encoding = None
+                    for weight_value in header.values():
+                        if weight_dtype := weight_value.get("dtype", None):
+                            if weight_dtype == "F32":
+                                supported_encodings.add(
+                                    SupportedEncoding.float32
+                                )
+                            elif weight_dtype == "BF16":
+                                supported_encodings.add(
+                                    SupportedEncoding.bfloat16
+                                )
+                            else:
+                                msg = f"unknown dtype found in safetensors file: {weight_dtype}"
+                                logging.warning(msg)
+
+            elif self.repo_type == RepoType.online:
                 if safetensors_info := self.info.safetensors:
                     for params in safetensors_info.parameters:
                         if "BF16" in params:
-                            self._supported_encodings.add(
-                                SupportedEncoding.bfloat16
-                            )
+                            supported_encodings.add(SupportedEncoding.bfloat16)
                         elif "F32" in params:
-                            self._supported_encodings.add(
-                                SupportedEncoding.float32
-                            )
+                            supported_encodings.add(SupportedEncoding.float32)
+            else:
+                msg = f"Unsupported repo_type: {self.repo_type}"
+                raise ValueError(msg)
 
-            if WeightsFormat.pytorch in self.formats_available:
-                cfg = AutoConfig.from_pretrained(
-                    self.repo_id, trust_remote_code=self.trust_remote_code
-                )
+        # Get torch dtype for pytorch files.
+        if WeightsFormat.pytorch in self.formats_available:
+            cfg = AutoConfig.from_pretrained(
+                self.repo_id, trust_remote_code=self.trust_remote_code
+            )
 
-                if torch_dtype := getattr(cfg, "torch_dtype", None):
-                    if torch_dtype == torch.float32:
-                        self._supported_encodings.add(SupportedEncoding.float32)
-                    elif torch_dtype == torch.bfloat16:
-                        self._supported_encodings.add(
-                            SupportedEncoding.bfloat16
-                        )
-                else:
-                    msg = "torch_dtype not available, cant infer encoding from config.json"
-                    logging.warning(msg)
+            if torch_dtype := getattr(cfg, "torch_dtype", None):
+                if torch_dtype == torch.float32:
+                    supported_encodings.add(SupportedEncoding.float32)
+                elif torch_dtype == torch.bfloat16:
+                    supported_encodings.add(SupportedEncoding.bfloat16)
+            else:
+                msg = "torch_dtype not available, cant infer encoding from config.json"
+                logging.warning(msg)
 
-        return list(self._supported_encodings)
+        return list(supported_encodings)
 
     def _get_gguf_files_for_encoding(
         self, encoding: SupportedEncoding
     ) -> dict[WeightsFormat, list[Path]]:
-        if WeightsFormat.gguf not in self.formats_available:
-            return {}
-
         files = []
-        for file_name in self.files:
-            file_encoding = SupportedEncoding.parse_from_file_name(file_name)
+        for gguf_file in self.weight_files.get(WeightsFormat.gguf, []):
+            file_encoding = SupportedEncoding.parse_from_file_name(gguf_file)
             if file_encoding == encoding:
-                files.append(Path(file_name))
+                files.append(Path(gguf_file))
 
         if files:
             return {WeightsFormat.gguf: files}
@@ -227,33 +306,33 @@ class HuggingFaceRepo:
     def _get_safetensor_files_for_encoding(
         self, encoding: SupportedEncoding
     ) -> dict[WeightsFormat, list[Path]]:
-        if WeightsFormat.safetensors not in self.formats_available:
-            return {}
+        if (
+            WeightsFormat.safetensors in self.weight_files
+            and encoding == self.supported_encodings[0]
+        ):
+            return {
+                WeightsFormat.safetensors: [
+                    Path(f)
+                    for f in self.weight_files[WeightsFormat.safetensors]
+                ]
+            }
 
-        if encoding not in self.supported_encodings:
-            return {}
-
-        if paths := [
-            Path(file) for file in self.files if file.endswith(".safetensors")
-        ]:
-            return {WeightsFormat.safetensors: paths}
-        else:
-            return {}
+        return {}
 
     def _get_pytorch_files_for_encoding(
-        self,
-        encoding: SupportedEncoding,
+        self, encoding: SupportedEncoding
     ) -> dict[WeightsFormat, list[Path]]:
-        if encoding not in self.supported_encodings:
-            return {}
+        if (
+            WeightsFormat.pytorch in self.weight_files
+            and encoding == self.supported_encodings[0]
+        ):
+            return {
+                WeightsFormat.pytorch: [
+                    Path(f) for f in self.weight_files[WeightsFormat.pytorch]
+                ]
+            }
 
-        fs = HfFileSystem()
-        pytorch_bin = cast(list[str], fs.glob(f"{self.repo_id}/*.bin"))
-        return {
-            WeightsFormat.pytorch: [
-                Path(x.replace(f"{self.repo_id}/", "")) for x in pytorch_bin
-            ]
-        }
+        return {}
 
     def files_for_encoding(
         self,
@@ -300,32 +379,9 @@ class HuggingFaceRepo:
             )
         )
 
-    @property
-    def gguf_architecture(self) -> Optional[str]:
-        if not self._gguf_architecture:
-            if hasattr(self.info, "gguf") and self.info.gguf is not None:
-                gguf_info = getattr(self.info, "gguf")
-                self._gguf_architecture = gguf_info["architecture"]
-
-        return self._gguf_architecture
-
-    @property
+    @cached_property
     def formats_available(self) -> list[WeightsFormat]:
-        if not self._formats_available:
-            # Retrieve formats.
-            if hasattr(self.info, "gguf") and self.info.gguf is not None:
-                self._formats_available.append(WeightsFormat.gguf)
-
-            if getattr(self.info, "safetensors", None):
-                self._formats_available.append(WeightsFormat.safetensors)
-
-            # Check for pytorch bins.
-            fs = HfFileSystem()
-            pytorch_bin = cast(list[str], fs.glob(f"{self.repo_id}/*.bin"))
-            if pytorch_bin:
-                self._formats_available.append(WeightsFormat.pytorch)
-
-        return self._formats_available
+        return list(self.weight_files.keys())
 
     def encoding_for_file(self, file: Union[str, Path]) -> SupportedEncoding:
         if str(file).endswith(".safetensors"):
