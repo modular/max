@@ -72,19 +72,76 @@ class TokenGeneratorRequestMessage(TypedDict):
 @dataclass(frozen=True)
 class TokenGeneratorRequest:
     id: str
+    """
+    A unique identifier for the request. This ID can be used to trace and log
+    the request throughout its lifecycle, facilitating debugging and tracking.
+    """
     index: int
+    """
+    The sequence order of this request within a batch. This is useful for
+    maintaining the order of requests when processing multiple requests
+    simultaneously, ensuring that responses can be matched back to their
+    corresponding requests accurately.
+    """
     model_name: str
+    """
+    The name of the model to be used for generating tokens. This should match
+    the available models on the server and determines the behavior and
+    capabilities of the response generation.
+    """
     prompt: Union[str, Sequence[int], None] = None
-    """Prompt here is to support legacy /completion APIs"""
+    """
+    The prompt to be processed by the model. This field supports legacy
+    completion APIs and can accept either a string or a sequence of integers
+    representing token IDs. If not provided, the model may generate output
+    based on the messages field.
+    """
     messages: Optional[list[TokenGeneratorRequestMessage]] = None
-    """Chat completion APIs work off messages."""
+    """
+    A list of messages for chat-based interactions. This is used in chat
+    completion APIs, where each message represents a turn in the conversation.
+    If provided, the model will generate responses based on these messages.
+    """
     images: Optional[list[bytes]] = None
+    """
+    A list of image byte arrays that can be included as part of the request.
+    This field is optional and may be used for multimodal inputs where images
+    are relevant to the prompt or task.
+    """
     tools: Optional[list[TokenGeneratorRequestTool]] = None
+    """
+    A list of tools that can be invoked during the generation process. This
+    allows the model to utilize external functionalities or APIs to enhance its
+    responses.
+    """
     max_new_tokens: Optional[int] = None
-    req_recv_time_ns: int = 0
+    """
+    The maximum number of new tokens to generate in the response. If not set,
+    the model may generate tokens until it reaches its internal limits or based
+    on other stopping criteria.
+    """
+    timestamp_ns: int = 0
+    """
+    The time (in nanoseconds) when the request was received by the server. This
+    can be useful for performance monitoring and logging purposes.
+    """
     request_path: str = "/"
+    """
+    The endpoint path for the request. This is typically used for routing and
+    logging requests within the server infrastructure.
+    """
     logprobs: int = 0
+    """
+    The number of top log probabilities to return for each generated token. A value
+    of 0 means that log probabilities will not be returned. Useful for analyzing
+    model confidence in its predictions.
+    """
     echo: bool = False
+    """
+    If set to True, the response will include the original prompt along with the
+    generated output. This can be useful for debugging or when you want to see how
+    the input relates to the output.
+    """
 
     def __str__(self) -> str:
         txt = f"Id: {self.id}"
