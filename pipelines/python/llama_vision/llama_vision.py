@@ -426,7 +426,7 @@ class LlamaVision(PipelineModel):
             np.array(
                 [max(ctx.seq_len for ctx in context_batch)], dtype=np.uint32
             )
-        )
+        ).to(self.pipeline_config.device)
 
         return (
             *res,
