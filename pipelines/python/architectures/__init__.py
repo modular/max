@@ -19,10 +19,13 @@ def register_all_models():
     import llama3 as llama3
     import llama_vision as llama_vision
     import pixtral as pixtral
-    import replit as replit
     from mistral import mistral_arch
+    from replit import replit_arch
 
-    PIPELINE_REGISTRY.register(mistral_arch)
+    architectures = [replit_arch, mistral_arch]
+
+    for arch in architectures:
+        PIPELINE_REGISTRY.register(arch)
 
 
 __all__ = ["register_all_models"]
