@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from itertools import chain
 from typing import Dict, Iterator, Optional
@@ -276,10 +277,8 @@ class PagedKVCacheManager(KVCacheManager):
         ]
 
     def _fetch(
-        self,
-        seq_ids_and_prompts: dict[int, np.ndarray],
-        num_steps: int = 1,
-    ) -> list[tuple[Tensor, Tensor, Tensor, Tensor]]:
+        self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
+    ) -> Sequence[tuple[Tensor, ...]]:
         """This method identifies available blocks to service the given requests and marks them as inflight.
         They're assigned to the request as "in-flight" until step is called.
 

@@ -106,7 +106,7 @@ class NaiveKVCacheManager(KVCacheManager):
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> List[tuple[Tensor, ...]]:
         existing_keys = list(self.cache_lengths.keys())
         for i, (seq_id, prompt) in enumerate(seq_ids_and_prompts.items()):
             if existing_keys[i] != seq_id:

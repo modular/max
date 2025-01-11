@@ -57,7 +57,8 @@ class TextModel(Layer):
 
     def __call__(
         self,
-        kv_cache_inputs: tuple[TensorValue, ...],
+        text_kv_cache_inputs: tuple[TensorValue, ...],
+        vision_kv_cache_inputs: tuple[TensorValue, ...],
         input_ids: TensorValue,
         hidden_input_row_offsets: TensorValue,
         hidden_max_seq_len: TensorValue,
@@ -70,16 +71,23 @@ class TextModel(Layer):
 
         before_attention_blocks_shape = hidden_states.shape
 
+        # Assume that text and vision KV caches have the same KV params for now.
+        # So they can share the KV collection constructor object.
+        kv_collection_constructor = FetchContinuousBatchingKVCacheCollection(
+            self.kv_params
+        )
+
+        # Construct text and vision KV collections with their distinct inputs.
+        text_kv_collection = kv_collection_constructor(*text_kv_cache_inputs)
+        vision_kv_collection = kv_collection_constructor(
+            *vision_kv_cache_inputs
+        )
+
         for decoder_layer in self.layers:
             # For text-only path we should skip cross attention layers.
             # We expect cross_attention_states to be zeroes if it's a text-only path.
             # The underlying implementation should be a no-op when a zeroed out cross
             # attention states is passed in.
-
-            kv_collection_constructor = (
-                FetchContinuousBatchingKVCacheCollection(self.kv_params)
-            )
-            kv_collection = kv_collection_constructor(*kv_cache_inputs)
 
             if isinstance(decoder_layer, CrossAttentionDecoderLayer):
                 hidden_states = decoder_layer(
@@ -88,12 +96,12 @@ class TextModel(Layer):
                     hidden_max_seq_len,
                     cross_attention_states,
                     cross_input_row_offsets,
-                    kv_collection,
+                    vision_kv_collection,
                 )
             else:
                 hidden_states = decoder_layer(
                     hidden_states,
-                    kv_collection,
+                    text_kv_collection,
                     input_row_offsets=hidden_input_row_offsets,
                 )
 
@@ -113,7 +121,8 @@ class CausalLanguageModel(Layer):
 
     def __call__(
         self,
-        kv_cache_inputs: tuple[TensorValue, ...],
+        text_kv_cache_inputs: tuple[TensorValue, ...],
+        vision_kv_cache_inputs: tuple[TensorValue, ...],
         input_ids: TensorValue,
         hidden_input_row_offsets: TensorValue,
         hidden_max_seq_len: TensorValue,
@@ -121,7 +130,8 @@ class CausalLanguageModel(Layer):
         cross_input_row_offsets: TensorValue,
     ) -> TensorValue:
         last_hidden_state = self.model(
-            kv_cache_inputs,
+            text_kv_cache_inputs,
+            vision_kv_cache_inputs,
             input_ids,
             hidden_input_row_offsets,
             hidden_max_seq_len,
@@ -372,12 +382,16 @@ def instantiate_language_model(
         interleaved=False,
     )
 
+    # Track the cross attention KV cache layer index to compute the self
+    # attention KV layer index.
+    cross_kv_layer_idx = -1
     for layer_idx in range(
         num_hidden_layers,
     ):
         curr_layer_weight = weights.language_model.model.layers[layer_idx]
 
         if layer_idx in cross_attention_layers:
+            cross_kv_layer_idx = cross_attention_layers.index(layer_idx)
             layers.append(
                 cross_attention_decoder_layer(
                     dtype=dtype,
@@ -388,7 +402,7 @@ def instantiate_language_model(
                     kv_params=kv_params,
                     intermediate_size=intermediate_size,
                     weights=curr_layer_weight,
-                    layer_idx=layer_idx,
+                    layer_idx=cross_kv_layer_idx,
                 )
             )
         else:
@@ -402,7 +416,9 @@ def instantiate_language_model(
                     rms_norm_eps=rms_norm_eps,
                     kv_params=kv_params,
                     weights=curr_layer_weight,
-                    layer_idx=layer_idx,
+                    # Self KV layer index is the total layer index minus the
+                    # number of cross KV layers so far.
+                    layer_idx=layer_idx - cross_kv_layer_idx + 1,
                     rotary_embedding=rotary_embedding,
                 )
             )

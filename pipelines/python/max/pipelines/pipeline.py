@@ -192,7 +192,17 @@ class PipelineModel(ABC):
         session: InferenceSession,
         available_cache_memory: int,
     ) -> KVCacheManager:
-        """Provided a PipelineConfig and InferenceSession, load the kv manager."""
+        """Provided a PipelineConfig and InferenceSession, loads the KV manager.
+
+        Args:
+            session: Inference session to compile and init the KV cache.
+            available_cache_memory: Amount of memory available to the KV cache,
+                in bytes.
+
+        Returns:
+            Either a single KV cache manager or a tuple of KV cache managers:
+            one per input modality.
+        """
         ...
 
     @abstractmethod

@@ -79,7 +79,7 @@ class KVCacheManager(ABC):
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> Sequence[tuple[Tensor, ...]]:
         """Used by `fetch` and should be implemented by child classes."""
         ...
 
@@ -88,7 +88,7 @@ class KVCacheManager(ABC):
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> Sequence[tuple[Tensor, ...]]:
         """Returns blocks and other inputs to kv cache kernel for given
         sequence ids and prompts."""
         # Call into `_fetch` method implemented by child classes.
@@ -109,7 +109,7 @@ class KVCacheManager(ABC):
     @abstractmethod
     def input_symbols(
         self,
-    ) -> Sequence[tuple[Type, Type, TensorType, TensorType]]: ...
+    ) -> Sequence[tuple[Type, ...]]: ...
 
     def claim(self, n: int) -> List[int]:
         """Claims `n` blocks of memory in the cache for incoming requests.
@@ -142,9 +142,8 @@ class KVCacheManager(ABC):
         """Used by `step` and can optionally be overridden by child classes."""
         ...
 
-    @final
     def step(self, seq_ids_and_new_tokens: dict[int, np.ndarray]) -> None:
-        """Update the `cache_lengths` objects to not that a new
+        """Update the `cache_lengths` objects to note that a new
         kv projection step has occurred, and that the underlying memory
         has been written to. This `cache_lengths` value is then used
         downstream in `fetch` to track what section of memory should
@@ -193,11 +192,19 @@ class KVCacheManager(ABC):
         """The maximum sequence length in current cache."""
         return max(self.cache_lengths.values())
 
+    def num_kv_inputs(self) -> int:
+        """Returns the default number of KV cache inputs for KV managers.
+
+        Subclasses with a different number of KV cache inputs should override
+        this method and `increment_cache_lengths`.
+        """
+        return 4
+
     def increment_cache_lengths(
         self,
-        kv_cache_inputs: List[tuple[Tensor, Tensor, Tensor, Tensor]],
+        kv_cache_inputs: Sequence[tuple[Tensor, ...]],
         prev_model_inputs: tuple[Tensor, ...],
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> List[tuple[Tensor, ...]]:
         """
         Prepare the inputs for a multistep execution, generally by incrementing
         the cache lengths. This should not require a device synchronization,
@@ -206,6 +213,12 @@ class KVCacheManager(ABC):
         This should also not update the cache lengths in our manager, this batch is
         still considered in-progress.
         """
+
+        # Make typechecking happy.
+        assert isinstance(kv_cache_inputs, List)
+
+        # Check the assumption on input length made by the internal function.
+        assert len(kv_cache_inputs[0]) == KVCacheManager.num_kv_inputs(self)
 
         if self.is_ragged:
             return self._increment_cache_lengths_ragged(
@@ -220,9 +233,9 @@ class KVCacheManager(ABC):
 
     def _increment_cache_lengths_ragged(
         self,
-        kv_cache_inputs: List[tuple[Tensor, Tensor, Tensor, Tensor]],
+        kv_cache_inputs: List[tuple[Tensor, ...]],
         prev_model_inputs: tuple[Tensor, ...],
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> List[tuple[Tensor, ...]]:
         """Prepares cache inputs for the next token in multistep execution.
 
         Updates the cache lengths for the next inference step without requiring device
@@ -268,9 +281,9 @@ class KVCacheManager(ABC):
 
     def _increment_cache_lengths_padded(
         self,
-        kv_cache_inputs: List[tuple[Tensor, Tensor, Tensor, Tensor]],
+        kv_cache_inputs: List[tuple[Tensor, ...]],
         prev_model_inputs: tuple[Tensor, ...],
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> List[tuple[Tensor, ...]]:
         """
         Prepare the inputs for a multistep execution, generally by incrementing
         the cache lengths. This should not require a device synchronization,

@@ -36,6 +36,8 @@ from nn.linear import Linear
 
 @dataclass
 class CrossSdpaAttention(Layer):
+    """Cross attention layer using SDPA (Scaled Dot Product Attention)."""
+
     n_heads: int
     """The number of attention heads."""
 
@@ -43,7 +45,7 @@ class CrossSdpaAttention(Layer):
     """KV Cache Params, including the number of kv heads, the head dim, and data type."""
 
     layer_idx: int
-    """The layer number associated with this Attention block."""
+    """Index into the cross attention layers' KV cache."""
 
     q_proj: Linear
     """A linear layer for the query projection."""

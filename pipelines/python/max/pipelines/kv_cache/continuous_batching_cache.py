@@ -177,7 +177,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> List[tuple[Tensor, Tensor, Tensor, Tensor]]:
+    ) -> List[tuple[Tensor, ...]]:
         """Fetches the KV cache state for the given sequence IDs.
 
         This method retrieves the current cache state for a batch of sequences, including their
