@@ -139,7 +139,7 @@ def main():
     tokenizer = transformers.CLIPTokenizer.from_pretrained(
         os.path.join(model_dir.path, "tokenizer")
     )
-    max_length = int(tokenizer.model_max_length)
+    max_length = Int(tokenizer.model_max_length)
     prompt_p = tokenizer(prompt, padding="max_length", max_length=max_length)
     prompt_n = tokenizer(
         negative_prompt, padding="max_length", max_length=max_length
@@ -186,7 +186,7 @@ def main():
         # Execute the diffusion model with bs=2. Both batches have same primary input and
         # timestep, but the encoder_hidden_states (primary prompt vs negative) differs.
         timestep_tensor = Tensor[DType.int64](TensorSpec(DType.int64, 1))
-        timestep_tensor[0] = int(schedule.timesteps[i])
+        timestep_tensor[0] = Int(schedule.timesteps[i])
 
         diffuser_output = img_diffuser.execute(
             "sample",

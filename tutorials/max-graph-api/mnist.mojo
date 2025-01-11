@@ -134,8 +134,8 @@ def main():
 
         predicted = probs.argmax(axis=1)
 
-        label_ = Tensor[DType.index](TensorShape(1), int(label))
-        correct += int(predicted == label_)
+        label_ = Tensor[DType.index](TensorShape(1), Int(label))
+        correct += Int(predicted == label_)
         total += 1
 
     print(
