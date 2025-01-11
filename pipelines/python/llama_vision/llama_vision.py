@@ -422,11 +422,13 @@ class LlamaVision(PipelineModel):
         input_id_values = Tensor.from_numpy(tokens).to(
             self.pipeline_config.device
         )
+        # This lives on host / in the CPU kernel, but is later casted to a scalar on
+        # device kernel side. No need for explicit .to(pipeline_config.device) call here.
         input_id_max_seq_len = Tensor.from_numpy(
             np.array(
                 [max(ctx.seq_len for ctx in context_batch)], dtype=np.uint32
             )
-        ).to(self.pipeline_config.device)
+        )
 
         return (
             *res,
