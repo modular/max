@@ -16,7 +16,8 @@ from __future__ import annotations
 import logging
 import time
 import warnings
-from typing import Sequence
+from collections.abc import Iterable
+from typing import Any
 
 import numpy as np
 from dataprocessing import causal_attention_mask_with_alibi, collate_batch
@@ -229,7 +230,7 @@ class ReplitModel(PipelineModel):
 
     def compute_log_probabilities(
         self,
-        model_inputs: Sequence[Tensor],
+        model_inputs: Iterable[Any],
         model_outputs: ModelOutputs,
         next_tokens: Tensor,
         batch_top_n: list[int],

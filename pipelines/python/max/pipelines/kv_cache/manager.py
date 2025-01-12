@@ -6,8 +6,9 @@
 """Abstract base class for KVCacheManager for KV Cache."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import List, Sequence, final
+from typing import Any, List, Sequence, final
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -203,7 +204,7 @@ class KVCacheManager(ABC):
     def increment_cache_lengths(
         self,
         kv_cache_inputs: Sequence[tuple[Tensor, ...]],
-        prev_model_inputs: tuple[Tensor, ...],
+        prev_model_inputs: Iterable[Any],
     ) -> List[tuple[Tensor, ...]]:
         """
         Prepare the inputs for a multistep execution, generally by incrementing
@@ -234,7 +235,7 @@ class KVCacheManager(ABC):
     def _increment_cache_lengths_ragged(
         self,
         kv_cache_inputs: List[tuple[Tensor, ...]],
-        prev_model_inputs: tuple[Tensor, ...],
+        prev_model_inputs: Iterable[Any],
     ) -> List[tuple[Tensor, ...]]:
         """Prepares cache inputs for the next token in multistep execution.
 
@@ -282,7 +283,7 @@ class KVCacheManager(ABC):
     def _increment_cache_lengths_padded(
         self,
         kv_cache_inputs: List[tuple[Tensor, ...]],
-        prev_model_inputs: tuple[Tensor, ...],
+        prev_model_inputs: Iterable[Any],
     ) -> List[tuple[Tensor, ...]]:
         """
         Prepare the inputs for a multistep execution, generally by incrementing

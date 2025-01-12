@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Sequence
-from typing import final
+from collections.abc import Iterable, Sequence
+from typing import Any, final
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -297,7 +297,7 @@ class MultimodalKVCacheManager(KVCacheManager):
     def increment_cache_lengths(
         self,
         kv_cache_inputs: Sequence[tuple[Tensor, ...]],
-        prev_model_inputs: tuple[Tensor, ...],
+        prev_model_inputs: Iterable[Any],
     ) -> list[tuple[Tensor, ...]]:
         """Updates the cache lengths for multistep execution.
 

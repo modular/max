@@ -392,7 +392,7 @@ class Llama3Model(PipelineModel):
 
     def compute_log_probabilities(
         self,
-        model_inputs: Sequence[Tensor],
+        model_inputs: Iterable[Any],
         model_outputs: ModelOutputs,
         next_tokens: Tensor,
         batch_top_n: list[int],

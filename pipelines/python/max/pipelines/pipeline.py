@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence, Type, TypeVar
 
@@ -153,14 +154,14 @@ class PipelineModel(ABC):
         return available_cache_memory
 
     @abstractmethod
-    def execute(self, *model_inputs: Tensor) -> ModelOutputs:
+    def execute(self, model_inputs: Any) -> ModelOutputs:
         """Runs the graph."""
         ...
 
     @abstractmethod
     def prepare_initial_token_inputs(
         self, context_batch: Sequence[T]
-    ) -> tuple[Tensor, ...]:
+    ) -> Iterable[Any]:
         """Prepares the initial inputs to be passed to `.execute()`.
 
         The inputs and functionality of this method can vary per model.
@@ -175,10 +176,8 @@ class PipelineModel(ABC):
 
     @abstractmethod
     def prepare_next_token_inputs(
-        self,
-        next_tokens: Tensor,
-        prev_model_inputs: tuple[Tensor, ...],
-    ) -> tuple[Tensor, ...]:
+        self, next_tokens: Tensor, prev_model_inputs: Any
+    ) -> Any:
         """Prepares the secondary inputs to be passed to `.execute()`.
 
         While `prepare_initial_token_inputs` is responsible for managing the initial inputs.
@@ -212,7 +211,7 @@ class PipelineModel(ABC):
 
     def compute_log_probabilities(
         self,
-        model_inputs: Sequence[Tensor],
+        model_inputs: Iterable[Any],
         model_outputs: ModelOutputs,
         next_tokens: Tensor,
         batch_top_n: list[int],
