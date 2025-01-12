@@ -493,6 +493,10 @@ class PipelineConfig:
     """Huggingface Repo id to load weights from only. This should only be set by internal code."""
 
     def __post_init__(self) -> None:
+        if not self.huggingface_repo_id:
+            msg = "hugginface_repo_id must be provided and must be a valid HuggingFace repo or local directory"
+            raise ValueError(msg)
+
         if (not os.path.exists(self.huggingface_repo_id)) and (
             not repo_exists(self.huggingface_repo_id)
         ):
