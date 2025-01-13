@@ -864,7 +864,11 @@ class LlamaVision(PipelineModel):
 
         logging.info("Building vision model...")
         vision_model_graph = self._llama3_vision_vision_graph()
-        logging.info("Compiling...")
+
+        logging.info("Building language model...")
+        language_model_graph = self._llama3_vision_language_graph()
+
+        logging.info("Compiling vision model...")
         before = time.perf_counter()
         vision_model = session.load(
             vision_model_graph,
@@ -875,9 +879,7 @@ class LlamaVision(PipelineModel):
             f"Compiling vision model took {after - before:.6f} seconds"
         )
 
-        logging.info("Building language model...")
-        language_model_graph = self._llama3_vision_language_graph()
-        logging.info("Compiling...")
+        logging.info("Compiling language model...")
         before = time.perf_counter()
         language_model = session.load(
             language_model_graph,
