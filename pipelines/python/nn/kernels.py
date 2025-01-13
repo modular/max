@@ -573,12 +573,11 @@ def cross_attention_ragged(
         msg = f"expected uint32 input_row_offsets but got {input_row_offsets.dtype}"
         raise ValueError(msg)
 
-    if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
-        cache_strategy_str = "cont_batch"
-    elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
-        cache_strategy_str = "paged"
-    else:
-        msg = f"unsupported cache strategy for flash_attention_ragged: {kv_params.cache_strategy}"
+    if kv_params.cache_strategy not in {
+        KVCacheStrategy.CONTINUOUS,
+        KVCacheStrategy.PAGED,
+    }:
+        msg = f"unsupported cache strategy for cross_attention_ragged: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
     if q_max_seq_len and (q_max_seq_len.dtype != DType.uint32):
@@ -587,8 +586,9 @@ def cross_attention_ragged(
         )
         raise ValueError(msg)
 
+    cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
-    op_name = f"cross_attention_kv_cache_h{kv_params.n_kv_heads_per_device}_d{kv_params.head_dim}_{str(mha_mask_config.attention_mask_variant.value)}_{cache_strategy_str}_ragged"
+    op_name = f"mo.cross_attention.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
