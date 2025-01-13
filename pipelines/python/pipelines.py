@@ -127,17 +127,31 @@ def cli_serve(
     help="The text prompt to use for further generation.",
 )
 @click.option(
+    "--image_url",
+    type=str,
+    multiple=True,
+    default=[],
+    help=(
+        "Images to include along with prompt, specified as URLs."
+        " The images are ignored if the model does not support"
+        " image inputs."
+    ),
+)
+@click.option(
     "--num-warmups",
     type=int,
     default=0,
     show_default=True,
     help="# of warmup iterations to run before the final timed run.",
 )
-def cli_pipeline(prompt, num_warmups, **config_kwargs):
+def cli_pipeline(prompt, image_url, num_warmups, **config_kwargs):
     # Load tokenizer & pipeline.
     pipeline_config = PipelineConfig(**config_kwargs)
     generate_text_for_pipeline(
-        pipeline_config, prompt=prompt, num_warmups=num_warmups
+        pipeline_config,
+        prompt=prompt,
+        image_urls=image_url,
+        num_warmups=num_warmups,
     )
 
 
