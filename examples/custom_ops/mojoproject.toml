@@ -7,8 +7,8 @@ platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
-addition = { cmd="mojo package kernels/ -o kernels.mojopkg && python addition.py", env={ MODULAR_ONLY_USE_NEW_EXTENSIBILITY_API="true" }}
-mandelbrot = { cmd="mojo package kernels/ -o kernels.mojopkg && python mandelbrot.py", env={ MODULAR_ONLY_USE_NEW_EXTENSIBILITY_API="true" }}
+addition = { cmd = "mojo package kernels/ -o kernels.mojopkg && python addition.py" }
+mandelbrot = { cmd = "mojo package kernels/ -o kernels.mojopkg && python mandelbrot.py" }
 
 [dependencies]
 python = ">=3.9,<3.13"
