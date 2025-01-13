@@ -136,7 +136,6 @@ class TextContext:
         next_tokens = self.next_tokens
         new_prompt = next_tokens[trim_len:]
         self._next_tokens = new_prompt
-        self.current_length += trim_len
         self.active_length = len(new_prompt)
         assert self.active_length > 0
 
@@ -213,7 +212,6 @@ class TextAndVisionContext:
         next_tokens = self.next_tokens
         new_prompt = next_tokens[trim_len:]
         self._next_tokens = new_prompt
-        self.current_length += trim_len
         self.active_length = len(new_prompt)
         assert self.active_length > 0
 
