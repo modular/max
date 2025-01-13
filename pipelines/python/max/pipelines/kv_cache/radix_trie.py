@@ -15,16 +15,23 @@ BlockId = Any
 SeqId = int
 
 
-def _token_prefix_match_len(tokens0: np.ndarray, tokens1: np.ndarray) -> int:
-    """computes the length of maximum shared prefix of two tokens
-    e.g: _token_prefix_match_len(["i", "like", "dogs"], ["i", "like", "cats"]) => 2
-         _token_prefix_match_len(["i", "like", "dogs"], ["we", "like", "cats"]) => 0
-         _token_prefix_match_len(["i", "like", "dogs"], ["i", "like", "dogs", "and", "cats"]) => 3
+def _token_prefix_match_len(
+    tokens0: np.ndarray, tokens1: np.ndarray, page_size: int
+) -> int:
+    """Computes the length of maximum shared prefix of two tokens, aligned by
+    `page_size`.
+
+    e.g: _token_prefix_match_len(["i", "like", "dogs"], ["i", "like", "cats"], page_size = 1) => 2
+         _token_prefix_match_len(["i", "like", "dogs"], ["we", "like", "cats"], page_size = 1) => 0
+         _token_prefix_match_len(["i", "like", "dogs"], ["i", "like", "dogs", "and", "cats"], page_size = 1) => 3
     """
-    for i, (t0, t1) in enumerate(zip(tokens0, tokens1)):
-        if t0 != t1:
+    assert len(tokens0) % page_size == 0
+    assert len(tokens1) % page_size == 0
+    shorter_len = min(len(tokens0), len(tokens1))
+    for i in range(0, shorter_len, page_size):
+        if (tokens0[i : i + page_size] != tokens1[i : i + page_size]).any():
             return i
-    return min(len(tokens0), len(tokens1))
+    return shorter_len
 
 
 def _starts_with(tokens: np.ndarray, prefix: np.ndarray) -> bool:
@@ -37,6 +44,13 @@ def _starts_with(tokens: np.ndarray, prefix: np.ndarray) -> bool:
     return (prefix == tokens[: len(prefix)]).all()
 
 
+def _token_to_key(tokens: np.ndarray, page_size: int) -> tuple[TokenId, ...]:
+    assert (
+        len(tokens) >= page_size
+    ), f"tokens must be at least page_size ({page_size}) long but is only {len(tokens)} tokens"
+    return tuple(tokens[:page_size])
+
+
 class TrieNode:
     """A TrieNode consists of a list of tokens and blocks.
 
@@ -47,7 +61,7 @@ class TrieNode:
 
     def __init__(self) -> None:
         """Constructs a TrieNode."""
-        self.children: Dict[TokenId, TrieNode] = {}
+        self.children: Dict[tuple[TokenId, ...], TrieNode] = {}
         # Typically in a map, we would have keys mapping to values.
         # To avoid collision with KV cache terminology, we call them tokens and blocks.
         #
@@ -88,9 +102,10 @@ class RadixTrie:
         - https://github.com/sgl-project/sglang/blob/337fe53ac41c68d6f171ef3b446f55eb0e98f77c/python/sglang/srt/mem_cache/radix_cache.py#L58
     """
 
-    def __init__(self) -> None:
+    def __init__(self, page_size: int = 1) -> None:
         """Constructs a RadixTrie."""
         self.root = TrieNode()
+        self.page_size = page_size
 
     def _check_node_valid(self, node: TrieNode):
         """Rudimentary checks of data structure invariants for TrieNode."""
@@ -102,11 +117,13 @@ class RadixTrie:
             assert len(node.tokens) > 0
             assert len(node.blocks) > 0
             assert node.parent
-            assert len(node.tokens) == len(node.blocks)
+            assert len(node.tokens) % self.page_size == 0
+            assert len(node.tokens) // self.page_size == len(node.blocks)
 
-        for tok, child in node.children.items():
+        for key, child in node.children.items():
             assert len(child.tokens) > 0
-            assert child.tokens[0] == tok
+            assert len(key) == self.page_size
+            assert _token_to_key(child.tokens, self.page_size) == key
 
     def insert(
         self,
@@ -138,23 +155,26 @@ class RadixTrie:
             if len(tokens) == 0:
                 return prev
 
-            if tokens[0] not in prev.children:
+            key = _token_to_key(tokens, self.page_size)
+            if key not in prev.children:
                 # insert new node
                 curr = TrieNode()
                 curr.parent = prev
                 curr.tokens = tokens
                 curr.blocks = blocks
-                prev.children[tokens[0]] = curr
+                prev.children[key] = curr
 
-            curr = prev.children[tokens[0]]
-            prefix_len = _token_prefix_match_len(curr.tokens, tokens)
+            curr = prev.children[key]
+            prefix_len = _token_prefix_match_len(
+                curr.tokens, tokens, self.page_size
+            )
 
             if prefix_len == len(curr.tokens) and prefix_len == len(tokens):
                 assert (curr.tokens == tokens).all()
                 return curr
 
             unmatched_tokens = tokens[prefix_len:]
-            unmatched_blocks = blocks[prefix_len:]
+            unmatched_blocks = blocks[prefix_len // self.page_size :]
             if prefix_len == len(curr.tokens):
                 assert _starts_with(tokens, curr.tokens)
                 return insert_helper(curr, unmatched_tokens, unmatched_blocks)
@@ -166,11 +186,14 @@ class RadixTrie:
             (parent, _) = self._split_node(curr, prefix_len)
             assert _starts_with(tokens, parent.tokens)
             unmatched_tokens = tokens[prefix_len:]
-            unmatched_blocks = blocks[prefix_len:]
+            unmatched_blocks = blocks[prefix_len // self.page_size :]
             return insert_helper(parent, unmatched_tokens, unmatched_blocks)
 
-        if len(tokens) != len(blocks):
-            msg = f"Insertion failed: the number of tokens and blocks do not match. len(tokens) == {len(tokens)} but len(blocks) == {len(blocks)}."
+        if len(tokens) % self.page_size != 0:
+            msg = f"Insertion failed: the number of tokens is not divisible by the page size. len(tokens) == {len(tokens)} but page_size == {self.page_size}."
+            raise ValueError(msg)
+        if len(tokens) // self.page_size != len(blocks):
+            msg = f"Insertion failed: the number of tokens and blocks do not match. len(tokens) // self.page_size == {len(tokens)} // {self.page_size} == {len(tokens) // self.page_size} but len(blocks) == {len(blocks)}."
             raise ValueError(msg)
         if len(tokens) == 0:
             msg = "Insertion failed: Attempted to insert 0 tokens into trie. Please provide at least one token to insert."
@@ -209,11 +232,15 @@ class RadixTrie:
         ) -> TrieNode:
             if len(tokens) == 0:
                 return prev
-            if tokens[0] not in prev.children:
+
+            key = _token_to_key(tokens, self.page_size)
+            if key not in prev.children:
                 return prev
 
-            curr = prev.children[tokens[0]]
-            prefix_len = _token_prefix_match_len(curr.tokens, tokens)
+            curr = prev.children[key]
+            prefix_len = _token_prefix_match_len(
+                curr.tokens, tokens, self.page_size
+            )
             if prefix_len < len(curr.tokens):
                 #   (prev) -> (curr)
                 # becomes:
@@ -229,6 +256,10 @@ class RadixTrie:
         if len(tokens) == 0:
             msg = "Match failed: Attempted to match 0 tokens in trie. Please provide at least one token to match."
             raise ValueError(msg)
+
+        # AIPIPE-323: We should support partial block matches
+        # truncate tokens to be divisible by page size
+        tokens = tokens[: len(tokens) // self.page_size * self.page_size]
 
         blocks: List[BlockId] = []
         if node is None:
@@ -254,6 +285,9 @@ class RadixTrie:
                     │  └────────┘
         """
         assert node != self.root
+        assert split_len > 0
+        assert split_len % self.page_size == 0
+
         parent = TrieNode()
         child = node
         parent.tokens, child.tokens = (
@@ -261,14 +295,17 @@ class RadixTrie:
             child.tokens[split_len:],
         )
         parent.blocks, child.blocks = (
-            child.blocks[:split_len],
-            child.blocks[split_len:],
+            child.blocks[: split_len // self.page_size],
+            child.blocks[split_len // self.page_size :],
         )
 
         parent.parent = child.parent
         assert parent.parent is not None
-        parent.parent.children[parent.tokens[0]] = parent
-        parent.children = {child.tokens[0]: child}
+        assert len(parent.tokens) > 0
+        parent_key = _token_to_key(parent.tokens, self.page_size)
+        parent.parent.children[parent_key] = parent
+        child_key = _token_to_key(child.tokens, self.page_size)
+        parent.children = {child_key: child}
         child.parent = parent
 
         parent.last_access_time = child.last_access_time
@@ -341,18 +378,25 @@ class RadixTrie:
                 evicted_blocks
             )
             blocks_to_evict_from_leaf = min(
-                remaining_blocks_to_evict, len(leaf.tokens)
+                remaining_blocks_to_evict, len(leaf.blocks)
             )
+            assert blocks_to_evict_from_leaf > 0
+
             # evict up to `left_to_evict` blocks from the leaf
             evicted_blocks.extend(leaf.blocks[-blocks_to_evict_from_leaf:])
-            first_tok = leaf.tokens[0]
-            leaf.tokens = leaf.tokens[:-blocks_to_evict_from_leaf]
+            key = _token_to_key(leaf.tokens, self.page_size)
+            leaf.tokens = leaf.tokens[
+                : -(blocks_to_evict_from_leaf * self.page_size)
+            ]
             leaf.blocks = leaf.blocks[:-blocks_to_evict_from_leaf]
+
+            assert len(leaf.tokens) % self.page_size == 0
+            assert len(leaf.tokens) // self.page_size == len(leaf.blocks)
 
             if len(leaf.tokens) == 0:
                 # delete leaf node
                 assert leaf.parent is not None
-                del leaf.parent.children[first_tok]
+                del leaf.parent.children[key]
 
                 # parent of leaf is now potentially a leaf
                 if len(leaf.parent.children) == 0:
