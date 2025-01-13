@@ -74,6 +74,17 @@ class RequestFuncOutput:
     error: str = ""
 
 
+def compute_output_len(
+    tokenizer: PreTrainedTokenizerBase, output: RequestFuncOutput
+) -> int:
+    return len(
+        tokenizer(
+            output.generated_text,
+            add_special_tokens=False,
+        ).input_ids
+    )
+
+
 async def async_request_trt_llm(
     request_func_input: RequestFuncInput,
     pbar: Optional[tqdm] = None,
@@ -591,11 +602,7 @@ def calculate_metrics(
             # serving backends instead of looking at len(outputs[i].itl) since
             # multiple output tokens may be bundled together
             # Note : this may inflate the output token count slightly
-            output_len = len(
-                tokenizer(
-                    outputs[i].generated_text, add_special_tokens=False
-                ).input_ids
-            )
+            output_len = compute_output_len(tokenizer, outputs[i])
             actual_output_lens.append(output_len)
             total_input += input_requests[i][1]
             if output_len > 1:
@@ -681,6 +688,7 @@ async def benchmark(
     disable_tqdm: bool,
     do_test_prompt: bool,
     collect_gpu_stats: bool,
+    print_inputs_and_outputs: bool,
 ):
     if backend in ASYNC_REQUEST_FUNCS:
         request_func = ASYNC_REQUEST_FUNCS[backend]
@@ -740,6 +748,18 @@ async def benchmark(
             )
         )
     outputs: List[RequestFuncOutput] = await asyncio.gather(*tasks)
+
+    if print_inputs_and_outputs:
+        print("Generated output text:")
+        for req_id, output in enumerate(outputs):
+            output_len = compute_output_len(tokenizer, output)
+            print(
+                {
+                    "req_id": req_id,
+                    "output_len": output_len,
+                    "output": output.generated_text,
+                }
+            )
 
     if pbar is not None:
         pbar.close()
@@ -961,6 +981,20 @@ def main(args: argparse.Namespace):
     else:
         raise ValueError(f"Unknown dataset: {args.dataset_name}")
 
+    if args.print_inputs_and_outputs:
+        print("Input prompts:")
+        for req_id, (prompt_formatted, prompt_len, output_len) in enumerate(
+            input_requests
+        ):
+            print(
+                {
+                    "req_id": req_id,
+                    "output_len": output_len,
+                    "prompt_len": prompt_len,
+                    "prompt": prompt_formatted,
+                }
+            )
+
     logger.info("starting benchmark run")
     benchmark_result = asyncio.run(
         benchmark(
@@ -974,6 +1008,7 @@ def main(args: argparse.Namespace):
             disable_tqdm=args.disable_tqdm,
             do_test_prompt=not args.skip_test_prompt,
             collect_gpu_stats=args.collect_gpu_stats,
+            print_inputs_and_outputs=args.print_inputs_and_outputs,
         )
     )
 
@@ -1211,6 +1246,11 @@ if __name__ == "__main__":
             "{backend}-{args.request_rate}qps-{base_model_id}-{current_dt}.json"
             " format."
         ),
+    )
+    parser.add_argument(
+        "--print-inputs-and-outputs",
+        action="store_true",
+        help="Print all input and outputs to console.",
     )
 
     parser.add_argument(
