@@ -123,7 +123,7 @@ class FetchPagedKVCacheCollection:
             )
             raise ValueError(msg)
 
-        op_name = f"paged_kv_cache_collection_h{self.kv_params.n_kv_heads}_d{self.kv_params.head_dim}_bshd"
+        op_name = f"mo.kv_collection_ctor.paged.nhead_{self.kv_params.n_kv_heads_per_device}.hdim_{self.kv_params.head_dim}"
         return PagedKVCacheCollection(
             ops.custom(
                 op_name,
