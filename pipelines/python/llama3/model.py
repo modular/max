@@ -272,13 +272,13 @@ class Llama3Model(PipelineModel):
 
     def _build_opaque_graph(self, weights: GGUFWeights) -> Graph:
         device0 = self.pipeline_config.devices[0]
-        deviceRef = DeviceRef(device0.label, device0.id)
+        device_ref = DeviceRef(device0.label, device0.id)
         tokens_type = TensorType(
-            DType.int64, shape=["total_seq_len"], device=deviceRef
+            DType.int64, shape=["total_seq_len"], device=device_ref
         )
         # NOTE: input_row_offsets_len should be batch_size + 1.
         input_row_offsets_type = TensorType(
-            DType.uint32, shape=["input_row_offsets_len"], device=deviceRef
+            DType.uint32, shape=["input_row_offsets_len"], device=device_ref
         )
 
         if len(self.pipeline_config.devices) > 1:
