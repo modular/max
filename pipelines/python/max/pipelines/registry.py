@@ -18,18 +18,14 @@ from max.graph.weights import WeightsConverter
 from .config import (
     PipelineConfig,
     PipelineEngine,
+    RopeType,
     SupportedEncoding,
     WeightsFormat,
 )
-from .hf_pipeline import (
-    HFTextGenerationPipeline,
-)
+from .hf_pipeline import HFTextGenerationPipeline
 from .interfaces import PipelineTokenizer, TokenGenerator
 from .kv_cache import KVCacheStrategy
-from .pipeline import (
-    PipelineModel,
-    TextGenerationPipeline,
-)
+from .pipeline import PipelineModel, TextGenerationPipeline
 from .tokenizer import TextAndVisionTokenizer, TextTokenizer
 
 # Store a map of checkpoint encodings that can be cast to another dtype while
@@ -51,8 +47,10 @@ class SupportedArchitecture:
         pipeline_model: Type[PipelineModel],
         tokenizer: Type[Union[TextTokenizer, TextAndVisionTokenizer]],
         default_weights_format: WeightsFormat,
-        weight_converters: dict[WeightsFormat, Type[WeightsConverter]]
-        | None = None,
+        rope_type: RopeType = RopeType.none,
+        weight_converters: (
+            dict[WeightsFormat, Type[WeightsConverter]] | None
+        ) = None,
     ):
         """Initializes a model architecture supported by MAX pipelines.
 
@@ -77,6 +75,7 @@ class SupportedArchitecture:
         self.pipeline_model = pipeline_model
         self.tokenizer = tokenizer
         self.default_weights_format = default_weights_format
+        self.rope_type = rope_type
         self.weight_converters = weight_converters or {}
 
 
@@ -301,6 +300,9 @@ class PipelineRegistry:
                         " not exist on HuggingFace."
                     )
                     raise ValueError(msg)
+
+        if pipeline_config.rope_type is None:
+            pipeline_config.rope_type = arch.rope_type
 
         # If we pass validation ensure, the engine is set as MAX.
         pipeline_config.engine = PipelineEngine.MAX

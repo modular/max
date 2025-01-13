@@ -8,6 +8,7 @@
 from .config import (
     PipelineConfig,
     PipelineEngine,
+    RopeType,
     SupportedEncoding,
     WeightsFormat,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "TextAndVisionTokenizer",
     "TextGenerationPipeline",
     "WeightsFormat",
+    "RopeType",
     "PipelineModel",
     "ModelOutputs",
     "TextResponse",

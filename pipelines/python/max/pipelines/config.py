@@ -122,6 +122,13 @@ class RepoType(str, Enum):
     local = "local"
 
 
+# Reference: https://github.com/ggerganov/llama.cpp/blob/eb5c3dc64bd967f2e23c87d9dec195f45468de60/src/llama.cpp#L20778
+class RopeType(str, Enum):
+    none = "none"
+    normal = "normal"
+    neox = "neox"
+
+
 @dataclass
 class HuggingFaceRepo:
     repo_id: str
@@ -483,6 +490,9 @@ class PipelineConfig:
     enable_echo: bool = False
     """Whether the model should be built with echo capabilities."""
 
+    rope_type: Optional[RopeType] = None
+    """Force using a specific rope type, 'none', 'normal', or 'neox'. Only matters for GGUF weights."""
+
     _huggingface_config: Optional[AutoConfig] = None
     """The HuggingFace config associated with the huggingface repo id."""
 
@@ -685,9 +695,11 @@ class PipelineConfig:
     def weights_size(self) -> Optional[int]:
         size = 0
         hf_repo = HuggingFaceRepo(
-            self._weights_repo_id
-            if self._weights_repo_id
-            else self.huggingface_repo_id,
+            (
+                self._weights_repo_id
+                if self._weights_repo_id
+                else self.huggingface_repo_id
+            ),
             trust_remote_code=self.trust_remote_code,
         )
         for file_path in self.weight_path:
@@ -773,6 +785,7 @@ class PipelineConfig:
             "max_cache_batch_size": "Define the maximum cache size reserved for a single batch. This value defaults to 1. Increase this value based on server capacity when deploying in production.",
             "max_ce_batch_size": "Set the maximum cache size reserved for a single context encoding batch. The effective limit will be the lesser of this value and max-cache-batch-size. Default is 32.",
             "cache_strategy": "Force a specific cache strategy: 'naive' or 'continuous'. If not provided, the optimal caching strategy for the model requested will be selected.",
+            "rope_type": "Force using a specific rope type, 'none', 'normal', or 'neox'. Only matters for GGUF weights.",
             "max_num_steps": "Specify the number of steps to run for multi-step scheduling during inference. Default is set to 1.",
             "pad_to_multiple_of": "Pad input tensors to be a multiple of value provided. Default is set to 2.",
             "kv_cache_page_size": "The number of tokens in a single page in the paged KVCache. Default is set to 512.",
@@ -786,8 +799,10 @@ class PipelineConfig:
 
     def huggingface_weights_repo(self) -> HuggingFaceRepo:
         return HuggingFaceRepo(
-            self._weights_repo_id
-            if self._weights_repo_id
-            else self.huggingface_repo_id,
+            (
+                self._weights_repo_id
+                if self._weights_repo_id
+                else self.huggingface_repo_id
+            ),
             trust_remote_code=self.trust_remote_code,
         )
