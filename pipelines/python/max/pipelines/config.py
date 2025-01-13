@@ -404,6 +404,9 @@ class HuggingFaceRepo:
 
 @dataclass(frozen=False)
 class PipelineConfig:
+    # When adding a new config parameter here, please remember to add a
+    # description to the `help()` method below
+
     huggingface_repo_id: str
     """repo_id of a huggingface model repository to use."""
 
@@ -456,7 +459,7 @@ class PipelineConfig:
     """Pad input tensors to be a multiple of value provided."""
 
     kv_cache_page_size: int = 512
-    """The number of tokens in a single page in the KVCache."""
+    """The number of tokens in a single page in the paged KVCache."""
 
     enable_prefix_caching: bool = False
     """Whether to enable prefix caching for the paged attention KVCache."""
@@ -759,20 +762,26 @@ class PipelineConfig:
         return {
             "huggingface_repo_id": "Specify the repository ID of a Huggingface model repository to use. This is used to load both Tokenizers, architectures and model weights.",
             "engine": "Specify the engine backend to use for serving the model. Options include 'max' for the MAX engine, or 'huggingface' as a fallback option that provides improved model coverage.",
+            "architecture": "Deprecated - Please set `huggingface-repo-id` instead. Define the model architecture to run. This should match one of the supported architectures for your selected engine.",
             "weight_path": "Provide an optional local path or path relative to the root of a Huggingface repo to the model weights you want to use. This allows you to specify custom weights instead of using defaults. You may pass multiple, ie. `--weight-path=model-00001-of-00002.safetensors --weight-path=model-00002-of-00002.safetensors`",
+            "device_specs": "Devices to run inference upon. Default is set to CPU.",
             "quantization_encoding": "Define the weight encoding type for quantization. This can help optimize performance and memory usage during inference. ie. q4_k, bfloat16 etc.",
-            "maximum_length": "Set the maximum sequence length for input data processed by the model. The default is 512 tokens. This can be raised up until the maximum of the model provided. As this value increases memory consumed by the engine increases accordingly.",
+            "serialized_model_path": "If specified, this flag attempts to load a serialized MEF model from the given path. This is useful for reusing previously saved models.",
+            "save_to_serialized_model_path": "If specified, this flag attempts to save the current model state to a serialized format at the given path for later use.",
+            "max_length": "Set the maximum sequence length for input data processed by the model. The default is 512 tokens. This can be raised up until the maximum of the model provided. As this value increases memory consumed by the engine increases accordingly.",
             "max_new_tokens": "Specify the maximum number of new tokens to generate during a single inference pass of the model. Default is -1, which means the model will generate until the maximum sequence length is hit, or and eos token is generated.",
             "max_cache_batch_size": "Define the maximum cache size reserved for a single batch. This value defaults to 1. Increase this value based on server capacity when deploying in production.",
             "max_ce_batch_size": "Set the maximum cache size reserved for a single context encoding batch. The effective limit will be the lesser of this value and max-cache-batch-size. Default is 32.",
             "cache_strategy": "Force a specific cache strategy: 'naive' or 'continuous'. If not provided, the optimal caching strategy for the model requested will be selected.",
             "max_num_steps": "Specify the number of steps to run for multi-step scheduling during inference. Default is set to 1.",
+            "pad_to_multiple_of": "Pad input tensors to be a multiple of value provided. Default is set to 2.",
+            "kv_cache_page_size": "The number of tokens in a single page in the paged KVCache. Default is set to 512.",
+            "enable_prefix_caching": "Whether to enable prefix caching for the paged attention KVCache. This defaults to false.",
+            "gpu_memory_utilization": "The fraction of available device memory that the process should consume. This is used to inform the size of the KVCache workspace: kv_cache_workspace = (total_free_memory * gpu_memory_utilization) - model_weights_size. Default is set to 0.9.",
             "top_k": "Limit sampling to the top K most probable tokens during generation. This can help control randomness and improve output quality. This defaults to 0, which defaults to greedy sampling.",
             "trust_remote_code": "Indicate whether to allow custom modelling files from Huggingface repositories. Set this to true with caution, as it may introduce security risks.",
             "force_download": "Specify whether to forcefully download a file even if it already exists in local cache. Set this to true if you want to ensure you have the latest version.",
-            "architecture": "Deprecated - Please set `huggingface-repo-id` instead. Define the model architecture to run. This should match one of the supported architectures for your selected engine.",
-            "serialized_model_path": "If specified, this flag attempts to load a serialized MEF model from the given path. This is useful for reusing previously saved models.",
-            "save_to_serialized_model_path": "If specified, this flag attempts to save the current model state to a serialized format at the given path for later use.",
+            "enable_echo": "Whether the model should be built with echo capabilities. This defaults to false.",
         }
 
     def huggingface_weights_repo(self) -> HuggingFaceRepo:
