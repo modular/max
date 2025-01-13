@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import dataclass
 from typing import Any, final
 
 import numpy as np
@@ -320,10 +321,87 @@ class MultimodalKVCacheManager(KVCacheManager):
         ]
 
 
+# TODO(bduke): use `@dataclass(slots=True)` when we drop 3.9 support.
+@dataclass
+class LlamaVisionInputs:
+    """Holds language model inputs and (optionally) vision model inputs."""
+
+    # Language model inputs.
+    input_id_values: Tensor
+    input_row_offsets: Tensor
+    input_id_max_seq_len: Tensor
+    pixel_row_offsets: Tensor
+
+    # Vision model inputs.
+    _pixel_values: Tensor | None = None
+    _aspect_ratio_ids: Tensor | None = None
+    _aspect_ratio_mask: Tensor | None = None
+
+    def __post_init__(self) -> None:
+        """Validate consistency between vision fields.
+
+        If pixel_values is set, then aspect_ratio_ids, aspect_ratio_mask,
+        and pixel_row_offsets must also be set, and vice versa.
+        """
+        if self.has_vision_inputs:
+            if not all(
+                x is not None
+                for x in (
+                    self._aspect_ratio_ids,
+                    self._aspect_ratio_mask,
+                    self.pixel_row_offsets,
+                )
+            ):
+                msg = "provide all or none of Llama Vision vision model inputs"
+                raise ValueError(msg)
+        else:
+            for field_name in ("_aspect_ratio_ids", "_aspect_ratio_mask"):
+                if getattr(self, field_name) is not None:
+                    msg = f"{field_name} must be None if _pixel_values is None"
+                    raise ValueError(msg)
+
+    def __iter__(self) -> Iterator[LlamaVisionInputs]:
+        # Return this directly as expected in execute.
+        yield self
+
+    @property
+    def has_vision_inputs(self) -> bool:
+        """Returns true iff this includes vision model inputs."""
+        return self._pixel_values is not None
+
+    @property
+    def pixel_values(self) -> Tensor:
+        assert self._pixel_values is not None
+        return self._pixel_values
+
+    @property
+    def aspect_ratio_ids(self) -> Tensor:
+        assert self._aspect_ratio_ids is not None
+        return self._aspect_ratio_ids
+
+    @property
+    def aspect_ratio_mask(self) -> Tensor:
+        assert self._aspect_ratio_mask is not None
+        return self._aspect_ratio_mask
+
+    def update_for_next_token(
+        self, next_tokens: Tensor, next_row_offsets: Tensor
+    ) -> LlamaVisionInputs:
+        """Updates next_tokens and row_offsets after an initial step."""
+        return LlamaVisionInputs(
+            input_id_values=next_tokens,
+            input_row_offsets=next_row_offsets,
+            input_id_max_seq_len=self.input_id_max_seq_len,
+            pixel_row_offsets=self.pixel_row_offsets,
+            # Set vision model inputs to None after the first `next_token`.
+            _pixel_values=None,
+            _aspect_ratio_ids=None,
+            _aspect_ratio_mask=None,
+        )
+
+
 class LlamaVisionModel(Layer):
-    """
-    The Llama 3.2 vision model.
-    """
+    """The Llama 3.2 vision model."""
 
     def __init__(
         self, pipeline_config: PipelineConfig, weights: Weights
@@ -460,7 +538,29 @@ class LlamaVisionLanguageModel(Layer):
 
 
 class LlamaVision(PipelineModel):
-    """The entire (multimodal) Llama3.2 vision model."""
+    """The entire (multimodal) Llama3.2 vision model.
+
+    A note on multi-step and vision inputs:
+
+    - `has_images` in `prepare_initial_token_inputs` is determined by whether or
+      not `pixel_values` is set on each TextAndVisionContext in the batch.
+      So on the context encoding call, the caller sets pixel_values, making
+      `has_images` True.
+    - `prepare_initial_token_inputs` unsets `ctx.pixel_values` (sets it to an
+      empty list).
+      So the next prepare_initial_token_inputs will have has_images == False
+      (the next multi-step train will skip the vision encoder).
+    - That covers the num_steps = 1 case.
+    - For multistep, the prepare_next_token_inputs function will unset
+      LlamaVisionInputs.pixel_values (and aspect ratio ids/mask).
+      So for multistep, step > 1, subsequent steps won't run the vision encoder.
+    - Note the 2 different mechanisms: `has_images` is determined by
+      `TextAndVisionContext.pixel_values` in `prepare_initial_token_inputs`,
+      but it is determined by `LlamaVisionInputs.pixel_values` in
+      `PipelineModel.execute` (which is called multiple times in a multi-step
+      train, so `prepare_next_token_inputs` needs to unset
+      `LlamaVisionInputs.pixel_values`).
+    """
 
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession
@@ -595,96 +695,89 @@ class LlamaVision(PipelineModel):
         # num_tiles * (image_dim**2 // patch_dim**2 + 1 (cls token))
         return max_num_tiles * ((height * width) // patch_size**2 + 1)
 
+    def _prepare_vision_inputs(
+        self,
+        context_batch: Sequence[TextAndVisionContext],
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Batches up pixel_values, aspect_ratio_ids, and aspect_ratio_masks."""
+        images = []
+        aspect_ratio_ids_list = []
+        aspect_ratio_mask_list = []
+        for context in context_batch:
+            # Get first image in first batch and permute the order to (HWC).
+            image = np.transpose(context.pixel_values, (0, 1, 3, 4, 2))
+
+            # Add batch_size, num_concurrent_media, and max_num_tiles dimensions
+            # [1, num_concurrent_media, max_num_tiles, H, W, C]
+            image = np.expand_dims(image, axis=(0))
+            images.append(image)
+
+            if "aspect_ratio_ids" not in context.extra_model_args:
+                msg = "aspect_ratio_ids is required for image / vision model input"
+                raise ValueError(msg)
+
+            if "aspect_ratio_mask" not in context.extra_model_args:
+                msg = "aspect_ratio_mask is required for image / vision model input"
+                raise ValueError(msg)
+
+            aspect_ratio_ids_list.append(
+                context.extra_model_args["aspect_ratio_ids"]
+            )
+            aspect_ratio_mask_list.append(
+                context.extra_model_args["aspect_ratio_mask"]
+            )
+
+        # Convert the list into a single NumPy array with shape
+        # (batch_size, 1, max_num_tiles, H, W, C).
+        final_images = np.concatenate(images, axis=0)
+
+        pixel_values = Tensor.from_numpy(final_images).to(
+            self.pipeline_config.device
+        )
+
+        final_aspect_ratio_ids = np.concatenate(aspect_ratio_ids_list, axis=0)
+
+        aspect_ratio_ids = Tensor.from_numpy(final_aspect_ratio_ids).to(
+            self.pipeline_config.device
+        )
+
+        final_aspect_ratio_mask = np.concatenate(aspect_ratio_mask_list, axis=0)
+
+        aspect_ratio_mask = Tensor.from_numpy(final_aspect_ratio_mask).to(
+            self.pipeline_config.device
+        )
+
+        return pixel_values, aspect_ratio_ids, aspect_ratio_mask
+
     def prepare_initial_token_inputs(
         self,
         context_batch: Sequence[TextAndVisionContext],  # type: ignore
-    ) -> tuple[Tensor, ...]:
+    ) -> LlamaVisionInputs:
         """Creates tensors of token and image inputs, if applicable."""
         if self.pipeline_config.cache_strategy != KVCacheStrategy.CONTINUOUS:
             msg = "Llama Vision only supports continuous batching"
             raise ValueError(msg)
 
-        def has_image(pixel_values) -> bool:
-            if isinstance(pixel_values, list):
-                return len(pixel_values) > 0
-            return pixel_values is not None
+        def has_image(pixel_values: np.ndarray | list[np.ndarray]) -> bool:
+            return pixel_values is not None and len(pixel_values) > 0
 
-        # Input validation - check if the sequence of contexts in this batch
-        # all have images, or none altogether.
-        has_images = -1
-        for context in context_batch:
-            is_curr_image = has_image(context.pixel_values)
-            if has_images == -1:
-                has_images = is_curr_image
-            elif (is_curr_image and has_images == 0) or (
-                not is_curr_image and has_images == 1
-            ):
-                raise RuntimeError(
-                    "Expected the context batch to all have images, or no images "
-                    "at all. At least one context in this batch has an image and "
-                    "another does not."
-                )
-            else:
-                has_images = 0 if is_curr_image else 1
+        has_images = any(has_image(ctx.pixel_values) for ctx in context_batch)
+        if has_images and not all(
+            has_image(ctx.pixel_values) for ctx in context_batch
+        ):
+            msg = (
+                "expected context batch to all have images, or no images at all"
+            )
+            raise RuntimeError(msg)
 
-        res = []
+        # Prepare vision inputs if applicable.
+        pixel_values = None
+        aspect_ratio_ids = None
+        aspect_ratio_mask = None
         if has_images:
-            images = []
-            aspect_ratio_ids_list = []
-            aspect_ratio_mask_list = []
-            for context in context_batch:
-                # Get first image in first batch and permute the order to (HWC).
-                image = np.transpose(context.pixel_values, (0, 1, 3, 4, 2))
-
-                # Add batch_size, num_concurrent_media, and max_num_tiles dimensions
-                # [1, num_concurrent_media, max_num_tiles, H, W, C]
-                image = np.expand_dims(image, axis=(0))
-                images.append(image)
-
-                if "aspect_ratio_ids" not in context.extra_model_args:
-                    msg = "aspect_ratio_ids is required for image / vision model input"
-                    raise ValueError(msg)
-
-                if "aspect_ratio_mask" not in context.extra_model_args:
-                    msg = "aspect_ratio_mask is required for image / vision model input"
-                    raise ValueError(msg)
-
-                aspect_ratio_ids_list.append(
-                    context.extra_model_args["aspect_ratio_ids"]
-                )
-                aspect_ratio_mask_list.append(
-                    context.extra_model_args["aspect_ratio_mask"]
-                )
-
-            # Convert the list into a single NumPy array with shape
-            # (batch_size, 1, max_num_tiles, H, W, C).
-            final_images = np.concatenate(images, axis=0)
-
-            pixel_values = Tensor.from_numpy(final_images).to(
-                self.pipeline_config.device
+            pixel_values, aspect_ratio_ids, aspect_ratio_mask = (
+                self._prepare_vision_inputs(context_batch)
             )
-
-            final_aspect_ratio_ids = np.concatenate(
-                aspect_ratio_ids_list, axis=0
-            )
-
-            aspect_ratio_ids = Tensor.from_numpy(final_aspect_ratio_ids).to(
-                self.pipeline_config.device
-            )
-
-            final_aspect_ratio_mask = np.concatenate(
-                aspect_ratio_mask_list, axis=0
-            )
-
-            aspect_ratio_mask = Tensor.from_numpy(final_aspect_ratio_mask).to(
-                self.pipeline_config.device
-            )
-
-            res = [
-                pixel_values,
-                aspect_ratio_ids,
-                aspect_ratio_mask,
-            ]
 
         # Input row offset type: ["input_row_offsets_len"], UInt32
         input_id_row_offsets = Tensor.from_numpy(
@@ -700,7 +793,7 @@ class LlamaVision(PipelineModel):
                 + [
                     # Use an input row offset of 0 to mean no image.
                     self.vision_max_seq_len
-                    if ctx.pixel_values is not None
+                    if has_image(ctx.pixel_values)
                     else 0
                     for ctx in context_batch
                 ],
@@ -722,46 +815,38 @@ class LlamaVision(PipelineModel):
             )
         )
 
-        return (
-            *res,
-            input_id_values,
-            input_id_row_offsets,
-            input_id_max_seq_len,
-            pixel_row_offsets,
+        # Unset the context's pixel values so that subsequent next_token
+        # calls reusing the same context won't run the vision encoder.
+        for ctx in context_batch:
+            ctx.pixel_values = []
+
+        return LlamaVisionInputs(
+            input_id_values=input_id_values,
+            input_row_offsets=input_id_row_offsets,
+            input_id_max_seq_len=input_id_max_seq_len,
+            pixel_row_offsets=pixel_row_offsets,
+            _pixel_values=pixel_values,
+            _aspect_ratio_ids=aspect_ratio_ids,
+            _aspect_ratio_mask=aspect_ratio_mask,
         )
 
     def prepare_next_token_inputs(
-        self,
-        next_tokens: Tensor,
-        prev_model_inputs: tuple[Tensor, ...],
-    ) -> tuple[Tensor, ...]:
-        # Next token inputs always go to the language model.
-        # - input ids
-        # - input max seq lengths
-        # - hidden input row offsets
-        input_id_max_seq_len: Tensor
-        old_row_offsets: Tensor
-        if len(prev_model_inputs) == 7:
-            # If the previous inputs include the pixel values
-            input_id_max_seq_len = prev_model_inputs[4]
-            old_row_offsets = prev_model_inputs[6]
-        else:
-            # If no pixel values were included
-            assert len(prev_model_inputs) == 3
-            input_id_max_seq_len = prev_model_inputs[1]
-            old_row_offsets = prev_model_inputs[2]
-        row_offsets_size = old_row_offsets.shape[0]
-        next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
-        next_token_inputs = (
-            next_tokens,
-            input_id_max_seq_len,
-            next_row_offsets,
-        )
-        return next_token_inputs
+        self, next_tokens: Tensor, prev_inputs: LlamaVisionInputs
+    ) -> LlamaVisionInputs:
+        """Produce the updated LlamaVisionInputs for the next token.
 
-    def execute(self, *model_inputs: Tensor) -> ModelOutputs:
-        model_input_list = list(model_inputs)
+        This sets existing vision inputs to none and replaces text tokens and
+        row offsets.
+        """
+        next_row_offsets = self._input_row_offsets_prealloc[
+            : prev_inputs.input_row_offsets.shape[0]
+        ]
 
+        return prev_inputs.update_for_next_token(next_tokens, next_row_offsets)
+
+    def execute(
+        self, model_inputs: LlamaVisionInputs, *kv_inputs: Tensor
+    ) -> ModelOutputs:
         # batch_size * num_concurrent_media * max_num_tiles * num_patches
         # are set to 0 here to imitate a dummy tensor (used in text-only mode).
         cross_attention_states = Tensor.zeros(
@@ -769,32 +854,25 @@ class LlamaVision(PipelineModel):
             dtype=self.pipeline_config.dtype,
         ).to(self.pipeline_config.device)
 
-        # Vision model has 3 more inputs.
-        # pixel_values(1), aspect_ratio_ids(1), aspect_ratio_mask(1)
-        if len(model_input_list) >= self.vision_graph_input_size:
-            cross_attention_states = self.vision_model.execute(  # type: ignore
-                *model_input_list[: self.vision_graph_input_size],
+        if model_inputs.has_vision_inputs:
+            # Compute the cross attention states if this is a CE step.
+            exec_result = self.vision_model.execute(
+                model_inputs.pixel_values,
+                model_inputs.aspect_ratio_ids,
+                model_inputs.aspect_ratio_mask,
                 copy_inputs_to_device=False,
             )[0]
-            model_input_list = model_input_list[self.vision_graph_input_size :]
-
-        # Insert vision model output to be fed as input to the subsequent
-        # language model. This assumes cross_attention_states is the first input
-        # since the list needs to be ordered.
-        model_input_list.insert(0, cross_attention_states)
-
-        # Language model has 8 inputs.
-        # kv_cache_inputs (4), input_ids(1), hidden_input_row_offsets(1),
-        # cross_attention_states(1), cross_input_row_offsets(1)
-        if len(model_input_list) != self.language_graph_input_size:
-            raise ValueError(
-                "Expecting language_model inputs to have {}, got {} instead".format(
-                    self.language_graph_input_size, len(model_input_list)
-                )
-            )
+            assert isinstance(exec_result, Tensor)
+            cross_attention_states = exec_result
 
         model_outputs = self.language_model.execute(
-            *model_input_list, copy_inputs_to_device=False
+            cross_attention_states,
+            model_inputs.input_id_values,
+            model_inputs.input_row_offsets,
+            model_inputs.input_id_max_seq_len,
+            model_inputs.pixel_row_offsets,
+            *kv_inputs,
+            copy_inputs_to_device=False,
         )
         assert not self.pipeline_config.enable_echo
         assert isinstance(model_outputs[0], Tensor)
