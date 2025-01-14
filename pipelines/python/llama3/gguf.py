@@ -18,7 +18,7 @@ from max.dtype import DType
 from max.graph import DeviceRef, Graph, TensorValue, TensorValueLike, ops
 from max.graph.quantization import QuantizationEncoding
 from max.graph.weights import Weights
-from max.pipelines import PipelineConfig
+from max.pipelines import PipelineConfig, RopeType, WeightsFormat
 from max.pipelines.kv_cache import (
     FetchContinuousBatchingKVCacheCollection,
     FetchPagedKVCacheCollection,
@@ -340,12 +340,17 @@ def distributed_transformer_opaque(
         else:
             rope_scaling = None
 
+        interleaved_rope_weights = (
+            pipeline_config.weights_format == WeightsFormat.gguf
+            and pipeline_config.rope_type == RopeType.normal
+        )
         rope = OptimizedRotaryEmbedding(
             dim=pipeline_config.huggingface_config.hidden_size,
             n_heads=pipeline_config.huggingface_config.num_attention_heads,
             theta=pipeline_config.huggingface_config.rope_theta,
             max_seq_len=pipeline_config.huggingface_config.max_seq_len,
             rope_scaling=rope_scaling,
+            interleaved=interleaved_rope_weights,
         )
 
         layers = [
@@ -440,14 +445,23 @@ def _transformer_opaque(
         else:
             rope_scaling = None
 
+        interleaved_rope_weights = (
+            pipeline_config.weights_format == WeightsFormat.gguf
+            and pipeline_config.rope_type == RopeType.normal
+        )
         rope = OptimizedRotaryEmbedding(
             dim=pipeline_config.huggingface_config.hidden_size,
             n_heads=pipeline_config.huggingface_config.num_attention_heads,
             theta=pipeline_config.huggingface_config.rope_theta,
             max_seq_len=pipeline_config.huggingface_config.max_seq_len,
             rope_scaling=rope_scaling,
+            interleaved=interleaved_rope_weights,
         )
 
+        if pipeline_config.huggingface_config.model_type == "exaone":
+            rms_norm_eps = pipeline_config.huggingface_config.layer_norm_epsilon
+        else:
+            rms_norm_eps = pipeline_config.huggingface_config.rms_norm_eps
         layers = [
             TransformerBlock(
                 attention=_attention_opaque(
@@ -466,12 +480,12 @@ def _transformer_opaque(
                 ),
                 attention_norm=rms_norm(
                     pipeline_config.huggingface_config.hidden_size,
-                    pipeline_config.huggingface_config.rms_norm_eps,
+                    rms_norm_eps,
                     weights.blk[i].attn_norm,
                 ),
                 mlp_norm=rms_norm(
                     pipeline_config.huggingface_config.hidden_size,
-                    pipeline_config.huggingface_config.rms_norm_eps,
+                    rms_norm_eps,
                     weights.blk[i].ffn_norm,
                 ),
             )
@@ -513,7 +527,7 @@ def _transformer_opaque(
             layers=layers,
             norm=rms_norm(
                 pipeline_config.huggingface_config.hidden_size,
-                pipeline_config.huggingface_config.rms_norm_eps,
+                rms_norm_eps,
                 weights.output_norm,
             ),
             output=output,
@@ -585,14 +599,23 @@ def transformer(
         else:
             rope_scaling = None
 
+        interleaved_rope_weights = (
+            pipeline_config.weights_format == WeightsFormat.gguf
+            and pipeline_config.rope_type == RopeType.normal
+        )
         rope = RotaryEmbedding(
             dim=pipeline_config.huggingface_config.hidden_size,
             n_heads=pipeline_config.huggingface_config.num_attention_heads,
             theta=pipeline_config.huggingface_config.rope_theta,
             max_seq_len=pipeline_config.huggingface_config.max_seq_len,
             rope_scaling=rope_scaling,
+            interleaved=interleaved_rope_weights,
         )
 
+        if pipeline_config.huggingface_config.model_type == "exaone":
+            rms_norm_eps = pipeline_config.huggingface_config.layer_norm_epsilon
+        else:
+            rms_norm_eps = pipeline_config.huggingface_config.rms_norm_eps
         layers = [
             NaiveTransformerBlock(
                 attention=attention(
@@ -607,12 +630,12 @@ def transformer(
                 ),
                 attention_norm=rms_norm(
                     pipeline_config.huggingface_config.hidden_size,
-                    pipeline_config.huggingface_config.rms_norm_eps,
+                    rms_norm_eps,
                     weights.blk[i].attn_norm,
                 ),
                 mlp_norm=rms_norm(
                     pipeline_config.huggingface_config.hidden_size,
-                    pipeline_config.huggingface_config.rms_norm_eps,
+                    rms_norm_eps,
                     weights.blk[i].ffn_norm,
                 ),
             )
@@ -645,7 +668,7 @@ def transformer(
             layers=layers,
             norm=rms_norm(
                 pipeline_config.huggingface_config.hidden_size,
-                pipeline_config.huggingface_config.rms_norm_eps,
+                rms_norm_eps,
                 weights.output_norm,
             ),
             output=output,

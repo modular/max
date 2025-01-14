@@ -46,8 +46,65 @@ LLAMA_GGUF_TENSOR_MAPPING = {
     "output_norm": "model.norm",
 }
 
+# Map from GGUF tensor names to Exaone Safetensor names.
+EXAONE_GGUF_TENSOR_MAPPING = {
+    "token_embd": "transformer.wte",
+    "blk": "transformer.h",
+    "ffn_up": "mlp.c_fc_1",
+    "ffn_down": "mlp.c_proj",
+    "ffn_gate": "mlp.c_fc_0",
+    "ffn_norm": "ln_2",
+    "attn_norm": "ln_1",  # +
+    "attn_q": "attn.attention.q_proj",  # +
+    "attn_v": "attn.attention.v_proj",  # +
+    "attn_k": "attn.attention.k_proj",  # +
+    "attn_output": "attn.attention.out_proj",
+    "output.weight": "lm_head.weight",
+    "output_norm": "transformer.ln_f",  # +
+}
 
-class LlamaSafetensorWeights(SafetensorWeights, WeightsConverter):
+
+class SafetensorAdapter(WeightsConverter):
+    @staticmethod
+    def load_weights(mapping, weight_path: list[Path], **kwargs):
+        config = kwargs["config"]
+
+        huggingface_config = config.huggingface_config
+        has_rope_scaling = False
+        rope_freqs_tensor = None
+        if rope_scaling := huggingface_config.rope_scaling:
+            if rope_scaling.get("rope_type", "").lower() == "llama3":
+                has_rope_scaling = True
+                rope_freqs_tensor = _compute_rope_scaling(
+                    rope_scaling, huggingface_config
+                )
+
+        return LlamaSafetensorWeights(
+            weight_path,
+            gguf_name_map=mapping,
+            huggingface_config=config.huggingface_config,
+            has_rope_scaling=has_rope_scaling,
+            rope_freqs_tensor=rope_freqs_tensor,
+        )
+
+
+class ExaoneSafetensorAdapter(SafetensorAdapter):
+    @staticmethod
+    def load_weights(weight_path: list[Path], **kwargs):
+        return SafetensorAdapter.load_weights(
+            EXAONE_GGUF_TENSOR_MAPPING, weight_path, **kwargs
+        )
+
+
+class LlamaSafetensorAdapter(SafetensorAdapter):
+    @staticmethod
+    def load_weights(weight_path: list[Path], **kwargs):
+        return SafetensorAdapter.load_weights(
+            LLAMA_GGUF_TENSOR_MAPPING, weight_path, **kwargs
+        )
+
+
+class LlamaSafetensorWeights(SafetensorWeights):
     """Loads Safetensor weights with GGUF names.
 
     Does the following when loading weights:
@@ -73,28 +130,6 @@ class LlamaSafetensorWeights(SafetensorWeights, WeightsConverter):
         self._huggingface_config = huggingface_config
         self._has_rope_scaling = has_rope_scaling
         self._rope_freqs_tensor = rope_freqs_tensor
-
-    @staticmethod
-    def load_weights(weight_path: list[Path], **kwargs):
-        config = kwargs["config"]
-
-        huggingface_config = config.huggingface_config
-        has_rope_scaling = False
-        rope_freqs_tensor = None
-        if rope_scaling := huggingface_config.rope_scaling:
-            if rope_scaling.get("rope_type", "").lower() == "llama3":
-                has_rope_scaling = True
-                rope_freqs_tensor = _compute_rope_scaling(
-                    rope_scaling, huggingface_config
-                )
-
-        return LlamaSafetensorWeights(
-            weight_path,
-            gguf_name_map=LLAMA_GGUF_TENSOR_MAPPING,
-            huggingface_config=config.huggingface_config,
-            has_rope_scaling=has_rope_scaling,
-            rope_freqs_tensor=rope_freqs_tensor,
-        )
 
     def items(self):
         """Iterate through all allocable weights that start with the prefix."""
@@ -169,14 +204,6 @@ class LlamaSafetensorWeights(SafetensorWeights, WeightsConverter):
             return tensor
         tensor = super()._load_tensor(dtype)
 
-        if self.name.endswith(("q_proj.weight", "q_proj.bias")):
-            n_head = self._huggingface_config.num_attention_heads
-            tensor = _permute_weights(tensor, n_head, n_head)
-        elif self.name.endswith(("k_proj.weight", "k_proj.bias")):
-            n_head = self._huggingface_config.num_attention_heads
-            n_kv_head = self._huggingface_config.num_key_value_heads
-            tensor = _permute_weights(tensor, n_head, n_kv_head)
-
         return tensor
 
 
@@ -209,17 +236,3 @@ def _compute_rope_scaling(rope_scaling, huggingface_config: LlamaConfig):
             )
             rope_factors.append(1 / ((1 - smooth) / factor + smooth))
     return torch.tensor(rope_factors, dtype=torch.float32)
-
-
-def _permute_weights(weights: torch.Tensor, n_head: int, n_head_kv: int | None):
-    # From llama.cpp's HF to GGUF conversion script:
-    # https://github.com/ggerganov/llama.cpp/blob/40c6d79fb52f995f47507fedfeaae2ac05d9b35c/convert_hf_to_gguf.py#L1571C1-L1578C41
-    if n_head_kv is not None and n_head != n_head_kv:
-        n_head = n_head_kv
-    return (
-        weights.reshape(
-            n_head, 2, weights.shape[0] // n_head // 2, *weights.shape[1:]
-        )
-        .swapaxes(1, 2)
-        .reshape(weights.shape)
-    )

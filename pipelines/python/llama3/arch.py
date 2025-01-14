@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
+    RopeType,
     SupportedArchitecture,
     SupportedEncoding,
     TextTokenizer,
@@ -20,7 +21,10 @@ from max.pipelines import (
 from max.pipelines.kv_cache import KVCacheStrategy
 
 from .model import Llama3Model
-from .safetensor_converter import LlamaSafetensorWeights
+from .safetensor_converter import (
+    ExaoneSafetensorAdapter,
+    LlamaSafetensorAdapter,
+)
 
 llama_arch = SupportedArchitecture(
     name="LlamaForCausalLM",
@@ -50,6 +54,36 @@ llama_arch = SupportedArchitecture(
     },
     pipeline_model=Llama3Model,
     tokenizer=TextTokenizer,
+    rope_type=RopeType.normal,
     default_weights_format=WeightsFormat.gguf,
-    weight_converters={WeightsFormat.safetensors: LlamaSafetensorWeights},
+    weight_converters={WeightsFormat.safetensors: LlamaSafetensorAdapter},
+)
+
+exaone_arch = SupportedArchitecture(
+    name="ExaoneForCausalLM",
+    default_encoding=SupportedEncoding.float32,
+    supported_encodings={
+        SupportedEncoding.q4_k: [KVCacheStrategy.NAIVE],
+        SupportedEncoding.q6_k: [KVCacheStrategy.NAIVE],
+        SupportedEncoding.float32: [
+            KVCacheStrategy.PAGED,
+            KVCacheStrategy.CONTINUOUS,
+            KVCacheStrategy.NAIVE,
+        ],
+        SupportedEncoding.bfloat16: [
+            KVCacheStrategy.PAGED,
+            KVCacheStrategy.CONTINUOUS,
+            KVCacheStrategy.NAIVE,
+        ],
+    },
+    example_repo_ids=[
+        "LGAI-EXAONE/EXAONE-3.5-2.4B-Instruct",
+        "LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct",
+        "LGAI-EXAONE/EXAONE-3.5-32B-Instruct",
+    ],
+    pipeline_model=Llama3Model,
+    tokenizer=TextTokenizer,
+    rope_type=RopeType.neox,
+    default_weights_format=WeightsFormat.gguf,
+    weight_converters={WeightsFormat.safetensors: ExaoneSafetensorAdapter},
 )

@@ -28,6 +28,7 @@ from .sampling import token_sampler
 
 ARCH_SAFE_VRAM_USAGE_LIMIT = {
     "DeepseekCoder": 0.96,
+    "ExaoneForCausalLM": 0.96,
     "LlamaForCausalLM": 0.96,
     "MistralForCausalLM": 0.96,
 }

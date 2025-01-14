@@ -14,8 +14,7 @@
 
 from max.pipelines import PIPELINE_REGISTRY
 
-from .arch import llama_arch
-from .config import get_llama_huggingface_file
+from .arch import exaone_arch, llama_arch
 from .model import Llama3Model
 
 __all__ = [
@@ -24,3 +23,4 @@ __all__ = [
 ]
 
 PIPELINE_REGISTRY.register(llama_arch)
+PIPELINE_REGISTRY.register(exaone_arch)
