@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Union
 
 import numpy as np
 from max.dtype import DType
@@ -34,9 +33,7 @@ def fused_qkv_ragged_matmul(
     input: TensorValue,
     input_row_offsets: TensorValue,
     wqkv: TensorValue,
-    kv_collection: Union[
-        ContinuousBatchingKVCacheCollection, PagedKVCacheCollection
-    ],
+    kv_collection: ContinuousBatchingKVCacheCollection | PagedKVCacheCollection,
     layer_idx: TensorValue,
     n_heads: int,
 ) -> TensorValue:
@@ -208,7 +205,7 @@ def fused_qk_ragged_rope(
     kv_params: KVCacheParams,
     input: TensorValue,
     input_row_offsets: TensorValue,
-    kv_collection: ContinuousBatchingKVCacheCollection,
+    kv_collection: ContinuousBatchingKVCacheCollection | PagedKVCacheCollection,
     freqs_cis: TensorValue,
     layer_idx: TensorValue,
     interleaved: bool = True,
@@ -470,7 +467,7 @@ def flash_attention_ragged(
     kv_params: KVCacheParams,
     input: TensorValue,
     input_row_offsets: TensorValue,
-    kv_collection: ContinuousBatchingKVCacheCollection,
+    kv_collection: ContinuousBatchingKVCacheCollection | PagedKVCacheCollection,
     layer_idx: TensorValue,
     mask_variant: MHAMaskVariant,
 ) -> TensorValue:
@@ -536,7 +533,7 @@ def cross_attention_ragged(
     kv_params: KVCacheParams,
     input: TensorValue,
     input_row_offsets: TensorValue,
-    kv_collection: ContinuousBatchingKVCacheCollection,
+    kv_collection: ContinuousBatchingKVCacheCollection | PagedKVCacheCollection,
     layer_idx: TensorValue,
     mask_variant: MHAMaskVariant,
     kv_input_row_offsets: TensorValue,
