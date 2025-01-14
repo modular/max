@@ -234,6 +234,7 @@ class PipelineRegistry:
 
             else:
                 msg = f"quantization_encoding of '{pipeline_config.quantization_encoding}' not supported by MAX engine, falling back to HuggingFace."
+                logging.info(msg)
                 pipeline_config.engine = PipelineEngine.HUGGINGFACE
                 return pipeline_config
 

@@ -67,6 +67,7 @@ class SupportedEncoding(str, Enum):
 
     @classmethod
     def parse_from_file_name(cls, name: str):
+        name = name.lower()
         if "f32" in name or "float32" in name:
             return SupportedEncoding.float32
         elif "bf16" in name or "bfloat16" in name:
