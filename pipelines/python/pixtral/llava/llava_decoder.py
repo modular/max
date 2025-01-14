@@ -26,7 +26,17 @@ from nn.layer import Layer
 
 @dataclass
 class Transformer(Layer):
-    """Transformer model consisting for TransformerBlock layers."""
+    """Transformer model consisting for TransformerBlock layers.
+
+    The differences between this transformer and the transformer in nn:
+
+    - It takes as input the token embeddings rather than the token ids.
+    - It skips the embedding generation (first step in nn.Transformer).
+
+    TODO(AIPIPE-273): Once we have mo.if, we can update nn.Transformer
+    to only generate embeddings if token ids are passed. That would
+    eliminate the need for this class.
+    """
 
     dim: int
     n_heads: int
@@ -46,9 +56,11 @@ class Transformer(Layer):
         ],
         **kwargs,
     ) -> tuple[TensorValue, ...]:
-        """Takes as input:
-        embeds: embeddings of the sequence of text tokens and possibly images.
-        shape = [batch_size, n_patches, hidden_dim]
+        """Transformer model consisting of TransformerBlock layers.
+
+        Args:
+            embeds: embeddings of the sequence of text tokens and possibly images.
+                shape = [batch_size, n_patches, hidden_dim]
         """
         h = embeds
 

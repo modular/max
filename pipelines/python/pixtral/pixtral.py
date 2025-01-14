@@ -18,7 +18,6 @@ import time
 
 import numpy as np
 from max.driver import Tensor
-from max.dtype import DType
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
 from max.pipelines import (
@@ -34,7 +33,7 @@ from max.pipelines.kv_cache import (
     load_kv_manager,
 )
 
-from .model.graph import _build_graph
+from .model.graph import _build_text_graph, _build_vision_graph
 from .vision_encoder.attention_utils import causal_attention_mask_2d_from_imgs
 
 
@@ -45,12 +44,39 @@ class PixtralModel(PipelineModel):
         self, pipeline_config: PipelineConfig, session: InferenceSession
     ) -> None:
         super().__init__(pipeline_config, session)
-        self.model = self.load_model(session)
+        self.vision_model, self.language_model = self.load_model(session)
+        # Note that in a multimodal model, the language model is the last model in the
+        # pipeline. Unfortunately, self.model is still being used (and exposed)
+        # in the token generation code, so we still need to set it here.
+        self.model = self.language_model
 
     def execute(self, *model_inputs: Tensor) -> ModelOutputs:  # type: ignore
-        model_outputs = self.model.execute(
-            *model_inputs, copy_inputs_to_device=False
+        model_input_list = list(model_inputs)
+
+        if (
+            len(model_input_list) == 8
+        ):  # vision_graph has 4 inputs: pixel_values and attention_mask
+            image_embeds = self.vision_model.execute(
+                *model_input_list[2:4], copy_inputs_to_device=False
+            )[0]
+            # drop pixel_values and attention_mask from inputs for the language model
+            model_input_list = model_input_list[:2] + model_input_list[4:]
+        else:
+            # batch_size * num_concurrent_media * num_patches are set to 0 here to imitate a dummy tensor (used in text-only mode).
+            image_embeds = Tensor.zeros(
+                shape=[
+                    0,
+                    0,
+                    self.pipeline_config.huggingface_config.text_config.hidden_size,
+                ],
+                dtype=self.pipeline_config.dtype,
+            ).to(self.pipeline_config.device)
+
+        model_input_list.insert(1, image_embeds)  # type: ignore
+        model_outputs = self.language_model.execute(
+            *model_input_list, copy_inputs_to_device=False
         )
+        assert not self.pipeline_config.enable_echo
         assert isinstance(model_outputs[0], Tensor)
         return ModelOutputs(next_token_logits=model_outputs[0])
 
@@ -73,10 +99,15 @@ class PixtralModel(PipelineModel):
         )
         input_ids = Tensor.from_numpy(tokens).to(self.pipeline_config.device)
 
-        if context_batch[0].pixel_values:
+        # TODO: change this to work with all contexts in the batch.
+        if context_batch[
+            0
+        ].pixel_values:  # check if the request has pixel_values
             # Get first image in first batch and permute the order to (HWC).
             # Pixtral processor returns CHW images.
-            image = np.transpose(context_batch[0].pixel_values[0], (1, 2, 0))
+            image = np.ascontiguousarray(
+                np.transpose(context_batch[0].pixel_values[0], (1, 2, 0))
+            )
             pixel_values = Tensor.from_numpy(image).to(
                 self.pipeline_config.device
             )
@@ -91,18 +122,15 @@ class PixtralModel(PipelineModel):
             attention_mask = Tensor.from_numpy(attention_mask).to(
                 self.pipeline_config.device
             )
-        else:
-            # Model assumes exactly one image as input. Pass an empty tensor which is never accessed.
-            pixel_values = Tensor.zeros(
-                dtype=DType.float32, shape=[304, 400, 3]
-            ).to(self.pipeline_config.device)
-            attention_mask = Tensor.zeros(
-                dtype=DType.float32, shape=[1, 1, 475, 475]
-            ).to(self.pipeline_config.device)
+            return (
+                input_ids,
+                input_row_offsets,
+                pixel_values,
+                attention_mask,
+            )
+
         return (
             input_ids,
-            pixel_values,
-            attention_mask,
             input_row_offsets,
         )
 
@@ -111,20 +139,14 @@ class PixtralModel(PipelineModel):
         next_tokens: Tensor,
         prev_model_inputs: tuple[Tensor, ...],
     ) -> tuple[Tensor, ...]:
-        (
-            prev_input_ids,
-            prev_pixel_values,
-            prev_attention_mask,
-            old_row_offsets,
-        ) = prev_model_inputs
+        # input_ids, old_row_offsets, Optional: [pixel_values, attention_mask]
+        old_row_offsets = prev_model_inputs[1]
 
         row_offsets_size = old_row_offsets.shape[0]
         next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
-
+        # In multi-step execution, don't re-pass the pixel_values.
         return (
             next_tokens,
-            prev_pixel_values,
-            prev_attention_mask,
             next_row_offsets,
         )
 
@@ -163,7 +185,7 @@ class PixtralModel(PipelineModel):
             devices=self.pipeline_config.devices,
         )
 
-    def load_model(self, session: InferenceSession) -> Model:
+    def load_model(self, session: InferenceSession) -> tuple[Model, Model]:
         if self.pipeline_config.enable_echo:
             msg = "Pixtral model does not currently implement enable echo."
             raise ValueError(msg)
@@ -185,37 +207,38 @@ class PixtralModel(PipelineModel):
             )
             raise ValueError(msg)
 
-        if serialized_path := self.pipeline_config.serialized_model_path:
-            # Hydrate all weights to be referenced by the serialized graph.
-            weights_registry = {}
-            for name, weight in self._weights.items():
-                weights_registry[name] = weight.raw_tensor()
-            logging.info(
-                "Loading serialized model from ", serialized_path, "..."
-            )
-            return session.load(
-                serialized_path,
-                weights_registry=weights_registry,
-            )
-        else:
-            logging.info("Building model...")
-            graph = _build_graph(
-                self.pipeline_config,
-                self._weights,
-                self._get_kv_params(),
-                self.kv_manager,
-            )
-            logging.info("Compiling...")
-            before = time.perf_counter()
-            model = session.load(
-                graph, weights_registry=self._weights.allocated_weights
-            )
-            after = time.perf_counter()
-            logging.info(f"Compiling model took {after - before:.6f} seconds")
-            if (
-                export_path
-                := self.pipeline_config.save_to_serialized_model_path
-            ):
-                logging.info("Exporting serialized model to %s", export_path)
-                model._export_mef(export_path)
-            return model
+        logging.info("Building vision model...")
+        vision_graph = _build_vision_graph(
+            self.pipeline_config,
+            self._weights,
+        )
+        logging.info("Compiling...")
+        before = time.perf_counter()
+        vision_model = session.load(
+            vision_graph, weights_registry=self._weights.allocated_weights
+        )
+        after = time.perf_counter()
+        logging.info(f"Compiling model took {after - before:.6f} seconds")
+        if export_path := self.pipeline_config.save_to_serialized_model_path:
+            logging.info("Exporting serialized model to %s", export_path)
+            vision_model._export_mef(export_path)
+
+        logging.info("Building text model...")
+        text_graph = _build_text_graph(
+            self.pipeline_config,
+            self._weights,
+            self._get_kv_params(),
+            self.kv_manager,
+        )
+        logging.info("Compiling...")
+        before = time.perf_counter()
+        text_model = session.load(
+            text_graph, weights_registry=self._weights.allocated_weights
+        )
+        after = time.perf_counter()
+        logging.info(f"Compiling model took {after - before:.6f} seconds")
+        if export_path := self.pipeline_config.save_to_serialized_model_path:
+            logging.info("Exporting serialized model to %s", export_path)
+            text_model._export_mef(export_path)
+
+        return vision_model, text_model

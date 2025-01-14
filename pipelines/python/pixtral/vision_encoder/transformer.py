@@ -84,6 +84,7 @@ class Transformer(Layer):
 
     n_heads: int
     layers: list[TransformerBlock]
+    dtype: DType
 
     def __call__(
         self,
@@ -102,5 +103,4 @@ class Transformer(Layer):
                 **kwargs,
             )
 
-        # Always return float32 logits, no matter the activation type
-        return ops.cast(h, DType.float32)
+        return ops.cast(h, self.dtype)
