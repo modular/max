@@ -749,6 +749,11 @@ async def benchmark(
         )
     outputs: List[RequestFuncOutput] = await asyncio.gather(*tasks)
 
+    if pbar is not None:
+        pbar.close()
+
+    benchmark_duration = (time.perf_counter_ns() - benchmark_start_time) / 1e9
+
     if print_inputs_and_outputs:
         print("Generated output text:")
         for req_id, output in enumerate(outputs):
@@ -760,11 +765,6 @@ async def benchmark(
                     "output": output.generated_text,
                 }
             )
-
-    if pbar is not None:
-        pbar.close()
-
-    benchmark_duration = (time.perf_counter_ns() - benchmark_start_time) / 1e9
 
     if collect_gpu_stats:
         gpu_metrics = collector.collect()
