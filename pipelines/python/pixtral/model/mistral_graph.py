@@ -12,13 +12,17 @@
 # ===----------------------------------------------------------------------=== #
 """Build a Mistral model via Graph API from Safetensor weights."""
 
+from typing import Union
+
 from max.dtype import DType
 from max.graph import Graph, ops
 from max.graph.weights import SafetensorWeights
 from max.pipelines import PipelineConfig
 from max.pipelines.kv_cache import (
+    FetchContinuousBatchingKVCacheCollection,
     FetchPagedKVCacheCollection,
     KVCacheParams,
+    KVCacheStrategy,
 )
 from nn import (
     MLP,
@@ -212,7 +216,18 @@ def _transformer(
             weights.language_model.lm_head,
         )
 
-        kv_collection_cls = FetchPagedKVCacheCollection
+        kv_collection_cls: Union[
+            type[FetchContinuousBatchingKVCacheCollection],
+            type[FetchPagedKVCacheCollection],
+        ]
+        if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
+            kv_collection_cls = FetchContinuousBatchingKVCacheCollection
+        elif kv_params.cache_strategy == KVCacheStrategy.PAGED:
+            kv_collection_cls = FetchPagedKVCacheCollection
+        else:
+            raise ValueError(
+                f"Unsupported caching strategy {kv_params.cache_strategy}"
+            )
 
         return Transformer(
             dim=params.huggingface_config.text_config.hidden_size,

@@ -46,7 +46,6 @@ class Transformer(Layer):
     output: Linear
     embedding: Embedding
     kv_params: KVCacheParams
-    # TODO: Update type hint. Some attention implementation require a continuous cache.
     kv_collection_constructor: Union[
         FetchContinuousBatchingKVCacheCollection, FetchPagedKVCacheCollection
     ]
