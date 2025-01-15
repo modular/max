@@ -32,6 +32,11 @@ class TokenGeneratorRequestTool(TypedDict):
     function: TokenGeneratorRequestFunction
 
 
+class TokenGeneratorResponseFormat(TypedDict):
+    type: str
+    json_schema: dict
+
+
 class TokenGeneratorRequestMessage(TypedDict):
     role: Literal["system", "user", "assistant"]
     content: Union[str, list[dict[str, Any]]]
@@ -113,6 +118,11 @@ class TokenGeneratorRequest:
     A list of tools that can be invoked during the generation process. This
     allows the model to utilize external functionalities or APIs to enhance its
     responses.
+    """
+    response_format: Optional[TokenGeneratorResponseFormat] = None
+    """
+    Specifies the desired format for the model's output. When set, it enables
+    structured generation, which adheres to the json_schema provided.
     """
     max_new_tokens: Optional[int] = None
     """
