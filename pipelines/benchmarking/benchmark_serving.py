@@ -1012,6 +1012,11 @@ def main(args: argparse.Namespace):
         )
     )
 
+    # Benchmark run failed if any failed requests
+    if args.num_prompts != benchmark_result["completed"]:
+        logger.info("finished benchmark run: Failed.")
+        sys.exit(1)
+
     # Save config and results to json
     if args.save_result:
         logger.info("saving results")
@@ -1056,7 +1061,7 @@ def main(args: argparse.Namespace):
         with open(file_name, "w") as outfile:
             json.dump(result_json, outfile)
 
-    logger.info("finished benchmark run")
+    logger.info("finished benchmark run: Success.")
 
 
 if __name__ == "__main__":
