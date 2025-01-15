@@ -18,6 +18,7 @@ from max.dtype import DType
 from max.graph import TensorValue, TensorValueLike, ops
 from max.pipelines.kv_cache import (
     FetchContinuousBatchingKVCacheCollection,
+    FetchPagedKVCacheCollection,
     KVCacheParams,
 )
 from nn import Embedding, Linear, LPLayerNorm, RMSNorm, TransformerBlock
@@ -45,7 +46,10 @@ class Transformer(Layer):
     output: Linear
     embedding: Embedding
     kv_params: KVCacheParams
-    kv_collection_constructor: FetchContinuousBatchingKVCacheCollection
+    # TODO: Update type hint. Some attention implementation require a continuous cache.
+    kv_collection_constructor: Union[
+        FetchContinuousBatchingKVCacheCollection, FetchPagedKVCacheCollection
+    ]
     all_logits: bool = False
 
     def __call__(
@@ -61,9 +65,13 @@ class Transformer(Layer):
         Args:
             embeds: embeddings of the sequence of text tokens and possibly images.
                 shape = [batch_size, n_patches, hidden_dim]
+            kv_cache_inputs: A tuple of 4 tensor values. In the case of paged attention,
+                (blocks, cache_lengths, lookup_table, is_cache_empty). In the case of
+                continuous attention, (blocks, cache_lengths, lookup_table, max_lengths).
         """
         h = embeds
 
+        # Construct a kv cache for use downstream.
         kv_collection = self.kv_collection_constructor(*kv_cache_inputs)
 
         for _, layer in enumerate(self.layers):

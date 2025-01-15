@@ -13,11 +13,14 @@
 """An opaque KV Cache optimized attention mechanism with Rope."""
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Union
 
 from max.dtype import DType
 from max.graph import DeviceRef, TensorValue, ops
-from max.pipelines.kv_cache import ContinuousBatchingKVCacheCollection
+from max.pipelines.kv_cache import (
+    ContinuousBatchingKVCacheCollection,
+    PagedKVCacheCollection,
+)
 
 from ..kernels import (
     MHAMaskVariant,
@@ -43,7 +46,9 @@ class AttentionWithRope(AttentionImpl):
     def __call__(
         self,
         x: TensorValue,
-        kv_collection: ContinuousBatchingKVCacheCollection,
+        kv_collection: Union[
+            ContinuousBatchingKVCacheCollection, PagedKVCacheCollection
+        ],
         **kwargs,
     ) -> TensorValue:
         # Get attributes from input.
@@ -138,7 +143,9 @@ class AttentionWithRopeQKV(AttentionImplQKV):
     def __call__(
         self,
         x: TensorValue,
-        kv_collection: ContinuousBatchingKVCacheCollection,
+        kv_collection: Union[
+            ContinuousBatchingKVCacheCollection, PagedKVCacheCollection
+        ],
         **kwargs,
     ) -> TensorValue:
         # Get attributes from input.

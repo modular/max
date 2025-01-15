@@ -20,7 +20,9 @@ from max.graph import TensorValue, TensorValueLike, ops
 from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheCollection,
     FetchContinuousBatchingKVCacheCollection,
+    FetchPagedKVCacheCollection,
     KVCacheParams,
+    PagedKVCacheCollection,
 )
 
 from ..attention.interfaces import AttentionImpl, AttentionImplQKV
@@ -43,11 +45,14 @@ class TransformerBlock(Layer):
     def __call__(
         self,
         x: TensorValue,
-        kv_collection: ContinuousBatchingKVCacheCollection,
+        kv_collection: ContinuousBatchingKVCacheCollection
+        | PagedKVCacheCollection,
         **kwargs,
     ) -> TensorValue:
         attn_out = self.attention(
-            self.attention_norm(x), kv_collection, **kwargs
+            self.attention_norm(x),
+            kv_collection,
+            **kwargs,
         )
 
         h = x + attn_out
@@ -67,7 +72,9 @@ class Transformer(Layer):
     output: Linear
     embedding: Embedding
     kv_params: KVCacheParams
-    kv_collection_constructor: FetchContinuousBatchingKVCacheCollection
+    kv_collection_constructor: (
+        FetchContinuousBatchingKVCacheCollection | FetchPagedKVCacheCollection
+    )
     all_logits: bool = False
 
     def __call__(

@@ -17,7 +17,7 @@ from max.graph import Graph, ops
 from max.graph.weights import SafetensorWeights
 from max.pipelines import PipelineConfig
 from max.pipelines.kv_cache import (
-    FetchContinuousBatchingKVCacheCollection,
+    FetchPagedKVCacheCollection,
     KVCacheParams,
 )
 from nn import (
@@ -212,7 +212,7 @@ def _transformer(
             weights.language_model.lm_head,
         )
 
-        kv_collection_cls = FetchContinuousBatchingKVCacheCollection
+        kv_collection_cls = FetchPagedKVCacheCollection
 
         return Transformer(
             dim=params.huggingface_config.text_config.hidden_size,

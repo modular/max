@@ -13,10 +13,14 @@
 """A vanilla opaque KV Cache optimized attention mechanism."""
 
 from dataclasses import dataclass
+from typing import Union
 
 from max.dtype import DType
 from max.graph import TensorValue, ops
-from max.pipelines.kv_cache import ContinuousBatchingKVCacheCollection
+from max.pipelines.kv_cache import (
+    ContinuousBatchingKVCacheCollection,
+    PagedKVCacheCollection,
+)
 
 from ..kernels import flash_attention, fused_qkv_matmul
 from .interfaces import AttentionImpl, AttentionImplQKV
@@ -27,9 +31,16 @@ class Attention(AttentionImpl):
     def __call__(
         self,
         x: TensorValue,
-        kv_collection: ContinuousBatchingKVCacheCollection,
+        kv_collection: Union[
+            ContinuousBatchingKVCacheCollection, PagedKVCacheCollection
+        ],
         **kwargs,
     ) -> TensorValue:
+        if isinstance(kv_collection, PagedKVCacheCollection):
+            raise ValueError(
+                "Paged attention not supported for Attention on non-ragged tensors."
+            )
+
         if "attention_mask" not in kwargs:
             raise ValueError("attention_mask not passed as input to Attention")
         attention_mask = kwargs["attention_mask"]
@@ -83,9 +94,16 @@ class AttentionQKV(AttentionImplQKV):
     def __call__(
         self,
         x: TensorValue,
-        kv_collection: ContinuousBatchingKVCacheCollection,
+        kv_collection: Union[
+            ContinuousBatchingKVCacheCollection, PagedKVCacheCollection
+        ],
         **kwargs,
     ) -> TensorValue:
+        if isinstance(kv_collection, PagedKVCacheCollection):
+            raise ValueError(
+                "Paged attention not supported for Attention on non-ragged tensors."
+            )
+
         if "attention_mask" not in kwargs:
             raise ValueError("attention_mask not passed as input to Attention")
         attention_mask = kwargs["attention_mask"]

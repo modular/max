@@ -14,11 +14,13 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Union
 
 from max.graph import TensorValue, TensorValueLike
 from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheCollection,
     KVCacheParams,
+    PagedKVCacheCollection,
 )
 
 from ..layer import Layer
@@ -95,8 +97,9 @@ class AttentionImpl(ABC, Layer):
     def __call__(
         self,
         x: TensorValue,
-        # TODO update type hints
-        kv_collection: ContinuousBatchingKVCacheCollection,
+        kv_collection: Union[
+            ContinuousBatchingKVCacheCollection, PagedKVCacheCollection
+        ],
         **kwargs,
     ) -> TensorValue: ...
 
@@ -192,7 +195,8 @@ class AttentionImplQKV(ABC, Layer):
     def __call__(
         self,
         x: TensorValue,
-        # TODO update type hints
-        kv_collection: ContinuousBatchingKVCacheCollection,
+        kv_collection: Union[
+            ContinuousBatchingKVCacheCollection, PagedKVCacheCollection
+        ],
         **kwargs,
     ) -> TensorValue: ...
