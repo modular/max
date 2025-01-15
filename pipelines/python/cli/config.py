@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import click
-from max.driver import DeviceSpec
+from max.driver import DeviceSpec, accelerator_count
 from max.pipelines import PipelineConfig, SupportedEncoding
 
 from .device_options import DevicesOptionType
@@ -166,17 +166,28 @@ def pipeline_config_options(func):
     )
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        kwargs["device_specs"] = []
         if kwargs["use_gpu"]:
-            kwargs["device_specs"] = [
-                DeviceSpec.accelerator(id=gpu_id)
-                for gpu_id in kwargs["use_gpu"]
-            ]
+            num_devices_available = accelerator_count()
+
+            for gpu_id in kwargs["use_gpu"]:
+                if gpu_id >= num_devices_available:
+                    msg = f"GPU {gpu_id} was requested but "
+                    if num_devices_available == 0:
+                        msg += "no GPU devices were found."
+                    else:
+                        msg += (
+                            f"only found {num_devices_available} GPU devices."
+                        )
+                    raise ValueError(msg)
+                kwargs["device_specs"].append(DeviceSpec.accelerator(id=gpu_id))
+
             # If the user is passing in a specific, quantization_encoding don't overwrite it.
             # If it is empty, set it to default to bfloat16 on gpu.
             if kwargs["quantization_encoding"] is None:
                 kwargs["quantization_encoding"] = SupportedEncoding.bfloat16
         else:
-            kwargs["device_specs"] = [DeviceSpec.cpu()]
+            kwargs["device_specs"].append(DeviceSpec.cpu())
 
         del kwargs["use_gpu"]
 

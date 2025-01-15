@@ -652,7 +652,14 @@ class PipelineConfig:
             return self._devices
         num_devices_available = accelerator_count()
         for device_spec in self.device_specs:
-            assert device_spec.id < num_devices_available
+            if device_spec.id >= num_devices_available:
+                msg = f"Device {device_spec.id} was requested but "
+
+                if num_devices_available == 0:
+                    msg += "no devices were found."
+                else:
+                    msg += f"only found {num_devices_available} devices."
+                raise ValueError(msg)
             self._devices.append(
                 CPU(device_spec.id)
                 if device_spec.device_type == "cpu"
