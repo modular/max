@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import warnings
 from typing import Any, Optional
 
@@ -51,8 +52,31 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
         self._tokenizer = AutoTokenizer.from_pretrained(
             pipeline_config.huggingface_repo_id
         )
-        self._eos_token_id = self._tokenizer.eos_token_id
 
+        eos_token_id = self._tokenizer.eos_token_id
+
+        # Expand eos tokens if more are provided in pipeline_config
+        if "eos_token_id" in pipeline_config.huggingface_config:
+            eos_tokens = pipeline_config.huggingface_config.eos_token_id
+            if isinstance(eos_tokens, int):
+                if eos_tokens != eos_token_id:
+                    msg = f"eos_token_id provided in huggingface config ({eos_tokens}), does not match provided eos_token_id ({eos_token_id}), using provided eos_token_id"
+                    logging.warning(msg)
+
+                eos_token_id = set([eos_tokens])
+            elif isinstance(eos_tokens, list):
+                if eos_token_id in eos_tokens:
+                    eos_token_id = set(eos_tokens)
+                else:
+                    eos_token_id = set([eos_token_id])
+            else:
+                msg = f"eos_token_id in huggingface_config, is neither int or list: {eos_tokens}"
+                logging.warning(msg)
+                self._eos_token_id = set([eos_token_id])
+        else:
+            eos_token_id = set([eos_token_id])
+
+        self._eos_token_id = eos_token_id
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
 
@@ -153,12 +177,15 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
                     self._cache.tokens[context.cache_seq_id], next_tokens
                 )
 
-                if not context.is_done(self._eos_token_id):
+                if (
+                    next_token_id in self._eos_token_id
+                    or (context.current_length + step) >= context.max_length
+                ):
+                    is_done[request_id] = True
+                else:
                     step_res[request_id] = TextResponse(
                         next_token=int(next_token_id)
                     )
-                else:
-                    is_done[request_id] = True
 
             res.append(step_res)
 
