@@ -282,7 +282,7 @@ class PipelineRegistry:
         if pipeline_config.cache_strategy not in supported_cache_strategies:
             supported_strategy = supported_cache_strategies[0]
 
-            msg = f"cache_strategy, not supported for '{pipeline_config.quantization_encoding}', using '{supported_strategy}' cache strategy."
+            msg = f"cache_strategy = '{pipeline_config.cache_strategy}' not supported for '{pipeline_config.quantization_encoding}', using '{supported_strategy}' cache strategy."
             logging.info(msg)
 
             pipeline_config.cache_strategy = supported_strategy
