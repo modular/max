@@ -92,14 +92,14 @@ def main():
 
     # Set default values
     seed()
-    prompt = str("")
-    negative_prompt = str("")
+    prompt = String("")
+    negative_prompt = String("")
     num_steps = 25
     hf = Python.import_module("huggingface_hub")
     model_dir = Path(
-        str(hf.snapshot_download("modularai/stable-diffusion-1.5-onnx"))
+        String(hf.snapshot_download("modularai/stable-diffusion-1.5-onnx"))
     )
-    output = str("output.png")
+    output = String("output.png")
 
     for i in range(1, len(argv), 2):
         if argv[i] == "--prompt":
@@ -114,7 +114,7 @@ def main():
             output = String(argv[i + 1])
         else:
             print(USAGE)
-            raise Error(str("Unknown option: ") + argv[i])
+            raise Error(String("Unknown option: ") + argv[i])
 
     # Only required arg is --prompt
     if prompt == "":
