@@ -15,6 +15,7 @@ from .config import (
 from .context import InputContext, TextAndVisionContext, TextContext
 from .hf_utils import HuggingFaceFile
 from .interfaces import (
+    PipelineTask,
     PipelineTokenizer,
     TokenGenerator,
     TokenGeneratorContext,
@@ -37,6 +38,7 @@ __all__ = [
     "HuggingFaceFile",
     "PipelineConfig",
     "PipelineEngine",
+    "PipelineTask",
     "HuggingFaceFile",
     "PIPELINE_REGISTRY",
     "SupportedArchitecture",
