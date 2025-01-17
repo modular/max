@@ -207,38 +207,65 @@ class PixtralModel(PipelineModel):
             )
             raise ValueError(msg)
 
-        logging.info("Building vision model...")
-        vision_graph = _build_vision_graph(
-            self.pipeline_config,
-            self._weights,
-        )
-        logging.info("Compiling...")
-        before = time.perf_counter()
-        vision_model = session.load(
-            vision_graph, weights_registry=self._weights.allocated_weights
-        )
-        after = time.perf_counter()
-        logging.info(f"Compiling model took {after - before:.6f} seconds")
-        if export_path := self.pipeline_config.save_to_serialized_model_path:
-            logging.info("Exporting serialized model to %s", export_path)
-            vision_model._export_mef(export_path)
+        if serialized_path := self.pipeline_config.serialized_model_path:
+            # Hydrate all weights to be referenced by the serialized path.
+            weights_registry = {}
+            for name, weight in self._weights.items():
+                weights_registry[name] = weight.raw_tensor()
 
-        logging.info("Building text model...")
-        text_graph = _build_text_graph(
-            self.pipeline_config,
-            self._weights,
-            self._get_kv_params(),
-            self.kv_manager,
-        )
-        logging.info("Compiling...")
-        before = time.perf_counter()
-        text_model = session.load(
-            text_graph, weights_registry=self._weights.allocated_weights
-        )
-        after = time.perf_counter()
-        logging.info(f"Compiling model took {after - before:.6f} seconds")
-        if export_path := self.pipeline_config.save_to_serialized_model_path:
-            logging.info("Exporting serialized model to %s", export_path)
-            text_model._export_mef(export_path)
+            def serialized_load(serialized_path):
+                logging.info(
+                    "Loading serialized model from %s", serialized_path
+                )
+                before = time.perf_counter()
+                model = session.load(
+                    f"{serialized_path}", weights_registry=weights_registry
+                )
+                after = time.perf_counter()
+                logging.info(
+                    f"Loading serialized model took {after - before:.6f} seconds"
+                )
+                return model
+
+            vision_model = serialized_load(f"{serialized_path}.vision")
+            text_model = serialized_load(f"{serialized_path}.text")
+
+        else:
+
+            def compile_model(graph, label, export_path=None):
+                logging.info(f"Compiling {label} model...")
+                before = time.perf_counter()
+                model = session.load(
+                    graph,
+                    weights_registry=self._weights.allocated_weights,
+                )
+                after = time.perf_counter()
+                logging.info(
+                    f"Compiling {label} model took {after - before:.6f} seconds"
+                )
+                if export_path:
+                    mef_path = f"{export_path}.{label}"
+                    logging.info(
+                        f"Exporting serialized {label} model to {mef_path}"
+                    )
+                    model._export_mef(mef_path)
+                return model
+
+            export_path = self.pipeline_config.save_to_serialized_model_path
+            logging.info("Building vision model...")
+            vision_graph = _build_vision_graph(
+                self.pipeline_config,
+                self._weights,
+            )
+            vision_model = compile_model(vision_graph, "vision", export_path)
+
+            logging.info("Building text model...")
+            text_graph = _build_text_graph(
+                self.pipeline_config,
+                self._weights,
+                self._get_kv_params(),
+                self.kv_manager,
+            )
+            text_model = compile_model(text_graph, "text", export_path)
 
         return vision_model, text_model
