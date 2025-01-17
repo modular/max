@@ -9,5 +9,5 @@ name = "local"
 [tasks]
 
 [dependencies]
-max = ">=24.4.0,<25"
+max = "25.1.0.dev2025011705"
 pytorch = ">=2.5.1,<3"

@@ -8,6 +8,6 @@ platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 
 [dependencies]
 python = ">=3.9,<3.13"
-max = "*"
+max = "25.1.0.dev2025011705"
 pip = ">=24.0,<25"
 jupyterlab = ">=4.2.5,<5"

@@ -12,7 +12,7 @@ dev-server = "fastapi dev main.py"
 format = "mojo format ."
 
 [dependencies]
-max = ">=24.4.0,<25"
+max = "25.1.0.dev2025011705"
 python = ">=3.8,<3.12"
 pytorch = ">=2.5.1,<3"
 

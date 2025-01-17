@@ -12,4 +12,4 @@ mandelbrot = { cmd = "mojo package kernels/ -o kernels.mojopkg && python mandelb
 
 [dependencies]
 python = ">=3.9,<3.13"
-max = ">=24.6.0.dev2024090821"
+max = "25.1.0.dev2025011705"

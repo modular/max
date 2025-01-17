@@ -11,4 +11,4 @@ basic = "mojo basics/basic.🔥"
 
 [dependencies]
 python = ">=3.9,<3.13"
-max = "*"
+max = "25.1.0.dev2025011705"

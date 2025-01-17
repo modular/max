@@ -8,7 +8,7 @@ platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 
 [dependencies]
 python = ">=3.9,<3.13"
-max = "*"
+max = "25.1.0.dev2025011705"
 tritonclient-http = ">=2.26.0,<3"
 tree = ">=2.1.3,<3"
 numpy = "<2.0"

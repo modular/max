@@ -15,7 +15,7 @@ serve = "python pipelines.py serve"
 
 [dependencies]
 python = ">=3.9,<3.13"
-max = ">=24.6.0.dev2024090821"
+max = "25.1.0.dev2025011705"
 
 [pypi-dependencies]
 click = ">=8.1.7"
