@@ -204,7 +204,7 @@ Resources:
           # Pull and run the MAX Serve container
           echo "Pulling and running MAX Serve container..."
           # Add error checking for docker pull
-          if ! sudo docker pull modular/max-openai-api:24.6.0; then
+          if ! sudo docker pull docker.modular.com/modular/max-openai-api:24.6.0; then
             echo "Failed to pull container image"
             /opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource MaxServeInstance --region ${AWS::Region}
             exit 1
@@ -220,7 +220,7 @@ Resources:
             --gpus 1 \
             -p 80:8000 \
             --ipc=host \
-            modular/max-openai-api:24.6.0 \
+            docker.modular.com/modular/max-openai-api:24.6.0 \
             --huggingface-repo-id ${HuggingFaceRepoId})
 
           if [ $? -ne 0 ]; then

@@ -25,7 +25,7 @@ fetch_logs() {
 
     LOGS=$(sshpass -p "$VM_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=50 -v azureuser@$PUBLIC_IP "
         # First check if container is running
-        CONTAINER_ID=\$(sudo docker ps -q -f ancestor=modular/max-openai-api:24.6.0)
+        CONTAINER_ID=\$(sudo docker ps -q -f ancestor=docker.modular.com/modular/max-openai-api:24.6.0)
         if [ -n \"\$CONTAINER_ID\" ]; then
             echo '=== Docker Container Found ==='
             sudo docker logs \$CONTAINER_ID
@@ -53,7 +53,7 @@ check_server_status() {
     echo "🔍 Checking logs for server status..."
 
     # First check if we're still in deployment phase
-    if echo "$logs" | grep -q "Pulling from modular/max-openai-api"; then
+    if echo "$logs" | grep -q "Pulling from docker.modular.com/modular/max-openai-api"; then
         echo "⏳ Docker image is still being pulled..."
         return 1
     fi
