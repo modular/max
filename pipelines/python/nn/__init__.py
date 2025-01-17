@@ -16,6 +16,7 @@ from .attention import (
     AttentionImpl,
     AttentionImplQKV,
     AttentionQKV,
+    AttentionWithoutMask,
     AttentionWithRope,
     AttentionWithRopeQKV,
     DistributedAttentionImpl,
@@ -24,6 +25,7 @@ from .attention import (
 )
 from .conv import Conv2D
 from .embedding import Embedding
+from .kernels import MHAMaskVariant
 from .linear import MLP, DistributedMLP, Linear
 from .norm import DistributedRMSNorm, LPLayerNorm, RMSNorm
 from .rotary_embedding import OptimizedRotaryEmbedding, RotaryEmbedding
@@ -44,6 +46,7 @@ __all__ = [
     "AttentionImplQKV",
     "AttentionWithRope",
     "AttentionWithRopeQKV",
+    "AttentionWithoutMask",
     "DistributedAttentionImpl",
     "DistributedAttentionWithRope",
     "DistributedTransformer",
@@ -53,6 +56,7 @@ __all__ = [
     "Embedding",
     "Linear",
     "LPLayerNorm",
+    "MHAMaskVariant",
     "MLP",
     "DistributedMLP",
     "NaiveTransformer",
