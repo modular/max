@@ -7,6 +7,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+import numpy as np
+
 
 class LogProbabilities:
     """Log probabilities for an individual output token.
@@ -81,3 +85,10 @@ class TextResponse:
             self.next_token == value.next_token
             and self.log_probabilities == value.log_probabilities
         )
+
+
+@dataclass
+class EmbeddingsResponse:
+    """Container for the response from embeddings pipeline."""
+
+    embeddings: np.ndarray

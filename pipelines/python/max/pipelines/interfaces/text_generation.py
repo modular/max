@@ -8,7 +8,6 @@
 from dataclasses import dataclass
 from typing import (
     Any,
-    Callable,
     Generic,
     Literal,
     Optional,
@@ -263,6 +262,3 @@ class TokenGenerator(Generic[TokenGeneratorContext], Protocol):
             context (TokenGeneratorContext): Finished context.
         """
         ...
-
-
-TokenGeneratorFactory = Callable[[], TokenGenerator]

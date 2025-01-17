@@ -249,6 +249,7 @@ class ReplitModel(PipelineModel):
                 ), "Echo was enabled but logits were not returned."
                 return None
             logits = model_outputs.logits.to(CPU()).to_numpy()
+        assert model_outputs.next_token_logits
         next_token_logits = model_outputs.next_token_logits.to(CPU()).to_numpy()
 
         sampled_tokens = next_tokens.to(CPU()).to_numpy()

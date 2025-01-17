@@ -97,7 +97,7 @@ def generate_text_for_pipeline(
     # Run timed run & print results.
     with TextGenerationMetrics(print_report=True) as metrics:
         tokenizer, pipeline = PIPELINE_REGISTRY.retrieve(pipeline_config)
-
+        assert isinstance(pipeline, TokenGenerator)
         if image_urls:
             logger.info("Downloading images")
             images = [requests.get(url).content for url in image_urls]

@@ -11,23 +11,6 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-from max.pipelines import PIPELINE_REGISTRY
+from .arch import mpnet_arch
 
-
-def register_all_models():
-    """Imports model architectures, thus registering the architecture in the shared PIPELINE_REGISTRY."""
-    import llama3 as llama3
-    import llama_vision as llama_vision
-    import pixtral as pixtral
-    from mistral import mistral_arch
-
-    from .mpnet import mpnet_arch
-    from .replit import replit_arch
-
-    architectures = [replit_arch, mistral_arch, mpnet_arch]
-
-    for arch in architectures:
-        PIPELINE_REGISTRY.register(arch)
-
-
-__all__ = ["register_all_models"]
+__all__ = ["mpnet_arch"]

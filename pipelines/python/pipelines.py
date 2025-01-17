@@ -21,6 +21,7 @@ from cli import (
     generate_text_for_pipeline,
     list_pipelines_to_console,
     pipeline_config_options,
+    pipeline_encode,
     serve_pipeline,
 )
 from max.pipelines import PIPELINE_REGISTRY, PipelineConfig, SupportedEncoding
@@ -151,6 +152,31 @@ def cli_pipeline(prompt, image_url, num_warmups, **config_kwargs):
         pipeline_config,
         prompt=prompt,
         image_urls=image_url,
+        num_warmups=num_warmups,
+    )
+
+
+@main.command(name="encode")
+@pipeline_config_options
+@click.option(
+    "--prompt",
+    type=str,
+    default="I believe the meaning of life is",
+    help="The text prompt to use for further generation.",
+)
+@click.option(
+    "--num-warmups",
+    type=int,
+    default=0,
+    show_default=True,
+    help="# of warmup iterations to run before the final timed run.",
+)
+def encode(prompt, num_warmups, **config_kwargs):
+    # Load tokenizer & pipeline.
+    pipeline_config = PipelineConfig(**config_kwargs)
+    pipeline_encode(
+        pipeline_config,
+        prompt=prompt,
         num_warmups=num_warmups,
     )
 

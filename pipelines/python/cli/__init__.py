@@ -14,6 +14,7 @@
 
 from .config import config_to_flag, pipeline_config_options
 from .device_options import DevicesOptionType
+from .encode import pipeline_encode
 from .generate import generate_text_for_pipeline, stream_text_to_console
 from .list import list_pipelines_to_console
 from .metrics import TextGenerationMetrics
@@ -29,4 +30,5 @@ __all__ = [
     "generate_text_for_pipeline",
     "stream_text_to_console",
     "list_pipelines_to_console",
+    "pipeline_encode",
 ]

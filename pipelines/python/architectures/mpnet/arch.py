@@ -11,23 +11,26 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-from max.pipelines import PIPELINE_REGISTRY
+from max.pipelines import (
+    SupportedArchitecture,
+    SupportedEncoding,
+    TextTokenizer,
+    WeightsFormat,
+)
 
+from .model import MPNetPipelineModel
 
-def register_all_models():
-    """Imports model architectures, thus registering the architecture in the shared PIPELINE_REGISTRY."""
-    import llama3 as llama3
-    import llama_vision as llama_vision
-    import pixtral as pixtral
-    from mistral import mistral_arch
-
-    from .mpnet import mpnet_arch
-    from .replit import replit_arch
-
-    architectures = [replit_arch, mistral_arch, mpnet_arch]
-
-    for arch in architectures:
-        PIPELINE_REGISTRY.register(arch)
-
-
-__all__ = ["register_all_models"]
+mpnet_arch = SupportedArchitecture(
+    name="MPNetForMaskedLM",
+    example_repo_ids=[
+        "sentence-transformers/all-mpnet-base-v2",
+    ],
+    default_encoding=SupportedEncoding.bfloat16,
+    supported_encodings={
+        SupportedEncoding.float32: [],
+        SupportedEncoding.bfloat16: [],
+    },
+    pipeline_model=MPNetPipelineModel,
+    tokenizer=TextTokenizer,
+    default_weights_format=WeightsFormat.safetensors,
+)

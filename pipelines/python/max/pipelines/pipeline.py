@@ -12,7 +12,15 @@ import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence, Type, TypeVar
+from typing import (
+    Any,
+    Optional,
+    Protocol,
+    Sequence,
+    Type,
+    TypeVar,
+    runtime_checkable,
+)
 
 from max.driver import CPU, Tensor
 from max.dtype import DType
@@ -36,7 +44,7 @@ ARCH_SAFE_VRAM_USAGE_LIMIT = {
 
 @dataclass(frozen=True)
 class ModelOutputs:
-    next_token_logits: Tensor
+    next_token_logits: Tensor | None = None
     """Logits for just the next token."""
 
     logits: Tensor | None = None
@@ -54,9 +62,11 @@ class PipelineModel(ABC):
     ) -> None:
         self.pipeline_config = pipeline_config
         self.available_cache_memory = self.estimate_memory_footprint()
-        self.kv_manager = self.load_kv_manager(
-            session, self.available_cache_memory
-        )
+
+        if isinstance(self, KVCacheMixin):
+            self.kv_manager = self.load_kv_manager(
+                session, self.available_cache_memory
+            )
 
     def estimate_memory_footprint(self) -> int:
         """Calculates the estimated memory consumption of our engine and
@@ -96,13 +106,17 @@ class PipelineModel(ABC):
             if free_memory
             else 0
         )
-        kv_size = self.estimate_kv_cache_size(available_cache_memory)
+        if isinstance(self, KVCacheMixin):
+            kv_size = self.estimate_kv_cache_size(available_cache_memory)
+        else:
+            kv_size = 0
+
         max_batch_size = (
             int(
                 (free_memory * vram_usage_limit_scale - weights_size)
                 / (kv_size / current_batch_size)
             )
-            if free_memory
+            if free_memory and kv_size > 0
             else None
         )
 
@@ -186,30 +200,6 @@ class PipelineModel(ABC):
         """
         ...
 
-    @abstractmethod
-    def load_kv_manager(
-        self,
-        session: InferenceSession,
-        available_cache_memory: int,
-    ) -> KVCacheManager:
-        """Provided a PipelineConfig and InferenceSession, loads the KV manager.
-
-        Args:
-            session: Inference session to compile and init the KV cache.
-            available_cache_memory: Amount of memory available to the KV cache,
-                in bytes.
-
-        Returns:
-            Either a single KV cache manager or a tuple of KV cache managers:
-            one per input modality.
-        """
-        ...
-
-    @abstractmethod
-    def estimate_kv_cache_size(self, available_cache_memory: int) -> int:
-        """Estimates the size of the kv cache in bytes."""
-        ...
-
     def compute_log_probabilities(
         self,
         model_inputs: Iterable[Any],
@@ -237,6 +227,31 @@ class PipelineModel(ABC):
         raise NotImplementedError(
             f"Log probabilities not implemented for {type(self)}."
         )
+
+
+@runtime_checkable
+class KVCacheMixin(Protocol):
+    def load_kv_manager(
+        self,
+        session: InferenceSession,
+        available_cache_memory: int,
+    ) -> KVCacheManager:
+        """Provided a PipelineConfig and InferenceSession, loads the KV manager.
+
+        Args:
+            session: Inference session to compile and init the KV cache.
+            available_cache_memory: Amount of memory available to the KV cache,
+                in bytes.
+
+        Returns:
+            Either a single KV cache manager or a tuple of KV cache managers:
+            one per input modality.
+        """
+        ...
+
+    def estimate_kv_cache_size(self, available_cache_memory: int) -> int:
+        """Estimates the size of the kv cache in bytes."""
+        ...
 
 
 class TextGenerationPipeline(TokenGenerator[T]):
@@ -387,6 +402,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
             model_outputs = self._pipeline_model.execute(
                 *curr_step_inputs, *kv_cache_inputs_tuple
             )
+            assert model_outputs.next_token_logits
             next_token_logits = model_outputs.next_token_logits
             tracer.next("sample_next_token")
             new_tokens, new_generated_tokens = self._sampler(

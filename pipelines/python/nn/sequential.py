@@ -14,7 +14,6 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 from max.graph import TensorValue
 
@@ -23,7 +22,7 @@ from .layer import Layer
 
 @dataclass
 class Sequential(Layer):
-    layers: list[Callable[[Any], TensorValue]]
+    layers: list[Callable[..., TensorValue]]
 
     def __post_init__(self):
         if len(self.layers) == 0:

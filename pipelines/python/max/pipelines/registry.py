@@ -22,8 +22,9 @@ from .config import (
     SupportedEncoding,
     WeightsFormat,
 )
+from .embeddings_pipeline import EmbeddingsPipeline
 from .hf_pipeline import HFTextGenerationPipeline
-from .interfaces import PipelineTokenizer, TokenGenerator
+from .interfaces import PipelineTask, PipelineTokenizer, TokenGenerator
 from .kv_cache import KVCacheStrategy
 from .pipeline import PipelineModel, TextGenerationPipeline
 from .tokenizer import TextAndVisionTokenizer, TextTokenizer
@@ -34,6 +35,11 @@ from .tokenizer import TextAndVisionTokenizer, TextTokenizer
 _ALTERNATE_ENCODINGS = {
     SupportedEncoding.float32: SupportedEncoding.bfloat16,
     SupportedEncoding.bfloat16: SupportedEncoding.float32,
+}
+
+_PIPELINE_COMMANDS = {
+    PipelineTask.TEXT_GENERATION: TextGenerationPipeline,
+    PipelineTask.EMBEDDINGS_GENERATION: EmbeddingsPipeline,
 }
 
 
@@ -86,10 +92,7 @@ class PipelineRegistry:
     def register(self, architecture: SupportedArchitecture):
         """Add new architecture to registry."""
         if architecture.name in self.architectures:
-            msg = (
-                "Refusing to override existing architecture for"
-                f" '{architecture.name}'"
-            )
+            msg = f"Refusing to override existing architecture for '{architecture.name}'"
             raise ValueError(msg)
 
         self.architectures[architecture.name] = architecture
@@ -279,7 +282,12 @@ class PipelineRegistry:
         supported_cache_strategies = arch.supported_encodings.get(
             pipeline_config.quantization_encoding, []
         )
-        if pipeline_config.cache_strategy not in supported_cache_strategies:
+        if (
+            # If no cache strategies are listed, the architecture does not use
+            # cache.
+            supported_cache_strategies
+            and pipeline_config.cache_strategy not in supported_cache_strategies
+        ):
             supported_strategy = supported_cache_strategies[0]
 
             msg = f"cache_strategy = '{pipeline_config.cache_strategy}' not supported for '{pipeline_config.quantization_encoding}', using '{supported_strategy}' cache strategy."
@@ -346,10 +354,12 @@ class PipelineRegistry:
         return message
 
     def retrieve_factory(
-        self, pipeline_config: PipelineConfig
+        self,
+        pipeline_config: PipelineConfig,
+        task: PipelineTask = PipelineTask.TEXT_GENERATION,
     ) -> tuple[
         PipelineTokenizer,
-        Callable[[], TokenGenerator],
+        Callable[[], TokenGenerator | EmbeddingsPipeline],
     ]:
         tokenizer: PipelineTokenizer
         pipeline_factory: Callable[[], TokenGenerator]
@@ -361,6 +371,8 @@ class PipelineRegistry:
             # Keep MyPy happy.
             assert pipeline_config.architecture is not None
 
+            pipeline_class = _PIPELINE_COMMANDS[task]
+
             # MAX pipeline
             arch = self.architectures[pipeline_config.architecture]
             logging.info(
@@ -368,7 +380,7 @@ class PipelineRegistry:
                     pipeline_config=pipeline_config,
                     tokenizer_type=arch.tokenizer,
                     pipeline_model=arch.pipeline_model.__name__,
-                    pipeline_name="TextGenerationPipeline",
+                    pipeline_name=pipeline_class.__name__,
                     factory=True,
                 )
             )
@@ -393,12 +405,16 @@ class PipelineRegistry:
                 tokenizer = arch.tokenizer(pipeline_config)
 
             pipeline_factory = functools.partial(
-                TextGenerationPipeline,
+                pipeline_class,
                 pipeline_config=pipeline_config,
                 pipeline_model=arch.pipeline_model,
                 eos_token_id=tokenizer.eos,
             )
         else:
+            if task != PipelineTask.TEXT_GENERATION:
+                raise ValueError(
+                    "Only `generate` is supported when using the Huggingface model engine."
+                )
             torch_device_type = str(pipeline_config.device_specs[0].device_type)
             if pipeline_config.device_specs[0].device_type == "gpu":
                 torch_device_type = "cuda"
@@ -424,10 +440,7 @@ class PipelineRegistry:
             )
 
         if tokenizer.eos is None:
-            msg = (
-                "tokenizer.eos value is None, tokenizer configuration is"
-                " incomplete."
-            )
+            msg = "tokenizer.eos value is None, tokenizer configuration is incomplete."
             raise ValueError(msg)
 
         return tokenizer, pipeline_factory
@@ -435,8 +448,11 @@ class PipelineRegistry:
     def retrieve(
         self,
         pipeline_config: PipelineConfig,
-    ) -> tuple[PipelineTokenizer, TokenGenerator]:
-        tokenizer, pipeline_factory = self.retrieve_factory(pipeline_config)
+        task: PipelineTask = PipelineTask.TEXT_GENERATION,
+    ) -> tuple[PipelineTokenizer, TokenGenerator | EmbeddingsPipeline]:
+        tokenizer, pipeline_factory = self.retrieve_factory(
+            pipeline_config, task
+        )
         return tokenizer, pipeline_factory()
 
     def reset(self) -> None:

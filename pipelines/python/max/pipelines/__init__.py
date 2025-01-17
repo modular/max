@@ -5,6 +5,9 @@
 # ===----------------------------------------------------------------------=== #
 """Types to interface with ML pipelines such as text/token generation."""
 
+from typing import Callable as _Callable
+from typing import Union as _Union
+
 from .config import (
     PipelineConfig,
     PipelineEngine,
@@ -13,6 +16,7 @@ from .config import (
     WeightsFormat,
 )
 from .context import InputContext, TextAndVisionContext, TextContext
+from .embeddings_pipeline import EmbeddingsPipeline
 from .hf_utils import HuggingFaceFile
 from .interfaces import (
     PipelineTask,
@@ -26,13 +30,16 @@ from .interfaces import (
 )
 from .pipeline import ModelOutputs, PipelineModel, TextGenerationPipeline
 from .registry import PIPELINE_REGISTRY, SupportedArchitecture
-from .response import LogProbabilities, TextResponse
+from .response import EmbeddingsResponse, LogProbabilities, TextResponse
 from .tokenizer import (
     IdentityPipelineTokenizer,
     PreTrainedPipelineTokenizer,
     TextAndVisionTokenizer,
     TextTokenizer,
 )
+
+PipelinesFactory = _Callable[[], _Union[TokenGenerator, EmbeddingsPipeline]]
+
 
 __all__ = [
     "HuggingFaceFile",
@@ -65,4 +72,6 @@ __all__ = [
     "ModelOutputs",
     "TextResponse",
     "LogProbabilities",
+    "EmbeddingsPipeline",
+    "EmbeddingsResponse",
 ]
