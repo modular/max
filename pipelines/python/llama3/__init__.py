@@ -19,7 +19,6 @@ from .model import Llama3Model
 
 __all__ = [
     "Llama3Model",
-    "get_llama_huggingface_file",
 ]
 
 PIPELINE_REGISTRY.register(llama_arch)
