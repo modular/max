@@ -198,6 +198,74 @@ def run_llama3(
             pipeline_config=config, prompt=prompt, num_warmups=num_warmups
         )
 
+@main.command(name="mistral")
+@pipeline_config_options
+@common_server_options
+@click.option(
+    "--prompt",
+    type=str,
+    default="Why is the sky blue?",
+    help="The text prompt to use for further generation.",
+)
+@click.option(
+    "--num-warmups",
+    type=int,
+    default=0,
+    show_default=True,
+    help="# of warmup iterations to run before the final timed run.",
+)
+@click.option(
+    "--serve",
+    type=bool,
+    default=False,
+    is_flag=True,
+    show_default=True,
+    help="Whether to serve an OpenAI HTTP endpoint on port 8000.",
+)
+def run_mistral(
+    prompt,
+    num_warmups,
+    serve,
+    profile_serve,
+    performance_fake,
+    batch_timeout,
+    model_name,
+    **config_kwargs,
+):
+    """Runs the Mistral pipeline."""
+
+    # Update basic parameters.
+    if config_kwargs["architecture"] is None:
+        config_kwargs["architecture"] = "MistralForCausalLM"
+
+    if config_kwargs["architecture"] != "MistralForCausalLM":
+        msg = (
+            f"provided architecture '{config_kwargs['architecture']}' not"
+            " compatible with Mistral."
+        )
+        raise ValueError(msg)
+
+    config_kwargs["trust_remote_code"] = True
+
+    config = PipelineConfig(**config_kwargs)
+
+    # if config.quantization_encoding not in [
+    #     SupportedEncoding.bfloat16
+    # ]:
+    #     config.cache_strategy = KVCacheStrategy.NAIVE
+
+    if serve:
+        serve_pipeline(
+            pipeline_config=config,
+            profile=profile_serve,
+            performance_fake=performance_fake,
+            batch_timeout=batch_timeout,
+            model_name=model_name,
+        )
+    else:
+        generate_text_for_pipeline(
+            pipeline_config=config, prompt=prompt, num_warmups=num_warmups
+        )
 
 @main.command(name="replit")
 @pipeline_config_options
