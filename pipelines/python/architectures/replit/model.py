@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 from dataprocessing import causal_attention_mask_with_alibi, collate_batch
-from max.driver import CPU, Tensor
+from max.driver import CPU, DeviceSpec, Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import GGUFWeights
 from max.pipelines import (
@@ -46,6 +46,10 @@ class ReplitModel(PipelineModel):
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession
     ) -> None:
+        if pipeline_config.device_specs[0] == DeviceSpec.cpu():
+            msg = "Replit currently only supported on gpu."
+            raise ValueError(msg)
+
         super().__init__(pipeline_config, session)
         self.model = self.load_model(session)
 
