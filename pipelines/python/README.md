@@ -21,8 +21,8 @@ family with state-of-the-art serving throughput.
 - [Mistral](mistral): Support for the `MistralForCausalLM` family of text
 completion models, by default using the Mistral NeMo 12B model. This pipeline
 has been tuned for performance using the MAX Graph API.
-- [Replit Code](replit): Code generation via the Replit Code V1.5 3B model,
-implemented using the MAX Graph API.
+- [Replit Code](architectures/replit): Code generation via the
+Replit Code V1.5 3B model, implemented using the MAX Graph API.
 
 Instructions for how to run each pipeline can be found in their respective
 subdirectories, along with all configuration parameters. A shared driver is

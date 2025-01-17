@@ -1,4 +1,4 @@
-### Writing custom CPU or GPU graph operations using Mojo
+# Writing custom CPU or GPU graph operations using Mojo
 
 > [!NOTE]
 > This is a preview of an interface for writing custom operations in Mojo,

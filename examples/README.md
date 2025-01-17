@@ -3,7 +3,7 @@
 These examples demonstrate the power and flexibility of
 [MAX](https://docs.modular.com/max/). They include:
 
-## [MAX Pipelines](graph-api/pipelines/)
+## [MAX Pipelines](../pipelines/python)
 
 End-to-end demonstrations of common AI workloads and more, built using
 [Mojo](https://docs.modular.com/mojo/) and the

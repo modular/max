@@ -8,7 +8,7 @@ This pipeline provides optimized support for the
 `LlavaForConditionalGeneration` family of multimodal models, as exemplified
 by the Pixtral multimodal text generation model. The model itself has
 been constructed in Python using the
-[MAX Graph API](https://docs.modular.com/engine/graph).
+[MAX Graph API](https://docs.modular.com/max/graph/).
 
 The MAX Graph API provides an accessible interface to the construction of
 flexible accelerated compute graphs, which are then optimized by the MAX

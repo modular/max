@@ -1,6 +1,4 @@
-<p align="center">
-    <img src="https://modular-assets.s3.amazonaws.com/images/modular_github_logo_bg.png">
-</p>
+![Modular Logo](https://modular-assets.s3.amazonaws.com/images/modular_github_logo_bg.png)
 
 # Welcome to MAX
 
@@ -10,9 +8,7 @@ commonly fragmented AI deployment workflows. MAX accelerates time to market
 for the latest innovations by giving AI developers a single toolchain that
 unlocks full programmability, unparalleled performance, and seamless hardware portability.
 
-<p align="center">
-    <img src="https://modular-assets.s3.amazonaws.com/images/modular_architecture_diagram_bg.png">
-</p>
+![Modular Architecture Diagram](https://modular-assets.s3.amazonaws.com/images/modular_architecture_diagram_bg.png)
 
 [See here to get started with MAX](https://docs.modular.com/max/get-started)
 and when you want to report issues or request features,
@@ -79,10 +75,12 @@ tutorials you can read at
 
 ### Docker Container
 
-To deploy MAX on AWS, you can pull our Docker Container from the the public ECR here:
-[https://gallery.ecr.aws/modular/max-serving](https://gallery.ecr.aws/modular/max-serving)
+The MAX container is our official Docker container for convenient MAX deployment.
+It includes the latest MAX version with GPU support, several AI libraries, and
+integrates with orchestration tools like Kubernetes.
 
-```public.ecr.aws/modular/max-serving```
+The MAX container image is available in the
+[Modular Docker Hub repository](https://hub.docker.com/r/modular/max-openai-api/).
 
 ## Contributing
 

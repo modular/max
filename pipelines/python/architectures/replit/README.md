@@ -7,7 +7,7 @@
 This pipeline demonstrates code completion from an initial prompt using
 Replit's Code V1.5 3B large language model. The model itself has been
 constructed in Python using the
-[MAX Graph API](https://docs.modular.com/engine/graph).
+[MAX Graph API](https://docs.modular.com/max/graph/).
 
 The MAX Graph API provides an accessible interface to the construction of
 flexible accelerated compute graphs, which are then optimized by the MAX

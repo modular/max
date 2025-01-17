@@ -20,7 +20,6 @@ metrics.
 - [Benchmarking scripts](#benchmarking-scripts)
 - [Output](#output)
 - [Reference](#reference)
-- [Recommended arguments](#recommended-arguments)
 - [Troubleshooting](#troubleshooting)
 
 ## Setup
