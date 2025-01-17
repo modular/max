@@ -20,7 +20,6 @@ from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
-from dataprocessing import causal_attention_mask_with_alibi, collate_batch
 from max.driver import CPU, DeviceSpec, Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import GGUFWeights
@@ -73,38 +72,19 @@ class ReplitModel(PipelineModel):
         self,
         context_batch: list[TextContext],  # type: ignore
     ) -> tuple[Tensor, ...]:
-        # Get tokens and seq_ids.
-        tokens = [ctx.next_tokens for ctx in context_batch]
-
-        unpadded_lengths = [ctx.seq_len for ctx in context_batch]
-
-        # Pad tokens and compute attention mask for the batch.
-        max_seq_len = self.kv_manager.max_sequence_length
-        start_pos = [max_seq_len] * len(context_batch)
-        next_tokens_batch, _ = collate_batch(
-            tokens,
-            batch_size=len(tokens),
-            pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
+        # Get input_row_offset: start and end position of each batch in the
+        # combined total_seq_len dimension.
+        input_row_offset = np.cumsum(
+            [0] + [ctx.seq_len for ctx in context_batch],
+            dtype=np.uint32,
         )
 
-        attention_mask = causal_attention_mask_with_alibi(
-            original_start_pos=start_pos,
-            original_seq_len=[len(t) for t in tokens],
-            pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
-            alibi_bias_max=self.pipeline_config.huggingface_config.attn_config[
-                "alibi_bias_max"
-            ],
-            n_heads=self.pipeline_config.huggingface_config.n_heads,
-        )
+        # Create a ragged token vector of length: sum(len(t) for t in tokens).
+        tokens = np.concatenate([ctx.next_tokens for ctx in context_batch])
 
         return (
-            Tensor.from_numpy(next_tokens_batch).to(
-                self.pipeline_config.device
-            ),
-            Tensor.from_numpy(attention_mask).to(self.pipeline_config.device),
-            Tensor.from_numpy(np.array(unpadded_lengths, np.uint32)).to(
-                self.pipeline_config.device
-            ),
+            Tensor.from_numpy(tokens).to(self.pipeline_config.device),
+            Tensor.from_numpy(input_row_offset).to(self.pipeline_config.device),
         )
 
     def prepare_next_token_inputs(
@@ -112,35 +92,12 @@ class ReplitModel(PipelineModel):
         next_tokens: Tensor,
         prev_model_inputs: tuple[Tensor, ...],
     ) -> tuple[Tensor, ...]:
-        # Update valid_lengths by one for all inputs.
-        prev_tokens, prev_attention_mask, valid_lengths = prev_model_inputs
-        valid_lengths += 1  # type: ignore
+        _, old_row_offsets = prev_model_inputs
+        row_offsets_size = old_row_offsets.shape[0]
+        next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
+        next_token_inputs = (next_tokens, next_row_offsets)
 
-        batch_size = prev_tokens.shape[0]
-        start_pos = [prev_attention_mask.shape[-1]] * batch_size
-        next_tokens_batch = collate_batch(
-            next_tokens,  # type: ignore
-            batch_size=batch_size,
-            pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
-        )
-
-        attention_mask = causal_attention_mask_with_alibi(
-            original_start_pos=start_pos,
-            original_seq_len=[len(t) for t in next_tokens],  # type: ignore
-            pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
-            alibi_bias_max=self.pipeline_config.huggingface_config.attn_config[
-                "alibi_bias_max"
-            ],
-            n_heads=self.pipeline_config.huggingface_config.n_heads,
-        )
-
-        # I believe, next_tokens_batch & valid_lengths, should already be resident on the GPU.
-        # The attention mask is a new tensor, and thus has to be moved over.
-        return (
-            Tensor.from_numpy(next_tokens_batch),  # type: ignore
-            Tensor.from_numpy(attention_mask).to(self.pipeline_config.device),
-            Tensor.from_numpy(valid_lengths),  # type: ignore
-        )
+        return next_token_inputs
 
     def _get_kv_params(self) -> KVCacheParams:
         return KVCacheParams(
@@ -184,10 +141,13 @@ class ReplitModel(PipelineModel):
         self,
         session: InferenceSession,
     ) -> Model:
-        # TODO: AIPIPE-235 - Support Multistep scheduling for Replit
-        if self.pipeline_config.max_num_steps > 1:
-            msg = "Replit pipeline does not support max_num_steps > 1"
-            raise ValueError(msg)
+        # Pre-allocate a buffer for input_row_offsets in multistep execution.
+        # We do this to avoid materializing and copying a buffer with each multistep step
+        self._input_row_offsets_prealloc = Tensor.from_numpy(
+            np.arange(
+                self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
+            )
+        ).to(self.pipeline_config.device)
 
         # Read in weights.
         weights = self.pipeline_config.load_weights()

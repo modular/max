@@ -24,11 +24,12 @@ from max.pipelines.kv_cache import (
     KVCacheParams,
 )
 from nn import (
-    Attention,
     AttentionImpl,
+    AttentionWithoutMask,
     Embedding,
     Linear,
     LPLayerNorm,
+    MHAMaskVariant,
     Sequential,
     Transformer,
     TransformerBlock,
@@ -86,7 +87,7 @@ def _attention(
         )
     )
 
-    return Attention(
+    return AttentionWithoutMask(
         n_heads=pipeline_config.huggingface_config.n_heads,
         kv_params=kv_params,
         wqkv=wqkv,
@@ -101,6 +102,7 @@ def _attention(
             )
         ),
         layer_idx=ops.constant(layer_index, dtype=DType.uint32),
+        mask_variant=MHAMaskVariant.CAUSAL_ALIBI_MASK,
     )
 
 
@@ -174,12 +176,10 @@ def _build_graph(
     kv_manager: KVCacheManager,
 ) -> Graph:
     # Graph input types.
-    tokens_type = TensorType(DType.int64, shape=["batch_size", "seq_len"])
-    attn_mask_type = TensorType(
-        DType.float32,
-        shape=["batch_size", "n_heads", "seq_len", "post_seq_len"],
+    tokens_type = TensorType(DType.int64, shape=["total_seq_len"])
+    input_row_offsets_type = TensorType(
+        DType.uint32, shape=["input_row_offsets_len"]
     )
-    valid_lengths_type = TensorType(DType.uint32, shape=["batch_size"])
     kv_cache_types = kv_manager.input_symbols()[0]
 
     # Initialize Graph.
@@ -187,18 +187,16 @@ def _build_graph(
         "replit",
         input_types=[
             tokens_type,
-            attn_mask_type,
-            valid_lengths_type,
+            input_row_offsets_type,
             *kv_cache_types,
         ],
     ) as graph:
         model = _transformer(graph, pipeline_config, weights, kv_params)
-        tokens, attention_mask, valid_lengths, *kv_cache_inputs = graph.inputs
+        tokens, input_row_offsets, *kv_cache_inputs = graph.inputs
         outputs = model(
             tokens=tokens,
-            valid_lengths=valid_lengths,
+            input_row_offsets=input_row_offsets,
             kv_cache_inputs=kv_cache_inputs,
-            attention_mask=attention_mask.cast(pipeline_config.dtype),  # type: ignore
         )
         graph.output(*outputs)
         return graph
