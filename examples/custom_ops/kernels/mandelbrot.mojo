@@ -65,7 +65,9 @@ struct Mandelbrot:
     ):
         @parameter
         @always_inline
-        fn func[width: Int](idx: IndexList[out.rank]) -> SIMD[out.type, width]:
+        fn elementwise_mandelbrot[
+            width: Int
+        ](idx: IndexList[out.rank]) -> SIMD[out.type, width]:
             var row = idx[0]
             var col = idx[1]
             var cx = min_x.cast[float_dtype]() + (
@@ -79,7 +81,7 @@ struct Mandelbrot:
                 c, max_iterations.cast[out.type]()
             )
 
-        foreach[func, synchronous, target](out, ctx)
+        foreach[elementwise_mandelbrot, synchronous, target](out, ctx)
 
     # You only need to implement this if you do not manually annotate
     # output shapes in the graph.

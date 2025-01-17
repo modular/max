@@ -35,10 +35,12 @@ struct AddOneCustom:
     ):
         @parameter
         @always_inline
-        fn func[width: Int](idx: IndexList[x.rank]) -> SIMD[x.type, width]:
+        fn elementwise_add_one[
+            width: Int
+        ](idx: IndexList[x.rank]) -> SIMD[x.type, width]:
             return x.load[width](idx) + 1
 
-        foreach[func, synchronous, target](out, ctx)
+        foreach[elementwise_add_one, synchronous, target](out, ctx)
 
     # You only need to implement this if you do not manually annotate
     # output shapes in the graph.
