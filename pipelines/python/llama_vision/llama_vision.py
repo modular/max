@@ -278,6 +278,7 @@ class MultimodalKVCacheManager(KVCacheManager):
         """Marks the sequence complete for both modalities' KV caches."""
         self.text_kv_manager.release(seq_id)
         self.vision_kv_manager.release(seq_id)
+        super().release(seq_id)
 
     def contains(self, seq_id: int) -> bool:
         """Returns whether `seq_id` is in the KV cache."""
