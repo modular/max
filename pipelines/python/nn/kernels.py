@@ -585,7 +585,7 @@ def cross_attention_ragged(
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
-    op_name = f"mo.cross_attention.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.cross_attention.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
@@ -609,6 +609,10 @@ def cross_attention_ragged(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )[0].tensor
 
 
