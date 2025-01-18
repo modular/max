@@ -71,6 +71,11 @@ def load_kv_manager(
             )
             raise ValueError(msg)
 
+        # TODO(KERN-1308) remove this validation as we generalize page_size
+        if page_size % 128 != 0 or page_size < 128:
+            msg = "Page size must be a multiple of 128 and at least 128."
+            raise ValueError(msg)
+
         if available_cache_memory is None:
             msg = "Missing required argument available_cache_memory for KVCacheStrategy.PAGED"
             raise ValueError(msg)

@@ -170,6 +170,7 @@ class PagedKVCacheManager(KVCacheManager):
         page_size: int = 512,
     ) -> None:
         self.page_size = page_size
+
         single_page_size_bytes = (
             2
             * num_layers
