@@ -76,7 +76,7 @@ class MLP(Layer):
                 )
             )
 
-        return self.down_proj((ops.silu(self.gate_proj(x)) * self.up_proj(x)))  # type: ignore
+        return self.down_proj(ops.silu(self.gate_proj(x)) * self.up_proj(x))  # type: ignore
 
 
 @dataclass
