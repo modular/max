@@ -103,10 +103,9 @@ class FetchContinuousBatchingKVCacheCollection:
             )
             raise ValueError(msg)
 
-        op_name = f"mo.kv_collection_ctor.continuous_batching.nhead_{self.kv_params.n_kv_heads_per_device}.hdim_{self.kv_params.head_dim}"
         return ContinuousBatchingKVCacheCollection(
             ops.custom(
-                op_name,
+                "mo.kv_collection_ctor.continuous_batching",
                 values=[
                     blocks,
                     cache_lengths,
@@ -114,6 +113,10 @@ class FetchContinuousBatchingKVCacheCollection:
                     max_lengths,
                 ],
                 out_types=[ContinuousBatchingKVCacheCollectionType()],
+                parameters={
+                    "num_heads": self.kv_params.n_kv_heads_per_device,
+                    "head_dim": self.kv_params.head_dim,
+                },
             )[0].opaque
         )
 

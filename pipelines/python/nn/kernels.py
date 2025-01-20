@@ -78,7 +78,7 @@ def fused_qkv_ragged_matmul(
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
 
-    op_name = f"mo.fused_qkv_matmul.ragged.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.fused_qkv_matmul.ragged.{cache_strategy_str}"
 
     return ops.inplace_custom(
         op_name,
@@ -90,6 +90,10 @@ def fused_qkv_ragged_matmul(
                 device=input.device,
             )
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )[0].tensor
 
 
@@ -131,7 +135,7 @@ def fused_qkv_matmul(
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
 
-    op_name = f"mo.fused_qkv_matmul.padded.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.fused_qkv_matmul.padded.{cache_strategy_str}"
 
     return ops.inplace_custom(
         op_name,
@@ -143,6 +147,10 @@ def fused_qkv_matmul(
                 device=input.device,
             )
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )[0].tensor
 
 
@@ -187,7 +195,7 @@ def matmul_kv_cache_ragged(
         raise ValueError(msg)
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
-    op_name = f"mo.kv_matmul.ragged.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.kv_matmul.ragged.{cache_strategy_str}"
 
     ops.inplace_custom(
         name=op_name,
@@ -198,6 +206,10 @@ def matmul_kv_cache_ragged(
             kv_collection,
             ops.constant(layer_idx, DType.uint32),
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )
 
 
@@ -241,7 +253,7 @@ def fused_qk_ragged_rope(
         raise ValueError(msg)
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
-    op_name = f"mo.fused_qk_rope.ragged.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.fused_qk_rope.ragged.{cache_strategy_str}"
 
     return ops.inplace_custom(
         op_name,
@@ -258,6 +270,10 @@ def fused_qk_ragged_rope(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )[0].tensor
 
 
@@ -294,7 +310,7 @@ def fused_qk_rope(
         raise ValueError(msg)
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
-    op_name = f"mo.fused_qk_rope.padded.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.fused_qk_rope.padded.{cache_strategy_str}"
 
     return ops.inplace_custom(
         op_name,
@@ -310,6 +326,10 @@ def fused_qk_rope(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )[0].tensor
 
 
@@ -349,7 +369,7 @@ def flash_attention(
         raise ValueError(msg)
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
-    op_name = f"mo.mha.padded.{cache_strategy_str}.tensor_mask.no_pos.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.mha.padded.{cache_strategy_str}.tensor_mask.no_pos"
 
     # NOTE: The scale argument to the flash attention kernel is constrained to
     # float32.
@@ -369,6 +389,10 @@ def flash_attention(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )[0].tensor
 
 
@@ -409,7 +433,7 @@ def flash_attention_with_causal_mask(
         raise ValueError(msg)
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
-    op_name = f"mo.mha.padded.{cache_strategy_str}.causal_mask.no_pos.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.mha.padded.{cache_strategy_str}.causal_mask.no_pos"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
@@ -421,6 +445,10 @@ def flash_attention_with_causal_mask(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )[0].tensor
 
 
@@ -513,7 +541,7 @@ def flash_attention_ragged(
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
-    op_name = f"mo.mha.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.mha.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}"
 
     # NOTE: The scale argument to flash attention is constrained to float32.
     scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
@@ -526,6 +554,10 @@ def flash_attention_ragged(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )[0].tensor
 
 
@@ -684,7 +716,7 @@ def rms_norm_key_cache(
     So use `input_row_offsets` to do this bookkeeping.
     """
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
-    op_name = f"mo.rms_norm_kv_cache.ragged.{cache_strategy_str}.nhead_{kv_params.n_kv_heads_per_device}.hdim_{kv_params.head_dim}"
+    op_name = f"mo.rms_norm_kv_cache.ragged.{cache_strategy_str}"
 
     gamma_rank_expected = 1
     if gamma.rank != gamma_rank_expected:
@@ -707,4 +739,8 @@ def rms_norm_key_cache(
             ops.cast(TensorValue.from_dim(total_seq_len), DType.uint32),
             input_row_offsets,
         ],
+        parameters={
+            "num_heads": kv_params.n_kv_heads_per_device,
+            "head_dim": kv_params.head_dim,
+        },
     )
