@@ -41,7 +41,7 @@ class MPNetEmbeddings(Layer):
     embeddings."""
 
     def __init__(self, pipeline_config: PipelineConfig, weights: Weights):
-        config = pipeline_config.huggingface_config
+        config = self.config = pipeline_config.huggingface_config
         self.word_embeddings = Embedding(
             weights.word_embeddings.weight.allocate(
                 pipeline_config.dtype,
@@ -80,12 +80,24 @@ class MPNetEmbeddings(Layer):
         )
 
     def __call__(
-        self, input_ids: TensorValue, position_ids: TensorValue
+        self,
+        input_ids: TensorValue,
     ) -> TensorValue:
+        position_ids = _create_position_ids_from_input_ids(
+            input_ids, self.config.pad_token_id
+        )
         inputs_embeds = self.word_embeddings(input_ids)
         position_embeddings = self.position_embeddings(position_ids)
         embeddings = inputs_embeds + position_embeddings
         return self.layer_norm(embeddings)
+
+
+def _create_position_ids_from_input_ids(
+    input_ids: TensorValue, padding_idx: int
+) -> TensorValue:
+    mask = (input_ids != padding_idx).cast(DType.int64)
+    incremental_indices = ops.cumsum(mask, axis=1) * mask
+    return incremental_indices + padding_idx
 
 
 class MPNetSelfAttention(Layer):
@@ -148,7 +160,7 @@ class MPNetSelfAttention(Layer):
             ),
         )
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: TensorValue) -> TensorValue:
         new_x_shape = x.shape[:-1] + [
             self.num_attention_heads,
             self.attention_head_size,
@@ -161,7 +173,7 @@ class MPNetSelfAttention(Layer):
         hidden_states,
         attention_mask: TensorValue,
         position_bias: TensorValue,
-    ):
+    ) -> TensorValue:
         q = self.q(hidden_states)
         k = self.k(hidden_states)
         v = self.v(hidden_states)
@@ -182,7 +194,6 @@ class MPNetSelfAttention(Layer):
         attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        # TODO: Check that ops.softmax(v) == nn.functional.softmax(v, dim=-1)
         attention_probs = ops.softmax(attention_scores)
 
         c = attention_probs @ v
@@ -215,7 +226,7 @@ class MPNetAttention(Layer):
         hidden_states: TensorValue,
         attention_mask: TensorValue,
         position_bias: TensorValue,
-    ):
+    ) -> TensorValue:
         attn_output = self.attn(
             hidden_states,
             attention_mask,
@@ -323,7 +334,7 @@ class MPNetEncoder(Layer):
     """Encoder that contains stacks of MPNetLayers."""
 
     def __init__(self, pipeline_config: PipelineConfig, weights: Weights):
-        config = pipeline_config.huggingface_config
+        config = self.config = pipeline_config.huggingface_config
         self.n_heads = config.num_attention_heads
         num_hidden_layers = config.num_hidden_layers
         self.layer = Sequential(
@@ -347,11 +358,8 @@ class MPNetEncoder(Layer):
         self,
         hidden_states: TensorValue,
         attention_mask: TensorValue,
-        relative_position_bucket: TensorValue,
-    ):
-        position_bias = self.compute_position_bias(
-            hidden_states, relative_position_bucket
-        )
+    ) -> TensorValue:
+        position_bias = self.compute_position_bias(hidden_states)
         for layer in self.layer.layers:
             hidden_states = layer(
                 hidden_states,
@@ -360,18 +368,58 @@ class MPNetEncoder(Layer):
             )
         return hidden_states
 
-    def compute_position_bias(
-        self, hidden_states, relative_position_bucket
-    ) -> TensorValue:
+    def compute_position_bias(self, hidden_states: TensorValue) -> TensorValue:
         shape = hidden_states.shape
         bsz, qlen, klen = shape[0], shape[1], shape[1]
-        values = self.relative_attention_bias(relative_position_bucket)
-        values = ops.permute(values, [0, 3, 1, 2])
+        start = ops.constant(0, DType.int64)
+        step = ops.constant(1, DType.int64)
+        context_position = ops.range(start, qlen, step, qlen).cast(DType.int64)[
+            :, None
+        ]
+        memory_position = ops.range(start, klen, step, klen).cast(DType.int64)[
+            None, :
+        ]
+        relative_position = memory_position - context_position
+        rp_bucket = self.relative_position_bucket(
+            relative_position,
+            num_buckets=self.config.relative_attention_num_buckets,
+        )
+        values = self.relative_attention_bias(rp_bucket)
+        values = ops.unsqueeze(ops.permute(values, [2, 0, 1]), 0)
         values = ops.broadcast_to(
             values,
             [bsz, self.num_attention_heads, qlen, klen],
         )
         return values
+
+    @staticmethod
+    def relative_position_bucket(
+        relative_position: TensorValue, num_buckets=32, max_distance=128
+    ) -> TensorValue:
+        n = -relative_position
+
+        num_buckets //= 2
+        ret = (n < 0).cast(DType.int64) * num_buckets
+        n = ops.abs(n)
+
+        max_exact = num_buckets // 2
+        is_small = n < max_exact
+
+        val_if_large = max_exact + ops.cast(
+            ops.log(ops.cast(n, DType.float32) / max_exact)
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact),
+            DType.int64,
+        )
+
+        # Roundabout implementation of full_like(val_if_large, num_buckets - 1).
+        max_bucket = ops.broadcast_to(
+            ops.constant(num_buckets - 1, DType.int64), val_if_large.shape
+        )
+
+        val_if_large = ops.min(val_if_large, max_bucket)
+        ret += ops.select(is_small, n, val_if_large)
+        return ret
 
 
 class MPNetModel(Layer):
@@ -389,17 +437,13 @@ class MPNetModel(Layer):
         self,
         input_ids: TensorValue,
         attention_mask: TensorValue,
-        position_ids: TensorValue,
-        relative_position_bucket: TensorValue,
     ) -> TensorValue:
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            position_ids=position_ids,
         )
         return self.encoder(
             embedding_output,
             attention_mask=attention_mask,
-            relative_position_bucket=relative_position_bucket,
         )
 
 
@@ -412,20 +456,15 @@ def build_graph(
     attention_mask_type = TensorType(
         pipeline_config.dtype, shape=["batch_size", 1, 1, "seq_len"]
     )
-    position_ids_type = TensorType(DType.int64, shape=["batch_size", "seq_len"])
-    relative_position_bucket_type = TensorType(
-        DType.int64,
-        shape=["batch_size", "seq_len", "seq_len"],
-    )
+
+    mpnet = MPNetModel(pipeline_config, weights)
 
     # Initialize Graph.
     return Graph(
         "mpnet",
-        MPNetModel(pipeline_config, weights),
+        mpnet,
         input_types=[
             input_ids_type,
             attention_mask_type,
-            position_ids_type,
-            relative_position_bucket_type,
         ],
     )

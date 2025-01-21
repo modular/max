@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import time
 
 import numpy as np
@@ -62,27 +61,17 @@ class MPNetPipelineModel(PipelineModel):
             pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
         )
 
-        # Compute position ids and relative position bucket.
-        mask = (next_tokens_batch != PAD_VALUE).astype(np.int64)
-        incremental_indices = np.cumsum(mask, axis=1) * mask
-        position_ids = incremental_indices + PAD_VALUE
-        relative_position_bucket = compute_relative_position_bucket(
-            position_ids,
-            num_buckets=self.pipeline_config.huggingface_config.relative_attention_num_buckets,
-        )
-
         # Compute and extend attention mask.
-        attention_mask = np.expand_dims(mask, (1, 2)).astype(
-            self.pipeline_config.dtype.to_numpy()
+        attention_mask = (next_tokens_batch != PAD_VALUE).astype(np.int64)
+        extended_attenion_mask = _get_extended_attention_mask(
+            attention_mask, self.pipeline_config.dtype.to_numpy()
         )
 
         return (
             Tensor.from_numpy(next_tokens_batch).to(
                 self.pipeline_config.device
             ),
-            Tensor.from_numpy(attention_mask).to(self.pipeline_config.device),
-            Tensor.from_numpy(position_ids).to(self.pipeline_config.device),
-            Tensor.from_numpy(relative_position_bucket).to(
+            Tensor.from_numpy(extended_attenion_mask).to(
                 self.pipeline_config.device
             ),
         )
@@ -142,30 +131,17 @@ class MPNetPipelineModel(PipelineModel):
             return model
 
 
-def compute_relative_position_bucket(
-    position_ids: np.ndarray, num_buckets=32, max_distance=128
-):
-    context_position = position_ids[:, :, None]
-    memory_position = position_ids[:, None, :]
-    relative_position = memory_position - context_position
-
-    ret = 0
-    n = -relative_position
-
-    num_buckets //= 2
-    ret += (n < 0).astype(np.int64) * num_buckets
-    n = np.abs(n)
-
-    max_exact = num_buckets // 2
-    is_small = n < max_exact
-
-    val_if_large = max_exact + (
-        np.log(n.astype(np.float32) / max_exact)
-        / math.log(max_distance / max_exact)
-        * (num_buckets - max_exact)
-    ).astype(np.int64)
-
-    val_if_large = np.minimum(
-        val_if_large, np.full_like(val_if_large, num_buckets - 1)
-    )
-    return ret + np.where(is_small, n, val_if_large)
+def _get_extended_attention_mask(attention_mask: np.ndarray, dtype: np.dtype):
+    extended_attention_mask = attention_mask[:, None, None, :]
+    # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+    # masked positions, this operation will create a tensor which is 0.0 for
+    # positions we want to attend and the dtype's smallest value for masked positions.
+    # Since we are adding it to the raw scores before the softmax, this is
+    # effectively the same as removing these entirely.
+    extended_attention_mask = extended_attention_mask.astype(
+        dtype=dtype
+    )  # fp16 compatibility
+    extended_attention_mask = (1.0 - extended_attention_mask) * np.finfo(
+        dtype
+    ).min
+    return extended_attention_mask
