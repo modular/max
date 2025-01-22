@@ -1,0 +1,18 @@
+[project]
+authors = ["Modular <hello@modular.com>"]
+channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+description = "Examples exercising the max pipelines in python"
+name = "Python Pipelines Examples"
+platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
+version = "0.1.0"
+
+[tasks]
+text_generation = "python text_generation.py"
+
+[dependencies]
+python = ">=3.9,<3.13"
+max = ">=24.6.0.dev2024090821"
+
+[pypi-dependencies]
+tqdm = ">=4.66.5"
+
