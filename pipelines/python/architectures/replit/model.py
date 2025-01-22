@@ -16,8 +16,7 @@ from __future__ import annotations
 import logging
 import time
 import warnings
-from collections.abc import Iterable
-from typing import Any
+from typing import Sequence, cast
 
 import numpy as np
 from max.driver import CPU, DeviceSpec, Tensor
@@ -25,6 +24,7 @@ from max.engine import InferenceSession, Model
 from max.graph.weights import GGUFWeights
 from max.pipelines import (
     LogProbabilities,
+    ModelInputs,
     ModelOutputs,
     PipelineConfig,
     PipelineModel,
@@ -41,6 +41,26 @@ from nn.compute_log_probabilities import compute_log_probabilities
 from .graph import _build_graph
 
 
+class ReplitInputs(ModelInputs):
+    """A class representing inputs for the Replit model.
+
+    This class encapsulates the input tensors required for the Replit model execution:
+    - tokens: A tensor containing the input token IDs
+    - input_row_offsets: A tensor containing the offsets for each row in the ragged input sequence
+    """
+
+    tokens: Tensor
+    input_row_offsets: Tensor
+
+    def __init__(
+        self,
+        tokens: Tensor,
+        input_row_offsets: Tensor,
+    ) -> None:
+        self.tokens = tokens
+        self.input_row_offsets = input_row_offsets
+
+
 class ReplitModel(PipelineModel):
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession
@@ -52,9 +72,18 @@ class ReplitModel(PipelineModel):
         super().__init__(pipeline_config, session)
         self.model = self.load_model(session)
 
-    def execute(self, *model_inputs: Tensor) -> ModelOutputs:  # type: ignore
+    def execute(
+        self,
+        model_inputs: ModelInputs,
+        kv_cache_inputs: Sequence[Tensor] | None = None,
+    ) -> ModelOutputs:
+        model_inputs = cast(ReplitInputs, model_inputs)
+        assert kv_cache_inputs is not None, "Replit has KV cache inputs"
         model_outputs = self.model.execute(
-            *model_inputs, copy_inputs_to_device=False
+            model_inputs.tokens,
+            model_inputs.input_row_offsets,
+            *kv_cache_inputs,
+            copy_inputs_to_device=False,
         )
         if self.pipeline_config.enable_echo:
             assert len(model_outputs) == 2
@@ -71,10 +100,10 @@ class ReplitModel(PipelineModel):
     def prepare_initial_token_inputs(
         self,
         context_batch: list[TextContext],  # type: ignore
-    ) -> tuple[Tensor, ...]:
-        # Get input_row_offset: start and end position of each batch in the
+    ) -> ReplitInputs:
+        # Get input_row_offsets: start and end position of each batch in the
         # combined total_seq_len dimension.
-        input_row_offset = np.cumsum(
+        input_row_offsets = np.cumsum(
             [0] + [ctx.seq_len for ctx in context_batch],
             dtype=np.uint32,
         )
@@ -82,22 +111,25 @@ class ReplitModel(PipelineModel):
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
         tokens = np.concatenate([ctx.next_tokens for ctx in context_batch])
 
-        return (
-            Tensor.from_numpy(tokens).to(self.pipeline_config.device),
-            Tensor.from_numpy(input_row_offset).to(self.pipeline_config.device),
+        return ReplitInputs(
+            tokens=Tensor.from_numpy(tokens).to(self.pipeline_config.device),
+            input_row_offsets=Tensor.from_numpy(input_row_offsets).to(
+                self.pipeline_config.device
+            ),
         )
 
     def prepare_next_token_inputs(
         self,
         next_tokens: Tensor,
-        prev_model_inputs: tuple[Tensor, ...],
-    ) -> tuple[Tensor, ...]:
-        _, old_row_offsets = prev_model_inputs
-        row_offsets_size = old_row_offsets.shape[0]
+        prev_model_inputs: ModelInputs,
+    ) -> ReplitInputs:
+        prev_model_inputs = cast(ReplitInputs, prev_model_inputs)
+        row_offsets_size = prev_model_inputs.input_row_offsets.shape[0]
         next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
-        next_token_inputs = (next_tokens, next_row_offsets)
-
-        return next_token_inputs
+        return ReplitInputs(
+            tokens=next_tokens,
+            input_row_offsets=next_row_offsets,
+        )
 
     def _get_kv_params(self) -> KVCacheParams:
         return KVCacheParams(
@@ -194,7 +226,7 @@ class ReplitModel(PipelineModel):
 
     def compute_log_probabilities(
         self,
-        model_inputs: Iterable[Any],
+        model_inputs: ModelInputs,
         model_outputs: ModelOutputs,
         next_tokens: Tensor,
         batch_top_n: list[int],
@@ -217,22 +249,22 @@ class ReplitModel(PipelineModel):
         next_token_logits = model_outputs.next_token_logits.to(CPU()).to_numpy()
 
         sampled_tokens = next_tokens.to(CPU()).to_numpy()
-        # Handle batched inputs.
-        token_tensor, _, valid_length_tensor = model_inputs
-        tokens = token_tensor.to(CPU()).to_numpy()
-        valid_lengths = valid_length_tensor.to(CPU()).to_numpy()
+
+        # Handle the ragged inputs
+        model_inputs = cast(ReplitInputs, model_inputs)
+        tokens = model_inputs.tokens.to(CPU()).to_numpy()
+        input_row_offsets = model_inputs.input_row_offsets.to(CPU()).to_numpy()
 
         def _get_logits_and_samples(
             batch_index: int, echo: bool
         ) -> tuple[np.ndarray, np.ndarray]:
             if echo:
-                seq_len = valid_lengths[batch_index]
-                padded_tokens = tokens[batch_index]
-                assert model_outputs.logits is not None
-                batch_logits = logits[batch_index, :seq_len]
+                start_offset = input_row_offsets[batch_index]
+                end_offset = input_row_offsets[batch_index + 1]
+                batch_logits = logits[start_offset:end_offset]
                 samples = np.concatenate(
                     (
-                        padded_tokens[1:seq_len],
+                        tokens[start_offset + 1 : end_offset],
                         sampled_tokens[batch_index : batch_index + 1],
                     )
                 )

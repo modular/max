@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Sequence, cast
 
 import numpy as np
 from dataprocessing import collate_batch
 from max.driver import Tensor
 from max.engine import InferenceSession, Model
 from max.pipelines import (
+    ModelInputs,
     ModelOutputs,
     PipelineConfig,
     PipelineModel,
@@ -32,6 +34,26 @@ from .graph import build_graph
 PAD_VALUE = 1
 
 
+class MPNetInputs(ModelInputs):
+    """A class representing inputs for the MPNet model.
+
+    This class encapsulates the input tensors required for the MPNet model execution:
+    - next_tokens_batch: A tensor containing the input token IDs
+    - extended_attention_mask: A tensor containing the extended attention mask
+    """
+
+    next_tokens_batch: Tensor
+    extended_attention_mask: Tensor
+
+    def __init__(
+        self,
+        next_tokens_batch: Tensor,
+        extended_attention_mask: Tensor,
+    ) -> None:
+        self.next_tokens_batch = next_tokens_batch
+        self.extended_attention_mask = extended_attention_mask
+
+
 class MPNetPipelineModel(PipelineModel):
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession
@@ -39,9 +61,17 @@ class MPNetPipelineModel(PipelineModel):
         super().__init__(pipeline_config, session)
         self.model = self.load_model(session)
 
-    def execute(self, *model_inputs: Tensor) -> ModelOutputs:  # type: ignore
+    def execute(
+        self,
+        model_inputs: ModelInputs,
+        kv_cache_inputs: Sequence[Tensor] | None = None,
+    ) -> ModelOutputs:
+        model_inputs = cast(MPNetInputs, model_inputs)
+        assert kv_cache_inputs is None, "MPNet does not have KV cache inputs"
         model_outputs = self.model.execute(
-            *model_inputs, copy_inputs_to_device=False
+            model_inputs.next_tokens_batch,
+            model_inputs.extended_attention_mask,
+            copy_inputs_to_device=False,
         )
         assert isinstance(model_outputs[0], Tensor)
         return ModelOutputs(logits=model_outputs[0])
@@ -49,7 +79,7 @@ class MPNetPipelineModel(PipelineModel):
     def prepare_initial_token_inputs(
         self,
         context_batch: list[TextContext],  # type: ignore
-    ) -> tuple[Tensor, ...]:
+    ) -> MPNetInputs:
         # Get tokens and seq_ids.
         tokens = [ctx.next_tokens for ctx in context_batch]
 
@@ -63,24 +93,24 @@ class MPNetPipelineModel(PipelineModel):
 
         # Compute and extend attention mask.
         attention_mask = (next_tokens_batch != PAD_VALUE).astype(np.int64)
-        extended_attenion_mask = _get_extended_attention_mask(
+        extended_attention_mask = _get_extended_attention_mask(
             attention_mask, self.pipeline_config.dtype.to_numpy()
         )
 
-        return (
-            Tensor.from_numpy(next_tokens_batch).to(
+        return MPNetInputs(
+            next_tokens_batch=Tensor.from_numpy(next_tokens_batch).to(
                 self.pipeline_config.device
             ),
-            Tensor.from_numpy(extended_attenion_mask).to(
-                self.pipeline_config.device
-            ),
+            extended_attention_mask=Tensor.from_numpy(
+                extended_attention_mask
+            ).to(self.pipeline_config.device),
         )
 
     def prepare_next_token_inputs(
         self,
         next_tokens: Tensor,
-        prev_model_inputs: tuple[Tensor, ...],
-    ) -> tuple[Tensor, ...]:
+        prev_model_inputs: ModelInputs,
+    ) -> MPNetInputs:
         raise NotImplementedError(
             "MPNet does not support preparing next tokens inputs."
         )

@@ -28,7 +28,12 @@ from .interfaces import (
     TokenGeneratorRequestMessage,
     TokenGeneratorRequestTool,
 )
-from .pipeline import ModelOutputs, PipelineModel, TextGenerationPipeline
+from .pipeline import (
+    ModelInputs,
+    ModelOutputs,
+    PipelineModel,
+    TextGenerationPipeline,
+)
 from .registry import PIPELINE_REGISTRY, SupportedArchitecture
 from .response import EmbeddingsResponse, LogProbabilities, TextResponse
 from .tokenizer import (
@@ -69,6 +74,7 @@ __all__ = [
     "WeightsFormat",
     "RopeType",
     "PipelineModel",
+    "ModelInputs",
     "ModelOutputs",
     "TextResponse",
     "LogProbabilities",

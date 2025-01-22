@@ -55,9 +55,10 @@ class EmbeddingsPipeline:
             context_batch
         )
 
-        curr_step_inputs = model_inputs
         tracer.next("execute")
-        model_outputs = self._pipeline_model.execute(*curr_step_inputs)
+        model_outputs = self._pipeline_model.execute(
+            model_inputs=model_inputs, kv_cache_inputs=None
+        )
         assert model_outputs.logits
         # Do the copy to host for each token generated.
         tracer.next("logits.to(CPU())")

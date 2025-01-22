@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Sequence, cast
 
 import numpy as np
 from max.driver import Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
 from max.pipelines import (
+    ModelInputs,
     ModelOutputs,
     PipelineConfig,
     PipelineModel,
@@ -37,6 +39,44 @@ from .model.graph import _build_text_graph, _build_vision_graph
 from .vision_encoder.attention_utils import causal_attention_mask_2d_from_imgs
 
 
+class PixtralInputs(ModelInputs):
+    """Holds inputs for the Pixtral model."""
+
+    input_ids: Tensor
+    input_row_offsets: Tensor
+
+    # Image inputs
+    _pixel_values: Tensor | None = None
+    _attention_mask: Tensor | None = None
+
+    def __init__(
+        self,
+        input_ids: Tensor,
+        input_row_offsets: Tensor,
+        pixel_values: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ):
+        self.input_ids = input_ids
+        self.input_row_offsets = input_row_offsets
+        self._pixel_values = pixel_values
+        self._attention_mask = attention_mask
+
+    @property
+    def has_vision_inputs(self) -> bool:
+        """Returns true iff this includes vision model inputs."""
+        return self._pixel_values is not None
+
+    @property
+    def pixel_values(self) -> Tensor:
+        assert self._pixel_values is not None
+        return self._pixel_values
+
+    @property
+    def attention_mask(self) -> Tensor:
+        assert self._attention_mask is not None
+        return self._attention_mask
+
+
 class PixtralModel(PipelineModel):
     """The overall interface to the Pixtral model."""
 
@@ -50,17 +90,19 @@ class PixtralModel(PipelineModel):
         # in the token generation code, so we still need to set it here.
         self.model = self.language_model
 
-    def execute(self, *model_inputs: Tensor) -> ModelOutputs:  # type: ignore
-        model_input_list = list(model_inputs)
-
-        if (
-            len(model_input_list) == 8
-        ):  # vision_graph has 4 inputs: pixel_values and attention_mask
+    def execute(
+        self,
+        model_inputs: ModelInputs,
+        # TODO(zheng): This should be folded as KVCacheInputs into ModelInputs.
+        kv_cache_inputs: Sequence[Tensor] | None = None,
+    ) -> ModelOutputs:
+        model_inputs = cast(PixtralInputs, model_inputs)
+        if model_inputs.has_vision_inputs:
             image_embeds = self.vision_model.execute(
-                *model_input_list[2:4], copy_inputs_to_device=False
+                model_inputs.pixel_values,
+                model_inputs.attention_mask,
+                copy_inputs_to_device=False,
             )[0]
-            # drop pixel_values and attention_mask from inputs for the language model
-            model_input_list = model_input_list[:2] + model_input_list[4:]
         else:
             # batch_size * num_concurrent_media * num_patches are set to 0 here to imitate a dummy tensor (used in text-only mode).
             image_embeds = Tensor.zeros(
@@ -72,9 +114,15 @@ class PixtralModel(PipelineModel):
                 dtype=self.pipeline_config.dtype,
             ).to(self.pipeline_config.device)
 
-        model_input_list.insert(1, image_embeds)  # type: ignore
+        assert (
+            kv_cache_inputs is not None
+        ), "Pixtral has KV cache inputs, but none were provided"
         model_outputs = self.language_model.execute(
-            *model_input_list, copy_inputs_to_device=False
+            model_inputs.input_ids,
+            image_embeds,
+            model_inputs.input_row_offsets,
+            *kv_cache_inputs,
+            copy_inputs_to_device=False,
         )
         assert not self.pipeline_config.enable_echo
         assert isinstance(model_outputs[0], Tensor)
@@ -83,7 +131,7 @@ class PixtralModel(PipelineModel):
     def prepare_initial_token_inputs(
         self,
         context_batch: list[TextAndVisionContext],  # type: ignore
-    ) -> tuple[Tensor, ...]:
+    ) -> PixtralInputs:
         # Input row offset type: ["input_row_offsets_len"], UInt32
         input_row_offsets = Tensor.from_numpy(
             np.cumsum(
@@ -122,32 +170,33 @@ class PixtralModel(PipelineModel):
             attention_mask = Tensor.from_numpy(attention_mask).to(
                 self.pipeline_config.device
             )
-            return (
-                input_ids,
-                input_row_offsets,
-                pixel_values,
-                attention_mask,
+            return PixtralInputs(
+                input_ids=input_ids,
+                input_row_offsets=input_row_offsets,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
             )
 
-        return (
-            input_ids,
-            input_row_offsets,
+        return PixtralInputs(
+            input_ids=input_ids,
+            input_row_offsets=input_row_offsets,
         )
 
     def prepare_next_token_inputs(
         self,
         next_tokens: Tensor,
-        prev_model_inputs: tuple[Tensor, ...],
-    ) -> tuple[Tensor, ...]:
+        prev_model_inputs: ModelInputs,
+    ) -> PixtralInputs:
+        prev_model_inputs = cast(PixtralInputs, prev_model_inputs)
         # input_ids, old_row_offsets, Optional: [pixel_values, attention_mask]
-        old_row_offsets = prev_model_inputs[1]
+        old_row_offsets = prev_model_inputs.input_row_offsets
 
         row_offsets_size = old_row_offsets.shape[0]
         next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
-        # In multi-step execution, don't re-pass the pixel_values.
-        return (
-            next_tokens,
-            next_row_offsets,
+        # In multi-step execution, don't re-pass the pixel_values and attention_mask.
+        return PixtralInputs(
+            input_ids=next_tokens,
+            input_row_offsets=next_row_offsets,
         )
 
     def _get_kv_params(self) -> KVCacheParams:

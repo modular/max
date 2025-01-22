@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import (
     Any,
@@ -40,6 +39,32 @@ ARCH_SAFE_VRAM_USAGE_LIMIT = {
     "LlamaForCausalLM": 0.96,
     "MistralForCausalLM": 0.96,
 }
+
+
+class ModelInputs:
+    """
+    Base class for model inputs.
+    Use this class to encapsulate inputs for your model.
+    You may store any number of dataclass fields
+
+    Example:
+        >>> class ReplitInputs(ModelInputs):
+        ...     tokens: Tensor
+        ...     input_row_offsets: Tensor
+        ...
+        ...     def __init__(self, tokens: Tensor, input_row_offsets: Tensor):
+        ...         self.tokens = tokens
+        ...         self.input_row_offsets = input_row_offsets
+        ...
+        >>> # Create tensors
+        >>> tokens = Tensor.zeros((1, 2, 3), DType.int64)
+        >>> input_row_offsets = Tensor.zeros((1, 1, 1), DType.int64)
+        >>> # Initialize inputs
+        >>> inputs = ReplitInputs(tokens=tokens, input_row_offsets=input_row_offsets)
+        >>> # Access tensors
+        >>> list(inputs) == [tokens, input_row_offsets]
+        True
+    """
 
 
 @dataclass(frozen=True)
@@ -169,14 +194,31 @@ class PipelineModel(ABC):
         return available_cache_memory
 
     @abstractmethod
-    def execute(self, model_inputs: Any) -> ModelOutputs:
-        """Runs the graph."""
-        ...
+    def execute(
+        self,
+        model_inputs: ModelInputs,
+        # TODO(zheng): This should be wrapped in a class called KVCacheInputs in the future.
+        kv_cache_inputs: Sequence[Tensor] | None = None,
+    ) -> ModelOutputs:
+        """Executes the graph with the given inputs.
+
+        Args:
+            model_inputs: The model inputs to execute, containing tensors and any other
+                required data for model execution.
+            kv_cache_inputs: The kv cache inputs to execute, containing tensors and any other
+                required data for model execution.
+
+        Returns:
+            ModelOutputs containing the pipeline's output tensors.
+
+        This is an abstract method that must be implemented by concrete PipelineModels
+        to define their specific execution logic.
+        """
 
     @abstractmethod
     def prepare_initial_token_inputs(
         self, context_batch: Sequence[T]
-    ) -> Iterable[Any]:
+    ) -> ModelInputs:
         """Prepares the initial inputs to be passed to `.execute()`.
 
         The inputs and functionality of this method can vary per model.
@@ -191,8 +233,10 @@ class PipelineModel(ABC):
 
     @abstractmethod
     def prepare_next_token_inputs(
-        self, next_tokens: Tensor, prev_model_inputs: Any
-    ) -> Any:
+        self,
+        next_tokens: Tensor,
+        prev_model_inputs: ModelInputs,
+    ) -> ModelInputs:
         """Prepares the secondary inputs to be passed to `.execute()`.
 
         While `prepare_initial_token_inputs` is responsible for managing the initial inputs.
@@ -202,7 +246,7 @@ class PipelineModel(ABC):
 
     def compute_log_probabilities(
         self,
-        model_inputs: Iterable[Any],
+        model_inputs: ModelInputs,
         model_outputs: ModelOutputs,
         next_tokens: Tensor,
         batch_top_n: list[int],
@@ -400,9 +444,10 @@ class TextGenerationPipeline(TokenGenerator[T]):
             ]
             # Execute the model and get next tokens.
             model_outputs = self._pipeline_model.execute(
-                *curr_step_inputs, *kv_cache_inputs_tuple
+                model_inputs=curr_step_inputs,
+                kv_cache_inputs=kv_cache_inputs_tuple,
             )
-            assert model_outputs.next_token_logits
+            assert model_outputs.next_token_logits is not None
             next_token_logits = model_outputs.next_token_logits
             tracer.next("sample_next_token")
             new_tokens, new_generated_tokens = self._sampler(
@@ -436,11 +481,17 @@ class TextGenerationPipeline(TokenGenerator[T]):
                 break
             # Prepare inputs for the next token in multistep execution
             tracer.next("increment_cache_lengths")  # pops sample_next_token
-            kv_cache_inputs = (
-                self._pipeline_model.kv_manager.increment_cache_lengths(
-                    kv_cache_inputs,
-                    curr_step_inputs,
-                )
+            # Unpack model inputs for execute() call by getting all fields
+            curr_step_inputs_tuple = tuple(
+                getattr(curr_step_inputs, field)
+                for field in vars(curr_step_inputs)
+            )
+            kv_cache_inputs = self._pipeline_model.kv_manager.increment_cache_lengths(
+                kv_cache_inputs,
+                # TODO(zheng): Due to a circular import in kv_cache/manager.py,
+                # we cannot import ModelInputs here. We just unroll all fields
+                # as an iterable one like this.
+                curr_step_inputs_tuple,
             )
             tracer.next("prepare_next_token_inputs")  # pops inc_cache_lengths
             curr_step_inputs = self._pipeline_model.prepare_next_token_inputs(

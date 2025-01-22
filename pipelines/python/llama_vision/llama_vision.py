@@ -15,9 +15,8 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass
-from typing import Any, final
+from collections.abc import Sequence
+from typing import Any, Iterable, cast, final
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -26,6 +25,7 @@ from max.engine import InferenceSession, Model
 from max.graph import Dim, Graph, Shape, TensorType, TensorValue, Type, ops
 from max.graph.weights import Weights
 from max.pipelines import (
+    ModelInputs,
     ModelOutputs,
     PipelineConfig,
     PipelineModel,
@@ -323,8 +323,7 @@ class MultimodalKVCacheManager(KVCacheManager):
 
 
 # TODO(bduke): use `@dataclass(slots=True)` when we drop 3.9 support.
-@dataclass
-class LlamaVisionInputs:
+class LlamaVisionInputs(ModelInputs):
     """Holds language model inputs and (optionally) vision model inputs."""
 
     # Language model inputs.
@@ -337,6 +336,24 @@ class LlamaVisionInputs:
     _pixel_values: Tensor | None = None
     _aspect_ratio_ids: Tensor | None = None
     _aspect_ratio_mask: Tensor | None = None
+
+    def __init__(
+        self,
+        input_id_values: Tensor,
+        input_row_offsets: Tensor,
+        input_id_max_seq_len: Tensor,
+        pixel_row_offsets: Tensor,
+        pixel_values: Tensor | None = None,
+        aspect_ratio_ids: Tensor | None = None,
+        aspect_ratio_mask: Tensor | None = None,
+    ):
+        self.input_id_values = input_id_values
+        self.input_row_offsets = input_row_offsets
+        self.input_id_max_seq_len = input_id_max_seq_len
+        self.pixel_row_offsets = pixel_row_offsets
+        self._pixel_values = pixel_values
+        self._aspect_ratio_ids = aspect_ratio_ids
+        self._aspect_ratio_mask = aspect_ratio_mask
 
     def __post_init__(self) -> None:
         """Validate consistency between vision fields.
@@ -360,10 +377,6 @@ class LlamaVisionInputs:
                 if getattr(self, field_name) is not None:
                     msg = f"{field_name} must be None if _pixel_values is None"
                     raise ValueError(msg)
-
-    def __iter__(self) -> Iterator[LlamaVisionInputs]:
-        # Return this directly as expected in execute.
-        yield self
 
     @property
     def has_vision_inputs(self) -> bool:
@@ -395,9 +408,9 @@ class LlamaVisionInputs:
             input_id_max_seq_len=self.input_id_max_seq_len,
             pixel_row_offsets=self.pixel_row_offsets,
             # Set vision model inputs to None after the first `next_token`.
-            _pixel_values=None,
-            _aspect_ratio_ids=None,
-            _aspect_ratio_mask=None,
+            pixel_values=None,
+            aspect_ratio_ids=None,
+            aspect_ratio_mask=None,
         )
 
 
@@ -826,19 +839,22 @@ class LlamaVision(PipelineModel):
             input_row_offsets=input_id_row_offsets,
             input_id_max_seq_len=input_id_max_seq_len,
             pixel_row_offsets=pixel_row_offsets,
-            _pixel_values=pixel_values,
-            _aspect_ratio_ids=aspect_ratio_ids,
-            _aspect_ratio_mask=aspect_ratio_mask,
+            pixel_values=pixel_values,
+            aspect_ratio_ids=aspect_ratio_ids,
+            aspect_ratio_mask=aspect_ratio_mask,
         )
 
     def prepare_next_token_inputs(
-        self, next_tokens: Tensor, prev_inputs: LlamaVisionInputs
+        self,
+        next_tokens: Tensor,
+        prev_inputs: ModelInputs,
     ) -> LlamaVisionInputs:
         """Produce the updated LlamaVisionInputs for the next token.
 
         This sets existing vision inputs to none and replaces text tokens and
         row offsets.
         """
+        prev_inputs = cast(LlamaVisionInputs, prev_inputs)
         next_row_offsets = self._input_row_offsets_prealloc[
             : prev_inputs.input_row_offsets.shape[0]
         ]
@@ -846,7 +862,10 @@ class LlamaVision(PipelineModel):
         return prev_inputs.update_for_next_token(next_tokens, next_row_offsets)
 
     def execute(
-        self, model_inputs: LlamaVisionInputs, *kv_inputs: Tensor
+        self,
+        model_inputs: ModelInputs,
+        # TODO(zheng): This should be folded as KVCacheInputs into ModelInputs.
+        kv_cache_inputs: Sequence[Tensor] | None = None,
     ) -> ModelOutputs:
         # batch_size * num_concurrent_media * max_num_tiles * num_patches
         # are set to 0 here to imitate a dummy tensor (used in text-only mode).
@@ -855,6 +874,7 @@ class LlamaVision(PipelineModel):
             dtype=self.pipeline_config.dtype,
         ).to(self.pipeline_config.device)
 
+        model_inputs = cast(LlamaVisionInputs, model_inputs)
         if model_inputs.has_vision_inputs:
             # Compute the cross attention states if this is a CE step.
             exec_result = self.vision_model.execute(
@@ -866,13 +886,14 @@ class LlamaVision(PipelineModel):
             assert isinstance(exec_result, Tensor)
             cross_attention_states = exec_result
 
+        assert kv_cache_inputs is not None
         model_outputs = self.language_model.execute(
             cross_attention_states,
             model_inputs.input_id_values,
             model_inputs.input_row_offsets,
             model_inputs.input_id_max_seq_len,
             model_inputs.pixel_row_offsets,
-            *kv_inputs,
+            *kv_cache_inputs,
             copy_inputs_to_device=False,
         )
         assert not self.pipeline_config.enable_echo

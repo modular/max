@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import time
 import warnings
-from typing import List, Sequence, Union
+from typing import List, Sequence, Union, cast
 
 import numpy as np
 from dataprocessing import batch_padded_tokens_and_mask
@@ -27,6 +27,7 @@ from max.graph import DeviceRef, Graph, TensorType
 from max.graph.weights import GGUFWeights
 from max.pipelines import (
     LogProbabilities,
+    ModelInputs,
     ModelOutputs,
     PipelineConfig,
     PipelineModel,
@@ -44,6 +45,27 @@ from nn.compute_log_probabilities import compute_log_probabilities
 from .gguf import distributed_transformer_opaque, transformer
 
 
+class Llama3Inputs(ModelInputs):
+    """A class representing inputs for the Llama3 model.
+
+    This class encapsulates the input tensors required for the Llama3 model execution:
+    - tokens: A tensor containing the input token IDs
+    - input_row_offsets_or_attn_mask: A tensor containing the offsets for each row in the ragged input sequence,
+    or the attention mask for the padded input sequence
+    """
+
+    tokens: Tensor
+    input_row_offsets_or_attn_mask: Tensor
+
+    def __init__(
+        self,
+        tokens: Tensor,
+        input_row_offsets_or_attn_mask: Tensor,
+    ) -> None:
+        self.tokens = tokens
+        self.input_row_offsets_or_attn_mask = input_row_offsets_or_attn_mask
+
+
 class Llama3Model(PipelineModel):
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession
@@ -51,9 +73,16 @@ class Llama3Model(PipelineModel):
         super().__init__(pipeline_config, session)
         self.model = self.load_model(session)
 
-    def execute(self, *model_inputs: Tensor) -> ModelOutputs:
+    def execute(
+        self,
+        model_inputs: ModelInputs,
+        kv_cache_inputs: Sequence[Tensor] | None = None,
+    ) -> ModelOutputs:
+        model_inputs = cast(Llama3Inputs, model_inputs)
         model_outputs = self.model.execute(
-            *model_inputs,
+            model_inputs.tokens,
+            model_inputs.input_row_offsets_or_attn_mask,
+            *kv_cache_inputs,
             copy_inputs_to_device=(
                 not self.pipeline_config.cache_strategy.uses_opaque()
             ),
@@ -69,10 +98,10 @@ class Llama3Model(PipelineModel):
 
     def _prepare_ragged_initial_token_inputs(
         self, context_batch: Sequence[TextContext]
-    ) -> tuple[Tensor, ...]:
-        # Get input_row_offset: start and end position of each batch in the
+    ) -> Llama3Inputs:
+        # Get input_row_offsets: start and end position of each batch in the
         # combined total_seq_len dimension.
-        input_row_offset = np.cumsum(
+        input_row_offsets = np.cumsum(
             [0] + [ctx.seq_len for ctx in context_batch],
             dtype=np.uint32,
         )
@@ -80,16 +109,18 @@ class Llama3Model(PipelineModel):
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
         tokens = np.concatenate([ctx.next_tokens for ctx in context_batch])
 
-        return (
-            Tensor.from_numpy(tokens).to(self.pipeline_config.devices[0]),
-            Tensor.from_numpy(input_row_offset).to(
+        return Llama3Inputs(
+            tokens=Tensor.from_numpy(tokens).to(
                 self.pipeline_config.devices[0]
             ),
+            input_row_offsets_or_attn_mask=Tensor.from_numpy(
+                input_row_offsets
+            ).to(self.pipeline_config.devices[0]),
         )
 
     def _prepare_padded_initial_token_inputs(
         self, context_batch: Sequence[TextContext]
-    ) -> tuple[Tensor, ...]:
+    ) -> Llama3Inputs:
         # Get tokens and seq_ids
         tokens = [ctx.next_tokens for ctx in context_batch]
 
@@ -102,11 +133,14 @@ class Llama3Model(PipelineModel):
             pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
         )
 
-        return (next_tokens_batch, attn_mask)
+        return Llama3Inputs(
+            tokens=next_tokens_batch,
+            input_row_offsets_or_attn_mask=attn_mask,
+        )
 
     def prepare_initial_token_inputs(
         self, context_batch: Sequence[TextContext]
-    ) -> tuple[Tensor, ...]:
+    ) -> Llama3Inputs:
         """Prepare the inputs for the first pass in multistep execution."""
         if self.pipeline_config.cache_strategy.uses_opaque():
             return self._prepare_ragged_initial_token_inputs(context_batch)
@@ -116,40 +150,46 @@ class Llama3Model(PipelineModel):
     def _prepare_ragged_next_token_inputs(
         self,
         next_tokens: Tensor,
-        prev_model_inputs: tuple[Tensor, ...],
-    ):
-        _, old_row_offsets = prev_model_inputs
-        row_offsets_size = old_row_offsets.shape[0]
+        prev_model_inputs: Llama3Inputs,
+    ) -> Llama3Inputs:
+        row_offsets_size = (
+            prev_model_inputs.input_row_offsets_or_attn_mask.shape[0]
+        )
         next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
-        next_token_inputs = (next_tokens, next_row_offsets)
 
-        return next_token_inputs
+        return Llama3Inputs(
+            tokens=next_tokens,
+            input_row_offsets_or_attn_mask=next_row_offsets,
+        )
 
     def _prepare_padded_next_token_inputs(
         self,
         next_tokens: Tensor,
-        prev_model_inputs: tuple[Tensor, ...],
-    ):
-        prev_tokens, prev_attn_mask = prev_model_inputs
-        batch_size = prev_tokens.shape[0]
-        start_pos = [prev_attn_mask.shape[-1]] * batch_size
+        prev_model_inputs: Llama3Inputs,
+    ) -> Llama3Inputs:
+        batch_size = prev_model_inputs.tokens.shape[0]
+        start_pos = [
+            prev_model_inputs.input_row_offsets_or_attn_mask.shape[-1]
+        ] * batch_size
         next_tokens_batch, _, attn_mask = batch_padded_tokens_and_mask(
             start_pos=start_pos,
             tokens=next_tokens,
             pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
         )
-        next_token_inputs = (next_tokens_batch, attn_mask)
-
-        return next_token_inputs
+        return Llama3Inputs(
+            tokens=next_tokens_batch,
+            input_row_offsets_or_attn_mask=attn_mask,
+        )
 
     def prepare_next_token_inputs(
         self,
         next_tokens: Tensor,
-        prev_model_inputs: tuple[Tensor, ...],
-    ) -> tuple[Tensor, ...]:
+        prev_model_inputs: ModelInputs,
+    ) -> Llama3Inputs:
         """Prepare the inputs for the next token in multistep execution.
         This should avoid any device synchronization or copy operations.
         """
+        prev_model_inputs = cast(Llama3Inputs, prev_model_inputs)
         if self.pipeline_config.cache_strategy.uses_opaque():
             return self._prepare_ragged_next_token_inputs(
                 next_tokens, prev_model_inputs
@@ -328,7 +368,9 @@ class Llama3Model(PipelineModel):
                 )
                 tokens, input_row_offsets, *kv_cache = graph.inputs
                 outputs = model(
-                    tokens, kv_cache, input_row_offsets=input_row_offsets
+                    tokens,
+                    kv_cache,
+                    input_row_offsets=input_row_offsets,
                 )
                 graph.output(*outputs)
                 return graph
@@ -392,7 +434,7 @@ class Llama3Model(PipelineModel):
 
     def compute_log_probabilities(
         self,
-        model_inputs: Iterable[Any],
+        model_inputs: ModelInputs,
         model_outputs: ModelOutputs,
         next_tokens: Tensor,
         batch_top_n: list[int],
@@ -416,9 +458,11 @@ class Llama3Model(PipelineModel):
         sampled_tokens = next_tokens.to(CPU()).to_numpy()
         if self.pipeline_config.cache_strategy.uses_opaque():
             # Handle the ragged inputs
-            tokens_tensor, input_row_offsets_tensor = model_inputs
-            tokens = tokens_tensor.to(CPU()).to_numpy()
-            input_row_offsets = input_row_offsets_tensor.to(CPU()).to_numpy()
+            model_inputs = cast(Llama3Inputs, model_inputs)
+            tokens = model_inputs.tokens.to(CPU()).to_numpy()
+            input_row_offsets = model_inputs.input_row_offsets.to(
+                CPU()
+            ).to_numpy()
 
             def _get_logits_and_samples(
                 batch_index: int, echo: bool
@@ -443,7 +487,7 @@ class Llama3Model(PipelineModel):
         else:
             # Handle batched inputs. Llama pads them to the right so the seq
             # lengths can be computed by finding the first 0 token.
-            tokens = model_inputs[0]
+            tokens = model_inputs.tokens
             seq_lens = np.sum(tokens > 0, axis=1)
 
             def _get_logits_and_samples(
