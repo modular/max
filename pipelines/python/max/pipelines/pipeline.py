@@ -355,7 +355,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
     def next_token(
         self,
         batch: dict[str, T],
-        num_steps: int = 1,
+        num_steps: int,
     ) -> list[dict[str, Any]]:
         """Provided a batch, process batch inputs, execute the graph for num_steps in a multi-step scenario,
         then decode the tokens holistically and return the list of decoded tokens.

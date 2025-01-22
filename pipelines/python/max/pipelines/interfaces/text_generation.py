@@ -242,13 +242,13 @@ class TokenGenerator(Generic[TokenGeneratorContext], Protocol):
     """Interface for LLM token-generator models."""
 
     def next_token(
-        self, batch: dict[str, TokenGeneratorContext], num_steps: int = 1
+        self, batch: dict[str, TokenGeneratorContext], num_steps: int
     ) -> list[dict[str, Any]]:
         """Computes the next token response for a single batch.
 
         Args:
             batch (dict[str, TokenGeneratorContext]): Batch of contexts.
-            num_steps (int, optional): Number of forward steps. Defaults to 1.
+            num_steps int: Number of tokens to generate.
 
         Returns:
             list[dict[str, Any]]: List of encoded responses (indexed by req. ID)

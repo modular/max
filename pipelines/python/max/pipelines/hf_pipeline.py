@@ -95,7 +95,7 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
             )
 
     def next_token(
-        self, batch: dict[str, TextContext], num_steps: int = 1
+        self, batch: dict[str, TextContext], num_steps: int
     ) -> list[dict[str, TextResponse]]:
         """Provided a batch, process batch inputs, execute the graph for num_steps in a multi-step scenario,
         then decode the tokens holistically and return the list of decoded tokens.

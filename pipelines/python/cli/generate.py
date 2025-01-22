@@ -40,6 +40,7 @@ async def stream_text_to_console(
     tokenizer: PipelineTokenizer,
     prompt: str,
     images: Optional[list[bytes]],
+    num_steps: int,
     metrics: Optional[TextGenerationMetrics] = None,
     print_tokens: bool = True,
 ) -> None:
@@ -63,22 +64,29 @@ async def stream_text_to_console(
         metrics.signpost("begin_generation")
 
     first_token = True
-    while True:
-        (response,) = pipeline.next_token(pipeline_request)
-        if req_id not in response:
-            # next_token is expected to omit the return if
-            # it encounters eos.
-            break
+    generate_again = True
+    while generate_again:
+        responses = pipeline.next_token(
+            pipeline_request,
+            num_steps=num_steps,
+        )
 
-        encoded_text = response[req_id].next_token
-        response_text = await tokenizer.decode(context, encoded_text)
-        if metrics:
-            if first_token:
-                first_token = False
-                metrics.signpost("first_token")
-            metrics.new_token()
-        if print_tokens:
-            print(response_text, end="", flush=True)
+        for response in responses:
+            if req_id not in response:
+                # next_token is expected to omit the return if
+                # it encounters eos.
+                generate_again = False
+                break
+
+            encoded_text = response[req_id].next_token
+            response_text = await tokenizer.decode(context, encoded_text)
+            if metrics:
+                if first_token:
+                    first_token = False
+                    metrics.signpost("first_token")
+                metrics.new_token()
+            if print_tokens:
+                print(response_text, end="", flush=True)
 
     if metrics:
         metrics.signpost("end_generation")
@@ -113,6 +121,7 @@ def generate_text_for_pipeline(
                         tokenizer,
                         prompt,
                         images,
+                        num_steps=pipeline_config.max_num_steps,
                         metrics=None,
                         print_tokens=False,
                     )
@@ -126,6 +135,7 @@ def generate_text_for_pipeline(
                 tokenizer,
                 prompt,
                 images,
+                num_steps=pipeline_config.max_num_steps,
                 metrics=metrics,
                 print_tokens=True,
             )
