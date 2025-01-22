@@ -154,11 +154,6 @@ class PipelineRegistry:
             pipeline_config.engine = PipelineEngine.HUGGINGFACE
             return pipeline_config
 
-        # TODO(KERN-1104) remove this constraint after we support passing context length to MHA kernel.
-        if pipeline_config.max_length > 16384:
-            msg = f"MAX engine currently has a max_length of 16384, got {pipeline_config.max_length}"
-            raise ValueError(msg)
-
         # The remainder of this function, assumes we have both a valid huggingface_repo_id,
         # and a SupportedArchitecture. We should then validate the details of the existing architecture
         # and fallback to HuggingFace if needed.
