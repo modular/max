@@ -153,6 +153,22 @@ def config_to_flag(cls):
 def pipeline_config_options(func):
     @config_to_flag(PipelineConfig)
     @click.option(
+        "--devices",
+        is_flag=False,
+        type=DevicesOptionType(),
+        show_default=False,
+        default="",
+        flag_value="0",
+        help=(
+            "Whether to run the model on CPU (--devices=cpu), GPU (--devices=gpu)"
+            " or a list of GPUs (--devices=gpu-0,gpu-1) etc. An ID value can be"
+            " provided optionally to indicate the device ID to target. If not"
+            " provided, the model will run on the first available GPU (--devices=gpu),"
+            " or CPU if no GPUs are available (--devices=cpu)."
+        ),
+    )
+    # Kept for backwards compatibility.
+    @click.option(
         "--use-gpu",
         is_flag=False,
         type=DevicesOptionType(),
@@ -167,30 +183,58 @@ def pipeline_config_options(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         kwargs["device_specs"] = []
-        if kwargs["use_gpu"]:
+
+        # If the user is explicitly requesting cpu, set the device spec to cpu, or
+        # else we always default to the first available GPU or the list of GPUs
+        # requested by the user.
+        if kwargs["devices"] == "cpu":
+            kwargs["device_specs"].append(DeviceSpec.cpu())
+        else:
+            gpu_devices_requested_set = set()
+
+            # We check for --devices first. --use-gpu is kept for backwards compatibility.
+            # If users pass in both, we only consider values from the --devices flag.
+            if kwargs["devices"] is not None:
+                if kwargs["devices"] == "gpu":
+                    gpu_devices_requested_set.add(0)
+                else:
+                    gpu_devices_requested_set.update(set(kwargs["devices"]))
+            elif kwargs["use_gpu"] is not None:
+                gpu_devices_requested_set.update(set(kwargs["use_gpu"]))
+
+            gpu_devices_requested = list(gpu_devices_requested_set)
             num_devices_available = accelerator_count()
 
-            for gpu_id in kwargs["use_gpu"]:
-                if gpu_id >= num_devices_available:
-                    msg = f"GPU {gpu_id} was requested but "
-                    if num_devices_available == 0:
-                        msg += "no GPU devices were found."
-                    else:
-                        msg += (
-                            f"only found {num_devices_available} GPU devices."
-                        )
-                    raise ValueError(msg)
-                kwargs["device_specs"].append(DeviceSpec.accelerator(id=gpu_id))
+            # If no devices are available and no devices are requested, default to cpu.
+            if num_devices_available == 0 and len(gpu_devices_requested) == 0:
+                kwargs["device_specs"].append(DeviceSpec.cpu())
+            else:
+                # If no devices are requested, default to the first available GPU.
+                gpu_devices_requested = (
+                    [0]
+                    if len(gpu_devices_requested) == 0
+                    else gpu_devices_requested
+                )
+                for gpu_id in gpu_devices_requested:
+                    if gpu_id >= num_devices_available:
+                        msg = f"GPU {gpu_id} was requested but "
+                        if num_devices_available == 0:
+                            msg += "no GPU devices were found."
+                        else:
+                            msg += f"only found {num_devices_available} GPU devices."
+                        msg += "Please provide valid GPU ID(s) or set --devices=cpu."
+                        raise ValueError(msg)
+                    kwargs["device_specs"].append(
+                        DeviceSpec.accelerator(id=gpu_id)
+                    )
 
-            # If the user is passing in a specific, quantization_encoding don't overwrite it.
-            # If it is empty, set it to default to bfloat16 on gpu.
-            if kwargs["quantization_encoding"] is None:
-                kwargs["quantization_encoding"] = SupportedEncoding.bfloat16
-        else:
-            kwargs["device_specs"].append(DeviceSpec.cpu())
+                # If the user is passing in a specific, quantization_encoding don't overwrite it.
+                # If it is empty, set it to default to bfloat16 on gpu.
+                if kwargs["quantization_encoding"] is None:
+                    kwargs["quantization_encoding"] = SupportedEncoding.bfloat16
 
         del kwargs["use_gpu"]
-
+        del kwargs["devices"]
         return func(*args, **kwargs)
 
     return wrapper

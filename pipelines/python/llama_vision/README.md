@@ -132,7 +132,8 @@ pipeline:
 - `--trust-remote-code`: Indicate whether to allow custom modeling files from
   Hugging Face repositories. Set this to true with caution, as it may
   introduce security risks.
-- `--use-gpu`: Uses the GPU to execute the model. A device ID can optionally
-  be provided to execute on a specific GPU in the system.
 - `--weight-path`: Overrides the default URL, and allows for an
   already-downloaded pretrained weight file to be used with the model.
+- `--devices`: Specifies the device(s) to use for the model. This can optionally
+  be "cpu", "gpu", or a comma-separated list of GPU ID(s) like "gpu-0,gpu-1".
+  Defaults to the first available GPU, or "cpu" if no GPUs are available.

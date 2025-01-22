@@ -114,4 +114,6 @@ pipeline:
   already-downloaded pretrained weight file to be used with the model.
 - `--max-cache-batch-size`: Specifies the maximum batch size to be used.
   Default is 1.
-- `--use-gpu`: Uses the GPU to execute the model.
+- `--devices`: Specifies the device(s) to use for the model. This can optionally
+  be "cpu" or a comma-separated list of GPU ID(s). Defaults to the first
+  available GPU.
