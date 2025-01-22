@@ -67,11 +67,6 @@ class InputContext(Protocol):
         """Trims the current prompt by the given number of tokens."""
         ...
 
-    # TODO: AIPIPE248 - Remove is_done interface and implementations
-    def is_done(self, eos: int) -> bool:
-        """Returns true if token gen for this context completed, else false."""
-        ...
-
 
 class TextContext:
     """A base class for model context, specifically for Text model variants."""
@@ -138,15 +133,6 @@ class TextContext:
         self._next_tokens = new_prompt
         self.active_length = len(new_prompt)
         assert self.active_length > 0
-
-    def is_done(self, eos: int) -> bool:
-        """Returns true if token gen for this context completed, else false."""
-        test_token = (
-            self._next_tokens[-1]
-            if isinstance(self._next_tokens, np.ndarray)
-            else self._next_tokens
-        )
-        return test_token == eos or self.current_length > self.max_length
 
 
 class TextAndVisionContext:
@@ -217,12 +203,3 @@ class TextAndVisionContext:
         self._next_tokens = new_prompt
         self.active_length = len(new_prompt)
         assert self.active_length > 0
-
-    def is_done(self, eos: int) -> bool:
-        """Returns true if token gen for this context completed, else false."""
-        test_token = (
-            self._next_tokens[-1]
-            if isinstance(self._next_tokens, np.ndarray)
-            else self._next_tokens
-        )
-        return test_token == eos or self.current_length > self.max_length
