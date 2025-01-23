@@ -454,7 +454,7 @@ def build_graph(
     # Graph input types.
     input_ids_type = TensorType(DType.int64, shape=["batch_size", "seq_len"])
     attention_mask_type = TensorType(
-        pipeline_config.dtype, shape=["batch_size", 1, 1, "seq_len"]
+        DType.float32, shape=["batch_size", 1, 1, "seq_len"]
     )
 
     mpnet = MPNetModel(pipeline_config, weights)

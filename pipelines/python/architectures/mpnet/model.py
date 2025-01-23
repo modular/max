@@ -10,6 +10,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
+"""Defines the MPNet pipeline model.
+
+Implementation is based on MPNetModel from the transformers library.
+"""
 
 from __future__ import annotations
 
@@ -93,9 +97,7 @@ class MPNetPipelineModel(PipelineModel):
 
         # Compute and extend attention mask.
         attention_mask = (next_tokens_batch != PAD_VALUE).astype(np.int64)
-        extended_attention_mask = _get_extended_attention_mask(
-            attention_mask, self.pipeline_config.dtype.to_numpy()
-        )
+        extended_attention_mask = _get_extended_attention_mask(attention_mask)
 
         return MPNetInputs(
             next_tokens_batch=Tensor.from_numpy(next_tokens_batch).to(
@@ -161,17 +163,15 @@ class MPNetPipelineModel(PipelineModel):
             return model
 
 
-def _get_extended_attention_mask(attention_mask: np.ndarray, dtype: np.dtype):
+def _get_extended_attention_mask(attention_mask: np.ndarray):
     extended_attention_mask = attention_mask[:, None, None, :]
     # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
     # masked positions, this operation will create a tensor which is 0.0 for
     # positions we want to attend and the dtype's smallest value for masked positions.
     # Since we are adding it to the raw scores before the softmax, this is
     # effectively the same as removing these entirely.
-    extended_attention_mask = extended_attention_mask.astype(
-        dtype=dtype
-    )  # fp16 compatibility
+    extended_attention_mask = extended_attention_mask.astype(dtype=np.float32)
     extended_attention_mask = (1.0 - extended_attention_mask) * np.finfo(
-        dtype
+        np.float32
     ).min
     return extended_attention_mask
