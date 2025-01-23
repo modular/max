@@ -26,7 +26,7 @@ from max.serve.api_server import (
 )
 from max.serve.config import APIType, Settings
 from max.serve.debug import DebugSettings
-from max.serve.pipelines.llm import TokenGeneratorPipelineConfig
+from max.serve.pipelines.llm import batch_config_from_pipeline_config
 from max.serve.pipelines.performance_fake import (
     PerformanceFakingPipelineTokenizer,
     get_performance_fake,
@@ -35,50 +35,6 @@ from transformers import AutoTokenizer
 from uvicorn import Server
 
 logger = logging.getLogger(__name__)
-
-
-def batch_config_from_pipeline_config(
-    pipeline_config: PipelineConfig, batch_timeout: float = 0.0
-) -> TokenGeneratorPipelineConfig:
-    if pipeline_config.cache_strategy == KVCacheStrategy.CONTINUOUS:
-        batch_config = TokenGeneratorPipelineConfig.continuous_heterogenous(
-            tg_batch_size=pipeline_config.max_cache_batch_size,
-            ce_batch_size=min(
-                pipeline_config.max_cache_batch_size,
-                pipeline_config.max_ce_batch_size,
-            ),
-            ce_batch_timeout=batch_timeout,
-            max_forward_steps=pipeline_config.max_num_steps,
-        )
-    elif pipeline_config.cache_strategy == KVCacheStrategy.NAIVE:
-        batch_config = TokenGeneratorPipelineConfig.dynamic_homogenous(
-            batch_size=pipeline_config.max_cache_batch_size,
-            batch_timeout=batch_timeout,
-            max_forward_steps=pipeline_config.max_num_steps,
-        )
-    elif pipeline_config.cache_strategy == KVCacheStrategy.PAGED:
-        batch_config = TokenGeneratorPipelineConfig.paged(
-            tg_batch_size=pipeline_config.max_cache_batch_size,
-            ce_batch_size=min(
-                pipeline_config.max_cache_batch_size,
-                pipeline_config.max_ce_batch_size,
-            ),
-            ce_batch_timeout=batch_timeout,
-            max_forward_steps=pipeline_config.max_num_steps,
-        )
-    else:
-        raise ValueError(
-            f"{pipeline_config.cache_strategy} caching strategy is not"
-            " supported by Serving."
-        )
-
-    logger.info(
-        "Server configured with %s caching with batch size %s",
-        pipeline_config.cache_strategy,
-        pipeline_config.max_cache_batch_size,
-    )
-
-    return batch_config
 
 
 def serve_pipeline(

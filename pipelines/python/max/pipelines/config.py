@@ -479,6 +479,10 @@ class PipelineConfig:
         kv_cache_workspace = (total_free_memory * gpu_memory_utilization) - model_weights_size
     """
 
+    target_num_new_tokens: Optional[int] = None
+    """The target number of un-encoded tokens to include in each batch.
+    If not set, this will be set to a best-guess optimal value based on model, hardware, and available memory."""
+
     top_k: Optional[int] = None
     """Limits the sampling to the K most probable tokens. If None, will default to greedy sampling."""
 
