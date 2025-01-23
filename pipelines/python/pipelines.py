@@ -24,8 +24,7 @@ from cli import (
     pipeline_encode,
     serve_pipeline,
 )
-from max.pipelines import PIPELINE_REGISTRY, PipelineConfig, SupportedEncoding
-from max.pipelines.kv_cache import KVCacheStrategy
+from max.pipelines import PIPELINE_REGISTRY, PipelineConfig
 
 logger = logging.getLogger(__name__)
 try:
@@ -146,6 +145,18 @@ def cli_serve(
     help="# of warmup iterations to run before the final timed run.",
 )
 def cli_pipeline(prompt, image_url, num_warmups, **config_kwargs):
+    # Replit huggingface_repo_ids are kinda broken due to transformers
+    # version mismatch. We manually update trust_remote_code to True
+    # because the modularai version does not have the custom Python code needed
+    # Without this, we get:
+    #     ValueError: `attn_type` has to be either `multihead_attention` or
+    #     `multiquery_attention`. Received: grouped_query_attention
+    # Another reason why we override this flag here is because at PipelineConfig
+    # instantiation below, we'll call AutoConfig.from_pretrained, which will
+    # trigger the error above if not set to True.
+    if "replit" in config_kwargs["huggingface_repo_id"]:
+        config_kwargs["trust_remote_code"] = True
+
     # Load tokenizer & pipeline.
     pipeline_config = PipelineConfig(**config_kwargs)
     generate_text_for_pipeline(
@@ -203,139 +214,6 @@ def cli_warm_cache(**config_kwargs) -> None:
 @main.command(name="list")
 def cli_list():
     list_pipelines_to_console()
-
-
-# All the models.
-
-
-@main.command(name="llama3")
-@pipeline_config_options
-@common_server_options
-@click.option(
-    "--prompt",
-    type=str,
-    default="I believe the meaning of life is",
-    help="The text prompt to use for further generation.",
-)
-@click.option(
-    "--num-warmups",
-    type=int,
-    default=1,
-    show_default=True,
-    help="# of warmup iterations to run before the final timed run.",
-)
-@click.option(
-    "--serve",
-    is_flag=True,
-    show_default=True,
-    default=False,
-    help="Whether to serve an OpenAI HTTP endpoint on port 8000.",
-)
-def run_llama3(
-    prompt,
-    num_warmups,
-    serve,
-    profile_serve,
-    performance_fake,
-    batch_timeout,
-    model_name,
-    sim_failure,
-    **config_kwargs,
-):
-    """Runs the Llama3 pipeline."""
-
-    # Update basic parameters.
-    repo_id = config_kwargs.get("huggingface_repo_id", None)
-    if not repo_id:
-        config_kwargs["huggingface_repo_id"] = "modularai/llama-3.1"
-
-    config = PipelineConfig(**config_kwargs)
-
-    if config.quantization_encoding not in [
-        SupportedEncoding.bfloat16,
-        SupportedEncoding.float32,
-    ]:
-        config.cache_strategy = KVCacheStrategy.NAIVE
-
-    if serve:
-        failure_percentage = None
-        if sim_failure > 0:
-            failure_percentage = sim_failure
-
-        serve_pipeline(
-            pipeline_config=config,
-            profile=profile_serve,
-            performance_fake=performance_fake,
-            batch_timeout=batch_timeout,
-            model_name=model_name,
-            failure_percentage=failure_percentage,
-        )
-    else:
-        generate_text_for_pipeline(
-            pipeline_config=config, prompt=prompt, num_warmups=num_warmups
-        )
-
-
-@main.command(name="replit")
-@pipeline_config_options
-@common_server_options
-@click.option(
-    "--prompt",
-    type=str,
-    default="I believe the meaning of life is",
-    help="The text prompt to use for further generation.",
-)
-@click.option(
-    "--num-warmups",
-    type=int,
-    default=0,
-    show_default=True,
-    help="# of warmup iterations to run before the final timed run.",
-)
-@click.option(
-    "--serve",
-    type=bool,
-    is_flag=True,
-    default=False,
-    help="Should the pipeline be served.",
-)
-def replit(
-    prompt,
-    num_warmups,
-    serve,
-    profile_serve,
-    performance_fake,
-    batch_timeout,
-    model_name,
-    sim_failure,
-    **config_kwargs,
-):
-    # Update basic parameters.
-    config_kwargs["trust_remote_code"] = True
-
-    repo_id = config_kwargs.get("huggingface_repo_id", None)
-    if not repo_id:
-        config_kwargs["huggingface_repo_id"] = "modularai/replit-code-1.5"
-
-    # Initialize config, and serve.
-    pipeline_config = PipelineConfig(**config_kwargs)
-    if serve:
-        failure_percentage = None
-        if sim_failure > 0:
-            failure_percentage = sim_failure
-
-        serve_pipeline(
-            pipeline_config=pipeline_config,
-            profile=profile_serve,
-            performance_fake=performance_fake,
-            batch_timeout=batch_timeout,
-            model_name=model_name,
-            failure_percentage=failure_percentage,
-        )
-    else:
-        generate_text_for_pipeline(
-            pipeline_config, prompt=prompt, num_warmups=num_warmups
-        )
 
 
 if __name__ == "__main__":

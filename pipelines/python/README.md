@@ -62,16 +62,9 @@ tool.
 3. Now run one of the text completion demos with any of following commands:
 
    ```shell
-   magic run llama3 --prompt "I believe the meaning of life is"
-   magic run replit --prompt "def fibonacci(n):"
-   magic run mistral --prompt "Why is the sky blue?"
-   ```
-
-   or test out generation at the command line for any supported model from
-   Hugging Face using the `generate` command:
-
-   ```shell
    magic run generate --huggingface-repo-id=modularai/llama-3.1 --prompt "Why is the sky blue?"
+   magic run generate --huggingface-repo-id=modularai/replit-code-1.5 --prompt "def fibonacci(n):"
+   magic run generate --huggingface-repo-id=mistralai/Mistral-Nemo-Instruct-2407 --prompt "Why is the sky blue?"
    ```
 
 4. Host a chat completion endpoint via MAX Serve.
@@ -79,14 +72,15 @@ tool.
    MAX Serve provides functionality to host performant OpenAI compatible
    endpoints using the FastAPI framework.
 
-   You can configure a pipeline to be hosted by using the `--serve` argument.
-   For example:
+   Finetuned weights hosted on Hugging Face can be used with one
+   of these optimized pipeline architectures when serving via the `serve`
+   command:
 
    ```shell
-   magic run llama3 --serve
+   magic run serve --huggingface-repo-id=modularai/llama-3.1
    ```
 
-   A request can be submitted via a cURL command.
+   A request can then be submitted via a cURL command.
 
    ```shell
    curl -N http://localhost:8000/v1/chat/completions \
@@ -99,14 +93,6 @@ tool.
            {"role": "user", "content": "Who won the world series in 2020?"}
        ]
    }'
-   ```
-
-   Additionally, finetuned weights hosted on Hugging Face can be used with one
-   of these optimized pipeline architectures when serving via the `serve`
-   command:
-
-   ```shell
-   magic run serve --huggingface-repo-id=modularai/llama-3.1
    ```
 
 ## Verified Hugging Face model architectures

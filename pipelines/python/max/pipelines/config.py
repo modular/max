@@ -486,7 +486,7 @@ class PipelineConfig:
     """Whether or not to allow for custom modelling files on Huggingface."""
 
     force_download: bool = False
-    """Whether to force download a given file if it’s not already present in the local cache."""
+    """Whether to force download a given file if it's not already present in the local cache."""
 
     enable_echo: bool = False
     """Whether the model should be built with echo capabilities."""
