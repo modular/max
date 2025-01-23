@@ -13,3 +13,4 @@
 
 from .add_one_custom import *
 from .mandelbrot import *
+from .vector_addition import *
