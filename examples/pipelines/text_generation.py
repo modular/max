@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 
 from architectures import register_all_models
@@ -128,4 +129,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if directory := os.getenv("BUILD_WORKSPACE_DIRECTORY"):
+        os.chdir(directory)
+
     main()
