@@ -466,7 +466,7 @@ class PipelineConfig:
     pad_to_multiple_of: int = 2
     """Pad input tensors to be a multiple of value provided."""
 
-    kv_cache_page_size: int = 512
+    kv_cache_page_size: int = 128
     """The number of tokens in a single page in the paged KVCache."""
 
     enable_prefix_caching: bool = False

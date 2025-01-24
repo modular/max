@@ -170,7 +170,7 @@ class PagedKVCacheManager(KVCacheManager):
         devices: list[Device],
         session: InferenceSession,
         cache_memory: int,
-        page_size: int = 512,
+        page_size: int = 128,
     ) -> None:
         self.page_size = page_size
 
