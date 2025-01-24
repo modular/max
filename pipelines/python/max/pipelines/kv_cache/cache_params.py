@@ -30,6 +30,7 @@ VALID_KV_KERNELS = [
 
 
 class KVCacheStrategy(str, Enum):
+    MODEL_DEFAULT = "model_default"
     NAIVE = "naive"
     CONTINUOUS = "continuous"
     PAGED = "paged"

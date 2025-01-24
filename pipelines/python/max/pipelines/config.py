@@ -457,8 +457,12 @@ class PipelineConfig:
     """Maximum cache size to reserve for a single context encoding batch.
     The actual limit is the lesser of this and max_cache_batch_size."""
 
-    cache_strategy: KVCacheStrategy = KVCacheStrategy.CONTINUOUS
-    """Force using a specific cache strategy, 'naive' or 'continuous'."""
+    cache_strategy: KVCacheStrategy = KVCacheStrategy.MODEL_DEFAULT
+    """The cache strategy to use. This defaults to 'model_default', which will set the cache
+    strategy based on the default strategy for the architecture requested.
+
+    You can also force the engine to use a specific caching strategy: 'naive', 'continuous', or 'paged'.
+    """
 
     max_num_steps: int = 1
     """The number of steps to run for multi-step scheduling."""

@@ -278,8 +278,15 @@ class PipelineRegistry:
             pipeline_config.quantization_encoding, []
         )
         if (
-            # If no cache strategies are listed, the architecture does not use
-            # cache.
+            pipeline_config.cache_strategy == KVCacheStrategy.MODEL_DEFAULT
+            and supported_cache_strategies
+        ):
+            default_strategy = supported_cache_strategies[0]
+            msg = f"default cache_strategy of '{default_strategy}' enabled"
+            logging.info(msg)
+
+            pipeline_config.cache_strategy = default_strategy
+        elif (
             supported_cache_strategies
             and pipeline_config.cache_strategy not in supported_cache_strategies
         ):
@@ -341,6 +348,7 @@ class PipelineRegistry:
             architecture:           {pipeline_config.architecture}
             huggingface_repo_id:    {pipeline_config.huggingface_repo_id}{weights_repo_str}
             quantization_encoding:  {pipeline_config.quantization_encoding}
+            cache_strategy:         {pipeline_config.cache_strategy}
             weight_path:            [
         {weight_path}
                                     ]
