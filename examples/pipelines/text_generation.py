@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 
+from architectures import register_all_models
 from max.pipelines import (
     PIPELINE_REGISTRY,
     PipelineConfig,
@@ -27,7 +28,7 @@ from max.pipelines.interfaces import (
 )
 from tqdm import tqdm
 
-MODEL = "meta-llama/Llama-3.1-8B-Instruct"
+MODEL = "modularai/llama-3.1"
 MAX_BATCH_SIZE = 32
 
 
@@ -102,6 +103,7 @@ def main():
         huggingface_repo_id=MODEL,
         max_cache_batch_size=MAX_BATCH_SIZE,
     )
+    register_all_models()
     tokenizer, pipeline = PIPELINE_REGISTRY.retrieve(pipeline_config)
     if not isinstance(pipeline, TokenGenerator):
         print("Pipeline not supported for text generation.")
