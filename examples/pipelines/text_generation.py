@@ -99,6 +99,7 @@ async def generate_responses(
 
 
 def main():
+    print(f"Loading model: {MODEL}")
     pipeline_config = PipelineConfig(
         huggingface_repo_id=MODEL,
         max_cache_batch_size=MAX_BATCH_SIZE,
@@ -115,8 +116,9 @@ def main():
         "The fastest way to learn python is",
     ]
 
+    print("Generating responses...")
     responses = asyncio.run(
-        generate_responses(tokenizer, pipeline, prompts, max_new_tokens=20)
+        generate_responses(tokenizer, pipeline, prompts, max_new_tokens=50)
     )
 
     for i, response in enumerate(responses):
