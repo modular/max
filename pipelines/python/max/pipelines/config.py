@@ -472,11 +472,11 @@ class PipelineConfig:
     enable_prefix_caching: bool = False
     """Whether to enable prefix caching for the paged attention KVCache."""
 
-    gpu_memory_utilization: float = 0.9
+    device_memory_utilization: float = 0.9
     """The fraction of available device memory that the process should consume.
 
     This is used to inform the size of the KVCache workspace:
-        kv_cache_workspace = (total_free_memory * gpu_memory_utilization) - model_weights_size
+        kv_cache_workspace = (total_free_memory * device_memory_utilization) - model_weights_size
     """
 
     target_num_new_tokens: Optional[int] = None
@@ -802,7 +802,7 @@ class PipelineConfig:
             "pad_to_multiple_of": "Pad input tensors to be a multiple of value provided. Default is set to 2.",
             "kv_cache_page_size": "The number of tokens in a single page in the paged KVCache. Default is set to 512.",
             "enable_prefix_caching": "Whether to enable prefix caching for the paged attention KVCache. This defaults to false.",
-            "gpu_memory_utilization": "The fraction of available device memory that the process should consume. This is used to inform the size of the KVCache workspace: kv_cache_workspace = (total_free_memory * gpu_memory_utilization) - model_weights_size. Default is set to 0.9.",
+            "device_memory_utilization": "The fraction of available device memory that the process should consume. This is used to inform the size of the KVCache workspace: kv_cache_workspace = (total_free_memory * device_memory_utilization) - model_weights_size. Default is set to 0.9.",
             "top_k": "Limit sampling to the top K most probable tokens during generation. This can help control randomness and improve output quality. This defaults to 0, which defaults to greedy sampling.",
             "trust_remote_code": "Indicate whether to allow custom modelling files from Huggingface repositories. Set this to true with caution, as it may introduce security risks.",
             "force_download": "Specify whether to forcefully download a file even if it already exists in local cache. Set this to true if you want to ensure you have the latest version.",

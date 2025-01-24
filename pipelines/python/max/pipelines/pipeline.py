@@ -127,7 +127,7 @@ class PipelineModel(ABC):
 
         available_cache_memory = (
             (free_memory - weights_size)
-            * self.pipeline_config.gpu_memory_utilization
+            * self.pipeline_config.device_memory_utilization
             if free_memory
             else 0
         )
