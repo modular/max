@@ -131,6 +131,7 @@ class FetchPagedKVCacheCollection:
                 parameters={
                     "num_heads": self.kv_params.n_kv_heads_per_device,
                     "head_dim": self.kv_params.head_dim,
+                    "page_size": int(blocks.shape[3]),
                 },
             )[0].opaque
         )
@@ -171,7 +172,7 @@ class PagedKVCacheManager(KVCacheManager):
         session: InferenceSession,
         cache_memory: int,
         page_size: int = 128,
-    ) -> None:
+    ):
         self.page_size = page_size
 
         single_page_size_bytes = (

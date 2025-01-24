@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Union
 
 import numpy as np
 from max.dtype import DType
@@ -76,6 +77,14 @@ def fused_qkv_ragged_matmul(
         msg = f"unsupported cache strategy for fused_qkv_ragged_matmul: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
+    parameters: dict[str, Union[int, str, DType]] = {
+        "num_heads": kv_params.n_kv_heads_per_device,
+        "head_dim": kv_params.head_dim,
+    }
+    if kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        assert kv_params.page_size is not None
+        parameters["page_size"] = int(kv_params.page_size)
+
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
 
     op_name = f"mo.fused_qkv_matmul.ragged.{cache_strategy_str}"
@@ -90,10 +99,7 @@ def fused_qkv_ragged_matmul(
                 device=input.device,
             )
         ],
-        parameters={
-            "num_heads": kv_params.n_kv_heads_per_device,
-            "head_dim": kv_params.head_dim,
-        },
+        parameters=parameters,
     )[0].tensor
 
 
@@ -134,7 +140,6 @@ def fused_qkv_matmul(
         raise ValueError(msg)
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
-
     op_name = f"mo.fused_qkv_matmul.padded.{cache_strategy_str}"
 
     return ops.inplace_custom(
@@ -194,6 +199,14 @@ def matmul_kv_cache_ragged(
         msg = f"unsupported cache strategy for fused_qkv_matmul: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
+    parameters: dict[str, Union[int, str, DType]] = {
+        "num_heads": kv_params.n_kv_heads_per_device,
+        "head_dim": kv_params.head_dim,
+    }
+    if kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        assert kv_params.page_size is not None
+        parameters["page_size"] = kv_params.page_size
+
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     op_name = f"mo.kv_matmul.ragged.{cache_strategy_str}"
 
@@ -206,10 +219,7 @@ def matmul_kv_cache_ragged(
             kv_collection,
             ops.constant(layer_idx, DType.uint32),
         ],
-        parameters={
-            "num_heads": kv_params.n_kv_heads_per_device,
-            "head_dim": kv_params.head_dim,
-        },
+        parameters=parameters,
     )
 
 
@@ -252,6 +262,14 @@ def fused_qk_ragged_rope(
         msg = f"unsupported cache strategy for fused_qk_ragged_rope: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
+    parameters: dict[str, Union[int, str, DType]] = {
+        "num_heads": kv_params.n_kv_heads_per_device,
+        "head_dim": kv_params.head_dim,
+    }
+    if kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        assert kv_params.page_size is not None
+        parameters["page_size"] = kv_params.page_size
+
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     op_name = f"mo.fused_qk_rope.ragged.{cache_strategy_str}"
 
@@ -270,10 +288,7 @@ def fused_qk_ragged_rope(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
-        parameters={
-            "num_heads": kv_params.n_kv_heads_per_device,
-            "head_dim": kv_params.head_dim,
-        },
+        parameters=parameters,
     )[0].tensor
 
 
@@ -309,6 +324,14 @@ def fused_qk_rope(
         msg = f"unsupported cache strategy for fused_qkv_matmul: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
+    parameters: dict[str, Union[int, str, DType]] = {
+        "num_heads": kv_params.n_kv_heads_per_device,
+        "head_dim": kv_params.head_dim,
+    }
+    if kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        assert kv_params.page_size is not None
+        parameters["page_size"] = kv_params.page_size
+
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     op_name = f"mo.fused_qk_rope.padded.{cache_strategy_str}"
 
@@ -326,10 +349,7 @@ def fused_qk_rope(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
-        parameters={
-            "num_heads": kv_params.n_kv_heads_per_device,
-            "head_dim": kv_params.head_dim,
-        },
+        parameters=parameters,
     )[0].tensor
 
 
@@ -539,6 +559,14 @@ def flash_attention_ragged(
         msg = f"unsupported cache strategy for flash_attention_ragged: {kv_params.cache_strategy}"
         raise ValueError(msg)
 
+    parameters: dict[str, Union[int, str, DType]] = {
+        "num_heads": kv_params.n_kv_heads_per_device,
+        "head_dim": kv_params.head_dim,
+    }
+    if kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        assert kv_params.page_size is not None
+        parameters["page_size"] = kv_params.page_size
+
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
     op_name = f"mo.mha.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}"
@@ -554,10 +582,7 @@ def flash_attention_ragged(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
-        parameters={
-            "num_heads": kv_params.n_kv_heads_per_device,
-            "head_dim": kv_params.head_dim,
-        },
+        parameters=parameters,
     )[0].tensor
 
 
@@ -615,6 +640,14 @@ def cross_attention_ragged(
         )
         raise ValueError(msg)
 
+    parameters: dict[str, Union[int, str, DType]] = {
+        "num_heads": kv_params.n_kv_heads_per_device,
+        "head_dim": kv_params.head_dim,
+    }
+    if kv_params.cache_strategy == KVCacheStrategy.PAGED:
+        assert kv_params.page_size is not None
+        parameters["page_size"] = kv_params.page_size
+
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
     op_name = f"mo.cross_attention.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}"
@@ -641,10 +674,7 @@ def cross_attention_ragged(
                 dtype=input.dtype, shape=input.shape, device=input.device
             )
         ],
-        parameters={
-            "num_heads": kv_params.n_kv_heads_per_device,
-            "head_dim": kv_params.head_dim,
-        },
+        parameters=parameters,
     )[0].tensor
 
 

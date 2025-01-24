@@ -4,6 +4,7 @@
 #
 # ===----------------------------------------------------------------------=== #
 from enum import Enum
+from typing import Optional
 
 from max.dtype import DType
 
@@ -57,6 +58,7 @@ class KVCacheParams:
         head_dim: int,
         enable_prefix_caching: bool = False,
         cache_strategy: KVCacheStrategy = KVCacheStrategy.CONTINUOUS,
+        page_size: Optional[int] = None,
         n_devices: int = 1,
     ):
         # Initialize static attributes.
@@ -66,6 +68,7 @@ class KVCacheParams:
         self.cache_strategy = cache_strategy
         self.n_devices = n_devices
         self.n_kv_heads_per_device = n_kv_heads // n_devices
+        self.page_size = page_size
         self.enable_prefix_caching = enable_prefix_caching
         # Validate inputs.
         if (
@@ -86,6 +89,8 @@ class KVCacheParams:
             raise ValueError(
                 "Prefix caching is only supported for PAGED cache strategy"
             )
+        if page_size is None and cache_strategy == KVCacheStrategy.PAGED:
+            raise ValueError("Page size is required for PAGED cache strategy")
 
     @property
     def dtype_shorthand(self) -> str:

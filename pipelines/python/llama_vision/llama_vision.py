@@ -909,6 +909,7 @@ class LlamaVision(PipelineModel):
                 // self.text_config.num_attention_heads
             ),
             cache_strategy=self.pipeline_config.cache_strategy,
+            page_size=self.pipeline_config.kv_cache_page_size,
             enable_prefix_caching=self.pipeline_config.enable_prefix_caching,
         )
 

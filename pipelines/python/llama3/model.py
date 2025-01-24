@@ -212,6 +212,7 @@ class Llama3Model(PipelineModel):
             head_dim=self.pipeline_config.huggingface_config.hidden_size
             // self.pipeline_config.huggingface_config.num_attention_heads,
             cache_strategy=self.pipeline_config.cache_strategy,
+            page_size=self.pipeline_config.kv_cache_page_size,
             n_devices=len(self.pipeline_config.devices),
             enable_prefix_caching=self.pipeline_config.enable_prefix_caching,
         )

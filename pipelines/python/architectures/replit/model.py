@@ -139,6 +139,7 @@ class ReplitModel(PipelineModel):
             ],
             head_dim=self.pipeline_config.huggingface_config.d_model
             // self.pipeline_config.huggingface_config.n_heads,
+            page_size=self.pipeline_config.kv_cache_page_size,
             cache_strategy=self.pipeline_config.cache_strategy,
             enable_prefix_caching=self.pipeline_config.enable_prefix_caching,
         )

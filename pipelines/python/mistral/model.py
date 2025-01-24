@@ -128,6 +128,7 @@ class MistralModel(PipelineModel):
             n_kv_heads=self.pipeline_config.huggingface_config.num_key_value_heads,
             head_dim=self.pipeline_config.huggingface_config.head_dim,
             cache_strategy=self.pipeline_config.cache_strategy,
+            page_size=self.pipeline_config.kv_cache_page_size,
             enable_prefix_caching=self.pipeline_config.enable_prefix_caching,
         )
 
