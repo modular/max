@@ -4,12 +4,15 @@
 > This is a preview of an interface for writing custom operations in Mojo,
 > and may be subject to change before the next stable release.
 
-Graphs in MAX can be extended to use custom operations written in Mojo. Three
+Graphs in MAX can be extended to use custom operations written in Mojo. Four
 examples of this are shown here:
 
 - Adding 1 to every element of an input tensor.
 - Calculating the Mandelbrot set.
 - Performing vector addition using a manual GPU function.
+- A top-K token sampler, a complex operation that shows a real-world use case
+  for a custom operation used today within a large language model processing
+  pipeline.
 
 Custom kernels have been written in Mojo to carry out these calculations. For
 each example, a simple graph containing a single operation is constructed
