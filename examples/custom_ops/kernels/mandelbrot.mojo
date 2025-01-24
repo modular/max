@@ -15,7 +15,7 @@ import compiler
 from complex import ComplexSIMD
 from math import iota
 from utils.index import IndexList
-from tensor import ManagedTensorSlice, foreach
+from max.tensor import ManagedTensorSlice, foreach
 from runtime.asyncrt import MojoCallContextPtr
 
 

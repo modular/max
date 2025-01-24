@@ -19,7 +19,7 @@ from buffer import NDBuffer
 from buffer.dimlist import Dim, DimList
 from memory import UnsafePointer, Span
 from utils.index import IndexList
-from tensor import ManagedTensorSlice, foreach
+from max.tensor import ManagedTensorSlice, foreach
 from runtime.asyncrt import MojoCallContextPtr
 from math import iota
 

@@ -13,7 +13,7 @@
 
 import compiler
 from utils.index import IndexList
-from tensor import ManagedTensorSlice, foreach
+from max.tensor import ManagedTensorSlice, foreach
 from runtime.asyncrt import MojoCallContextPtr
 
 
