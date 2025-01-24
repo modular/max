@@ -36,6 +36,7 @@ A single Magic command runs each of the examples:
 magic run addition
 magic run mandelbrot
 magic run vector_addition
+magic run top_k
 ```
 
 The execution has two phases: first a `kernels.mojopkg` is compiled from the

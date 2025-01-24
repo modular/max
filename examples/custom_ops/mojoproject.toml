@@ -10,6 +10,7 @@ version = "0.1.0"
 addition = { cmd = "mojo package kernels/ -o kernels.mojopkg && python addition.py" }
 mandelbrot = { cmd = "mojo package kernels/ -o kernels.mojopkg && python mandelbrot.py" }
 vector_addition = { cmd = "mojo package kernels/ -o kernels.mojopkg && python vector_addition.py" }
+top_k = { cmd = "mojo package kernels/ -o kernels.mojopkg && python top_k.py" }
 
 [dependencies]
 python = ">=3.9,<3.13"
