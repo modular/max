@@ -15,7 +15,7 @@ from gpu import block_dim, block_idx, thread_idx
 from gpu.host import DeviceContext
 from math import ceildiv
 from utils.index import IndexList
-from tensor_utils import ManagedTensorSlice, foreach
+from tensor import ManagedTensorSlice, foreach
 from runtime.asyncrt import MojoCallContextPtr
 
 
