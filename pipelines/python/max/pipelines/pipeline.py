@@ -27,7 +27,7 @@ from max.engine import InferenceSession
 from max.profiler import Tracer, traced
 
 from .config import PipelineConfig
-from .context import InputContext
+from .context import InputContext, TextContext
 from .interfaces import TokenGenerator
 from .kv_cache import KVCacheManager, KVCacheStrategy
 from .response import LogProbabilities, TextResponse
@@ -351,43 +351,38 @@ class TextGenerationPipeline(TokenGenerator[T]):
             )
         )
 
-    @traced
-    def next_token(
+    def calculate_num_steps(
         self,
-        batch: dict[str, T],
         num_steps: int,
-    ) -> list[dict[str, Any]]:
-        """Provided a batch, process batch inputs, execute the graph for num_steps in a multi-step scenario,
-        then decode the tokens holistically and return the list of decoded tokens.
-        """
-        tracer: Tracer = Tracer("compute_parameters")
-        # Flatten our batch for consistent indexing.
-        context_batch = list(batch.values())
+        context: T,
+    ) -> int:
+        # this is effectively: max_seq_len - (num_tokens_in_kv_cache + num_new_tokens) - num_new_tokens
+        num_available_steps = self._pipeline_config.max_length - (
+            context.current_length - context.seq_len
+        )
+        if num_available_steps <= 0:
+            raise ValueError(
+                f"Request {context.cache_seq_id} length ({context.current_length}) is larger than or equal to the configured max_length ({self._pipeline_config.max_length})"
+            )
 
-        # Get extra compute parameters for each input.
-        batch_top_n = [context.log_probabilities for context in context_batch]
-        compute_log_probabilities = any(batch_top_n)
-        batch_echo: list[bool] = [
-            context.log_probabilities_echo for context in context_batch
-        ]
+        return (
+            num_steps
+            if num_available_steps > num_steps
+            else num_available_steps
+        )
 
+    @traced
+    def prepare_batch(
+        self,
+        batch: list[T],
+        num_steps: int,
+    ) -> tuple[ModelInputs, Any, int]:
+        tracer: Tracer = Tracer("prepare_batch")
+        seq_ids_and_prompts = {}
+        seq_ids_and_untrimmed_lengths = {}
         tracer.next("claim_cache_rows")
-        # Claim cache rows for our batch.
-        for context in context_batch:
-            # this is effectively: max_seq_len - (num_tokens_in_kv_cache + num_new_tokens) - num_new_tokens
-            num_available_steps = self._pipeline_config.max_length - (
-                context.current_length - context.seq_len
-            )
-            if num_available_steps <= 0:
-                raise ValueError(
-                    f"Request {context.cache_seq_id} length ({context.current_length}) is larger than or equal to the configured max_length ({self._pipeline_config.max_length})"
-                )
-
-            num_steps = (
-                num_steps
-                if num_available_steps > num_steps
-                else num_available_steps
-            )
+        for context in batch:
+            # Claim cache rows for context.
             if not self._pipeline_model.kv_manager.contains(
                 context.cache_seq_id
             ):
@@ -395,12 +390,15 @@ class TextGenerationPipeline(TokenGenerator[T]):
                     [context.cache_seq_id]
                 )
 
-        seq_ids_and_prompts = {
-            ctx.cache_seq_id: ctx.next_tokens for ctx in context_batch
-        }
-        seq_ids_and_untrimmed_lengths = {
-            ctx.cache_seq_id: len(ctx.next_tokens) for ctx in context_batch
-        }
+            # Gather tokens and untrimmed lengths.
+            seq_ids_and_prompts[context.cache_seq_id] = context.next_tokens
+
+            seq_ids_and_untrimmed_lengths[context.cache_seq_id] = len(
+                context.next_tokens
+            )
+
+            # Update num_steps.
+            num_steps = self.calculate_num_steps(num_steps, context)
 
         # `fetch` mutates the seq_ids_and_prompts input in place when tokens are
         # retrieved from the cache. This shortens the prompt in the event that
@@ -411,16 +409,46 @@ class TextGenerationPipeline(TokenGenerator[T]):
         )
 
         # Update the context with the new possibly shortened prompt.
-        for ctx in context_batch:
-            seq_id = ctx.cache_seq_id
-            untrimmed_length = seq_ids_and_untrimmed_lengths[seq_id]
-            trimmed_length = len(seq_ids_and_prompts[seq_id])
-            ctx.trim_prompt(untrimmed_length - trimmed_length)
+        tracer.next("trim_prompt")
+        for context in batch:
+            untrimmed_length = seq_ids_and_untrimmed_lengths[
+                context.cache_seq_id
+            ]
+            trimmed_length = len(seq_ids_and_prompts[context.cache_seq_id])
+            context.trim_prompt(untrimmed_length - trimmed_length)
 
-        tracer.next("prepare_initial_token_inputs")
-        # Prepare inputs for the first token in multistep execution.
-        model_inputs = self._pipeline_model.prepare_initial_token_inputs(
-            context_batch
+        return (
+            self._pipeline_model.prepare_initial_token_inputs(batch),
+            kv_cache_inputs,
+            num_steps,
+        )
+
+    @traced
+    def next_token(
+        self,
+        batch: dict[str, T],
+        num_steps: int,
+    ) -> list[dict[str, Any]]:
+        """Provided a batch, process batch inputs, execute the graph for num_steps in a multi-step scenario,
+        then decode the tokens holistically and return the list of decoded tokens.
+        """
+        tracer: Tracer = Tracer("compute_parameters")
+
+        # Flatten our batch for consistent indexing.
+        context_batch = list(batch.values())
+
+        assert isinstance(context_batch[0], TextContext)
+
+        # # Get extra compute parameters for each input.
+        batch_top_n = [context.log_probabilities for context in context_batch]
+        compute_log_probabilities = any(batch_top_n)
+        batch_echo: list[bool] = [
+            context.log_probabilities_echo for context in context_batch
+        ]
+
+        # Prepare the batch.
+        model_inputs, kv_cache_inputs, num_steps = self.prepare_batch(
+            context_batch, num_steps
         )
 
         # Multistep execution loop.
@@ -524,9 +552,14 @@ class TextGenerationPipeline(TokenGenerator[T]):
                 # Convert to a Python scalar to improve serialization performance.
                 next_token = int(generated_tokens_host[batch_index, step])
 
+                # Write this token into our pre-allocated tokens array.
+                context.update(
+                    new_token=next_token,
+                )
+
                 if (
                     next_token in self._eos_token_id
-                    or (context.current_length + step) >= context.max_length
+                    or (context.current_length + step - 1) >= context.max_length
                 ):
                     step += 1
                     break
@@ -543,13 +576,6 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
                 step += 1
 
-            # Update the context once, just at the end.
-            tracer.push(f"update_batch_{batch_index}")
-            context.update(
-                new_token=next_token,
-                num_steps=step,
-            )
-            tracer.pop()  # pops update_batch_{batch_index}
         return res
 
     def release(self, context: T) -> None:

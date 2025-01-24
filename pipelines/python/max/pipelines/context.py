@@ -9,6 +9,8 @@ from typing import Any, Protocol, Sequence, Union, runtime_checkable
 
 import numpy as np
 
+CHUNK_SIZE = 128
+
 
 @runtime_checkable
 class InputContext(Protocol):
@@ -58,7 +60,6 @@ class InputContext(Protocol):
     def update(
         self,
         new_token: int,
-        num_steps: int = 1,
     ) -> None:
         """Updates the next_tokens and extends existing tokens to include all generated tokens."""
         ...
@@ -76,7 +77,7 @@ class TextContext:
         cache_seq_id: int,
         prompt: Union[str, Sequence[int]],
         max_length: int,
-        next_tokens: np.ndarray,
+        tokens: np.ndarray,
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
     ) -> None:
@@ -84,13 +85,21 @@ class TextContext:
         self.prompt = prompt
         self.max_length = max_length
 
-        if next_tokens.ndim != 1:
-            msg = f"next_tokens must be one dimensional array: got shape '{next_tokens.shape}'"
+        if tokens.ndim != 1:
+            msg = f"tokens must be one dimensional array: got shape '{tokens.shape}'"
             raise ValueError(msg)
 
-        self._next_tokens: Union[np.ndarray, int] = next_tokens
-        self.current_length = self._next_tokens.shape[-1]
+        self.size = int(np.ceil(len(tokens) / CHUNK_SIZE) * CHUNK_SIZE)
+
+        # Resizing, in this way, repeats the tokens data to fill the shape.
+        # This is not a problem, as we simply overwrite the invalid data
+        self.tokens = np.array(tokens)
+        self.tokens.resize(self.size)
+
+        self.current_length = len(tokens)
         self.active_length = self.current_length
+        self.active_idx = self.current_length
+        self.start_idx = 0
 
         self.log_probabilities = log_probabilities
         self.log_probabilities_echo = log_probabilities_echo
@@ -106,20 +115,25 @@ class TextContext:
 
     @property
     def next_tokens(self) -> np.ndarray:
-        if isinstance(self._next_tokens, int):
-            return np.array([self._next_tokens]).reshape(-1)
-
-        return self._next_tokens
+        return self.tokens[self.start_idx : self.active_idx]
 
     def update(
         self,
         new_token: int,
-        num_steps: int = 1,
     ) -> None:
         """Updates the next_tokens and extends existing tokens to include all generated tokens."""
-        self._next_tokens = new_token
-        self.current_length += num_steps
 
+        if self.active_idx >= self.size:
+            self.size += CHUNK_SIZE
+            if self.tokens.flags.owndata:
+                self.tokens.resize(self.size)
+            else:
+                self.tokens = np.resize(self.tokens, self.size)
+
+        self.tokens[self.active_idx] = new_token
+        self.start_idx = self.active_idx
+        self.active_idx += 1
+        self.current_length += 1
         self.active_length = 1
 
     def trim_prompt(self, trim_len: int) -> None:
@@ -127,12 +141,9 @@ class TextContext:
         if trim_len == 0:
             return
 
-        assert trim_len < len(self.next_tokens)
-        next_tokens = self.next_tokens
-        new_prompt = next_tokens[trim_len:]
-        self._next_tokens = new_prompt
-        self.active_length = len(new_prompt)
-        assert self.active_length > 0
+        assert trim_len < (self.active_idx - self.start_idx)
+        self.start_idx += trim_len
+        self.active_length = self.active_idx - self.start_idx
 
 
 class TextAndVisionContext:
@@ -143,7 +154,7 @@ class TextAndVisionContext:
         cache_seq_id: int,
         prompt: Union[str, Sequence[int]],
         max_length: int,
-        next_tokens: np.ndarray,
+        tokens: np.ndarray,
         pixel_values: Union[np.ndarray, list[np.ndarray]],
         extra_model_args: dict[str, Any],
         log_probabilities: int = 0,
@@ -153,10 +164,22 @@ class TextAndVisionContext:
         self.prompt = prompt
         self.max_length = max_length
 
-        self._next_tokens: Union[np.ndarray, int] = next_tokens
-        self.pixel_values = pixel_values
-        self.current_length = self._next_tokens.shape[-1]
+        if tokens.ndim != 1:
+            msg = f"tokens must be one dimensional array: got shape '{tokens.shape}'"
+            raise ValueError(msg)
+
+        self.size = int(np.ceil(len(tokens) / CHUNK_SIZE) * CHUNK_SIZE)
+        # Resizing, in this way, repeats the tokens data to fill the shape.
+        # This is not a problem, as we simply overwrite the invalid data
+        self.tokens = np.array(tokens)
+        self.tokens.resize(self.size)
+
+        self.current_length = len(tokens)
         self.active_length = self.current_length
+        self.active_idx = self.current_length
+        self.start_idx = 0
+
+        self.pixel_values = pixel_values
         self.extra_model_args = extra_model_args
 
         self.log_probabilities = log_probabilities
@@ -164,10 +187,7 @@ class TextAndVisionContext:
 
     @property
     def next_tokens(self) -> np.ndarray:
-        if isinstance(self._next_tokens, int):
-            return np.array([self._next_tokens])
-
-        return self._next_tokens
+        return self.tokens[self.start_idx : self.active_idx]
 
     @property
     def seq_len(self) -> int:
@@ -181,25 +201,30 @@ class TextAndVisionContext:
     def update(
         self,
         new_token: int,
-        num_steps: int = 1,
     ) -> None:
         """Updates the next_tokens attribute, and extends current_length if needed, based on the provided num_steps."""
-        self._next_tokens = new_token
-        self.current_length += num_steps
+        if self.active_idx <= self.size:
+            self.size += CHUNK_SIZE
+            if self.tokens.flags.owndata:
+                self.tokens.resize(self.size)
+            else:
+                self.tokens = np.resize(self.tokens, self.size)
+
+        self.tokens[self.active_idx] = new_token
+        self.start_idx = self.active_idx
+        self.active_idx += 1
+        self.current_length += 1
+        self.active_length = 1
+
         # Update context not to re-encode the same image in next steps. There are no image tokens
         # expected after context encoding.
         self.pixel_values = []
-
-        self.active_length = 1
 
     def trim_prompt(self, trim_len: int) -> None:
         """Trims the current prompt by the given number of tokens."""
         if trim_len == 0:
             return
 
-        assert trim_len < len(self.next_tokens)
-        next_tokens = self.next_tokens
-        new_prompt = next_tokens[trim_len:]
-        self._next_tokens = new_prompt
-        self.active_length = len(new_prompt)
-        assert self.active_length > 0
+        assert trim_len < (self.active_idx - self.start_idx)
+        self.start_idx += trim_len
+        self.active_length = self.active_idx - self.start_idx

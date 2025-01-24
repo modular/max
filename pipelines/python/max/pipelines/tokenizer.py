@@ -248,7 +248,7 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             prompt=prompt,
             cache_seq_id=request.index,
             max_length=len(encoded_prompt) + max_gen_tokens,
-            next_tokens=np.array(encoded_prompt),
+            tokens=np.array(encoded_prompt),
             log_probabilities=request.logprobs,
             log_probabilities_echo=request.echo,
         )
@@ -431,7 +431,7 @@ class TextAndVisionTokenizer(
             pixel_values=pixel_values,
             extra_model_args=extra_model_args,
             cache_seq_id=request.index,
-            next_tokens=encoded_prompt,
+            tokens=encoded_prompt,
             max_length=encoded_prompt.shape[0] + max_gen_tokens,
         )
         return context
