@@ -19,10 +19,7 @@ from tensor_utils import ManagedTensorSlice, foreach
 from runtime.asyncrt import MojoCallContextPtr
 
 
-fn _vector_addition_cpu[
-    synchronous: Bool,
-    target: StringLiteral,
-](
+fn _vector_addition_cpu(
     out: ManagedTensorSlice,
     lhs: ManagedTensorSlice[out.type, out.rank],
     rhs: ManagedTensorSlice[out.type, out.rank],
@@ -38,10 +35,7 @@ fn _vector_addition_cpu[
         out.store[1](idx, result)
 
 
-fn _vector_addition_gpu[
-    synchronous: Bool,
-    target: StringLiteral,
-](
+fn _vector_addition_gpu(
     out: ManagedTensorSlice,
     lhs: ManagedTensorSlice[out.type, out.rank],
     rhs: ManagedTensorSlice[out.type, out.rank],
@@ -81,8 +75,6 @@ fn _vector_addition_gpu[
 struct VectorAddition:
     @staticmethod
     fn execute[
-        # Parameter that if true, runs kernel synchronously in runtime
-        synchronous: Bool,
         # The kind of device this will be run on: "cpu" or "gpu"
         target: StringLiteral,
     ](
@@ -103,8 +95,8 @@ struct VectorAddition:
         # this operation for, so we can specialize it for the target hardware.
         @parameter
         if target == "cpu":
-            _vector_addition_cpu[synchronous, target](out, lhs, rhs, ctx)
+            _vector_addition_cpu(out, lhs, rhs, ctx)
         elif target == "gpu":
-            _vector_addition_gpu[synchronous, target](out, lhs, rhs, ctx)
+            _vector_addition_gpu(out, lhs, rhs, ctx)
         else:
             raise Error("No known target:", target)

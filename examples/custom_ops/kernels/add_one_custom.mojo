@@ -21,9 +21,7 @@ from runtime.asyncrt import MojoCallContextPtr
 struct AddOneCustom:
     @staticmethod
     fn execute[
-        # Parameter that if true, runs kernel synchronously in runtime
-        synchronous: Bool,
-        # e.g. "CUDA" or "CPU"
+        # The kind of device this will be run on: "cpu" or "gpu"
         target: StringLiteral,
     ](
         # as num_dps_outputs=1, the first argument is the "output"
@@ -40,7 +38,7 @@ struct AddOneCustom:
         ](idx: IndexList[x.rank]) -> SIMD[x.type, width]:
             return x.load[width](idx) + 1
 
-        foreach[elementwise_add_one, synchronous, target](out, ctx)
+        foreach[elementwise_add_one, target=target](out, ctx)
 
     # You only need to implement this if you do not manually annotate
     # output shapes in the graph.

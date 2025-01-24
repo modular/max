@@ -47,9 +47,7 @@ alias float_dtype = DType.float32
 struct Mandelbrot:
     @staticmethod
     fn execute[
-        # Parameter that if true, runs kernel synchronously in runtime
-        synchronous: Bool,
-        # e.g. "CUDA" or "CPU"
+        # The kind of device this will be run on: "cpu" or "gpu"
         target: StringLiteral,
     ](
         # as num_dps_outputs=1, the first argument is the "output"
@@ -81,7 +79,7 @@ struct Mandelbrot:
                 c, max_iterations.cast[out.type]()
             )
 
-        foreach[elementwise_mandelbrot, synchronous, target](out, ctx)
+        foreach[elementwise_mandelbrot, target=target](out, ctx)
 
     # You only need to implement this if you do not manually annotate
     # output shapes in the graph.
