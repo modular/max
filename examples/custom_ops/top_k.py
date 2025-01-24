@@ -1,5 +1,5 @@
 # ===----------------------------------------------------------------------=== #
-# Copyright (c) 2024, Modular Inc. All rights reserved.
+# Copyright (c) 2025, Modular Inc. All rights reserved.
 #
 # Licensed under the Apache License v2.0 with LLVM Exceptions:
 # https://llvm.org/LICENSE.txt
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     The quick rabbit jumps over the brown dog
     The quick dog chases past the lazy fox
     The quick dog runs through the tall trees
-    The quick brown fox jumps over the lazy dog 
+    The quick brown fox jumps over the lazy dog
     The brown dog sleeps under the shady tree
     The brown rabbit hops under the tall tree
     The brown fox runs through the forest trees
