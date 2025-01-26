@@ -17,6 +17,38 @@ from max.tensor import ManagedTensorSlice, foreach
 from runtime.asyncrt import MojoCallContextPtr
 
 
+@compiler.register("add_constant_custom", num_dps_outputs=1)
+struct AddConstantCustom[value: Int]:
+    @staticmethod
+    fn execute[
+        # e.g. "CUDA" or "CPU"
+        target: StringLiteral,
+    ](
+        # as num_dps_outputs=1, the first argument is the "output"
+        out: ManagedTensorSlice,
+        # starting here are the list of inputs
+        x: ManagedTensorSlice[out.type, out.rank],
+        # the context is needed for some GPU calls
+        ctx: MojoCallContextPtr,
+    ):
+        @parameter
+        @always_inline
+        fn add_constant[
+            width: Int
+        ](idx: IndexList[x.rank]) -> SIMD[x.type, width]:
+            return x.load[width](idx) + value
+
+        foreach[add_constant, False, target](out, ctx)
+
+    # You only need to implement this if you do not manually annotate
+    # output shapes in the graph.
+    @staticmethod
+    fn shape(
+        x: ManagedTensorSlice,
+    ) raises -> IndexList[x.rank]:
+        raise "NotImplemented"
+
+
 @compiler.register("add_one_custom", num_dps_outputs=1)
 struct AddOneCustom:
     @staticmethod
