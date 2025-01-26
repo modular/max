@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import Any, Type, TypeVar
 
-from max.driver import CPU
 from max.engine import InferenceSession
 from max.profiler import Tracer, traced
 
@@ -62,7 +61,7 @@ class EmbeddingsPipeline:
         assert model_outputs.logits
         # Do the copy to host for each token generated.
         tracer.next("logits.to(CPU())")
-        batch_embeddings = model_outputs.logits.to(CPU()).to_numpy()
+        batch_embeddings = model_outputs.logits.to_numpy()
 
         # Prepare the response.
         res: dict[str, Any] = {}

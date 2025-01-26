@@ -453,14 +453,14 @@ class Llama3Model(PipelineModel):
                     not self.pipeline_config.enable_echo
                 ), "Echo was enabled but logits were not returned."
                 return None
-            logits = model_outputs.logits.to(CPU()).to_numpy()
-        next_token_logits = model_outputs.next_token_logits.to(CPU()).to_numpy()
+            logits = model_outputs.logits.to_numpy()
+        next_token_logits = model_outputs.next_token_logits.to_numpy()
 
-        sampled_tokens = next_tokens.to(CPU()).to_numpy()
+        sampled_tokens = next_tokens.to_numpy()
         if self.pipeline_config.cache_strategy.uses_opaque():
             # Handle the ragged inputs
             model_inputs = cast(Llama3Inputs, model_inputs)
-            tokens = model_inputs.tokens.to(CPU()).to_numpy()
+            tokens = model_inputs.tokens.to_numpy()
             input_row_offsets = model_inputs.input_row_offsets.to(
                 CPU()
             ).to_numpy()

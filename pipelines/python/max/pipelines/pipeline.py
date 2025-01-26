@@ -21,7 +21,7 @@ from typing import (
     runtime_checkable,
 )
 
-from max.driver import CPU, Tensor
+from max.driver import Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.profiler import Tracer, traced
@@ -532,7 +532,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         tracer.next(
             "generated_tokens.to(CPU())"
         )  # pops multistep_execution_loop_steps
-        generated_tokens_host = generated_tokens.to(CPU()).to_numpy()
+        generated_tokens_host = generated_tokens.to_numpy()
 
         # Actually update the cache lengths in our kv_cache manager
         tracer.next("kv_manager.step")  # pops generated_tokens.to(CPU())

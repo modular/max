@@ -19,7 +19,7 @@ import warnings
 from typing import Sequence, cast
 
 import numpy as np
-from max.driver import CPU, DeviceSpec, Tensor
+from max.driver import DeviceSpec, Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import GGUFWeights
 from max.pipelines import (
@@ -245,16 +245,16 @@ class ReplitModel(PipelineModel):
                     not self.pipeline_config.enable_echo
                 ), "Echo was enabled but logits were not returned."
                 return None
-            logits = model_outputs.logits.to(CPU()).to_numpy()
+            logits = model_outputs.logits.to_numpy()
         assert model_outputs.next_token_logits
-        next_token_logits = model_outputs.next_token_logits.to(CPU()).to_numpy()
+        next_token_logits = model_outputs.next_token_logits.to_numpy()
 
-        sampled_tokens = next_tokens.to(CPU()).to_numpy()
+        sampled_tokens = next_tokens.to_numpy()
 
         # Handle the ragged inputs
         model_inputs = cast(ReplitInputs, model_inputs)
-        tokens = model_inputs.tokens.to(CPU()).to_numpy()
-        input_row_offsets = model_inputs.input_row_offsets.to(CPU()).to_numpy()
+        tokens = model_inputs.tokens.to_numpy()
+        input_row_offsets = model_inputs.input_row_offsets.to_numpy()
 
         def _get_logits_and_samples(
             batch_index: int, echo: bool
