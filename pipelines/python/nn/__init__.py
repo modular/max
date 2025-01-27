@@ -23,7 +23,7 @@ from .attention import (
     DistributedAttentionWithRope,
     NaiveAttentionWithRope,
 )
-from .conv import Conv2D
+from .conv import Conv1D, Conv2D
 from .embedding import Embedding
 from .kernels import MHAMaskVariant
 from .linear import MLP, DistributedMLP, Linear

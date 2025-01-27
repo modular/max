@@ -54,14 +54,7 @@ class Conv2D(Layer):
             isinstance(self.filter, Weight)
             and self.filter.quantization_encoding is not None
         ):
-            return ops.conv2d(
-                x,
-                self.filter.quantization_encoding,  # type: ignore
-                self.stride,
-                self.dilation,
-                self.padding,
-                self.groups,
-            )
+            raise ValueError("Conv1D not implemented with weight quantization.")
         return ops.conv2d(
             x,
             self.filter,
@@ -70,3 +63,49 @@ class Conv2D(Layer):
             self.padding,
             self.groups,
         )
+
+
+@dataclass
+class Conv1D(Layer):
+    """A 1D convolution over an input signal composed of several input
+    planes.
+    """
+
+    filter: TensorValueLike  # [kernel_size, in_channels, out_channels]
+
+    stride: int = 1
+    padding: int = 0
+    dilation: int = 1
+    groups: int = 1
+    bias: bool = False
+
+    def __call__(self, x: TensorValue) -> TensorValue:
+        """
+        Args:
+            x: a tensor of shape [batch_size, length, in_channels]
+
+        Returns:
+            a tensor of shape [batch_size, new_length, out_channels]
+            new_length = ((length + 2 * padding - (kernel_size - 1) - 1) / stride) + 1
+        """
+        # TODO(GEX-327): Support Conv1D in mo rather than implementing it using Conv2D.
+        # Reshape [batch_size, length, in_channels] to [batch_size, height=1, length, in_channels].
+        x = ops.unsqueeze(x, 1)
+        # Reshape  [kernel_size, in_channels, out_channels] to [height=1, kernel_size, in_channels, out_channels].
+        filter = ops.unsqueeze(self.filter, 0)
+        if (
+            isinstance(self.filter, Weight)
+            and self.filter.quantization_encoding is not None
+        ):
+            raise ValueError("Conv1D not implemented with weight quantization.")
+        else:
+            output = ops.conv2d(
+                x,
+                filter,
+                (1, self.stride),
+                (1, self.dilation),
+                (0, 0, self.padding, self.padding),
+                self.groups,
+            )
+        # Reshape [batch_size, height=1, new_length, out_channels] to [batch_size, new_length, out_channels].
+        return ops.squeeze(output, 1)
