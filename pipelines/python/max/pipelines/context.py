@@ -91,10 +91,12 @@ class TextContext:
 
         self.size = int(np.ceil(len(tokens) / CHUNK_SIZE) * CHUNK_SIZE)
 
-        # Resizing, in this way, repeats the tokens data to fill the shape.
-        # This is not a problem, as we simply overwrite the invalid data
-        self.tokens = np.array(tokens)
-        self.tokens.resize(self.size)
+        # Create a fresh array since the input tokens may be a view or share memory with
+        # another array in the caller, which prevents us from resizing it directly.
+        # The extra space is initialized to zero and will be filled with generated tokens.
+        assert len(tokens) <= self.size
+        self.tokens = np.zeros(self.size, dtype=tokens.dtype)
+        self.tokens[: len(tokens)] = tokens
 
         self.current_length = len(tokens)
         self.active_length = self.current_length
@@ -169,10 +171,13 @@ class TextAndVisionContext:
             raise ValueError(msg)
 
         self.size = int(np.ceil(len(tokens) / CHUNK_SIZE) * CHUNK_SIZE)
-        # Resizing, in this way, repeats the tokens data to fill the shape.
-        # This is not a problem, as we simply overwrite the invalid data
-        self.tokens = np.array(tokens)
-        self.tokens.resize(self.size)
+
+        # Create a fresh array since the input tokens may be a view or share memory with
+        # another array in the caller, which prevents us from resizing it directly.
+        # The extra space is initialized to zero and will be filled with generated tokens.
+        assert len(tokens) <= self.size
+        self.tokens = np.zeros(self.size, dtype=tokens.dtype)
+        self.tokens[: len(tokens)] = tokens
 
         self.current_length = len(tokens)
         self.active_length = self.current_length
@@ -203,7 +208,7 @@ class TextAndVisionContext:
         new_token: int,
     ) -> None:
         """Updates the next_tokens attribute, and extends current_length if needed, based on the provided num_steps."""
-        if self.active_idx <= self.size:
+        if self.active_idx >= self.size:
             self.size += CHUNK_SIZE
             if self.tokens.flags.owndata:
                 self.tokens.resize(self.size)
