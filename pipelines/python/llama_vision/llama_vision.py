@@ -731,7 +731,9 @@ class LlamaVision(PipelineModel):
 
     @classmethod
     def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
-        return pipeline_config.huggingface_config.num_hidden_layers
+        return (
+            pipeline_config.huggingface_config.vision_config.num_hidden_layers
+        )
 
     def _prepare_vision_inputs(
         self,
