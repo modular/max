@@ -24,6 +24,7 @@ from typing import (
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
+from max.pipelines.kv_cache import infer_optimal_batch_size
 from max.profiler import Tracer, traced
 
 from .config import PipelineConfig
@@ -103,6 +104,37 @@ class PipelineModel(ABC):
     def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
         """Returns the number of layers for the pipeline model."""
         ...
+
+    @classmethod
+    def infer_optimal_batch_size(
+        cls,
+        pipeline_config: PipelineConfig,
+        available_cache_memory: int,
+    ) -> int:
+        """Returns the estimated optimal batch size to run the model
+        given current memory constraints."""
+        if not issubclass(cls, KVCacheMixin):
+            # we rely on the KVCache setup to know optimal batch size.
+            # If we don't have that, default to BS=1.
+            return 1
+        elif (
+            len(pipeline_config.devices) == 1
+            and pipeline_config.devices[0].is_host
+        ):
+            # batching on CPU is generally not useful, so we hard-code a batch size of 1.
+            return 1
+
+        # TODO we should map HF configs to a unified MAX Config object
+        # this would help avoid these excessive calls to class methods.
+        n_layers = cls.get_num_layers(pipeline_config)
+        kv_params = cls.get_kv_params(pipeline_config)
+        return infer_optimal_batch_size(
+            kv_params,
+            pipeline_config.max_length,
+            n_layers,
+            available_cache_memory,
+            pipeline_config.devices,
+        )
 
     @classmethod
     def estimate_weights_size(cls, pipeline_config: PipelineConfig) -> int:

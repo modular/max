@@ -93,6 +93,7 @@ class NaiveKVCacheManager(KVCacheManager):
                 cls._cache_shape(params, 1, max_seq_len, num_layers),
             )
             * params.dtype.size_in_bytes
+            * 2
         )
         return int(available_cache_memory // cache_size_per_sequence)
 

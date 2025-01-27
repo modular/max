@@ -25,7 +25,7 @@ from .config import (
 from .embeddings_pipeline import EmbeddingsPipeline
 from .hf_pipeline import HFTextGenerationPipeline
 from .interfaces import PipelineTask, PipelineTokenizer, TokenGenerator
-from .kv_cache import KVCacheStrategy, infer_optimal_batch_size
+from .kv_cache import KVCacheStrategy
 from .pipeline import KVCacheMixin, PipelineModel, TextGenerationPipeline
 from .tokenizer import TextAndVisionTokenizer, TextTokenizer
 
@@ -329,8 +329,6 @@ class PipelineRegistry:
         def to_mib(bytes):
             return round(bytes / 1024 / 1024)
 
-        kv_params = arch.pipeline_model.get_kv_params(pipeline_config)
-
         free_memory = None
         try:
             # TODO(AIPIPE-200): change this back to free_memory.
@@ -434,16 +432,9 @@ class PipelineRegistry:
         model_cls: Type[PipelineModel],
         available_kv_cache_memory: int,
     ) -> int:
-        # TODO we should map HF configs to a unified MAX Config object
-        # this would help avoid these excessive calls to class methods.
-        n_layers = model_cls.get_num_layers(pipeline_config)
-        kv_params = model_cls.get_kv_params(pipeline_config)
-        return infer_optimal_batch_size(
-            kv_params,
-            pipeline_config.max_length,
-            n_layers,
+        return model_cls.infer_optimal_batch_size(
+            pipeline_config,
             available_kv_cache_memory,
-            pipeline_config.devices,
         )
 
     def _infer_optimal_max_length(self, pipeline_config: PipelineConfig) -> int:

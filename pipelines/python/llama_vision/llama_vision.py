@@ -37,7 +37,6 @@ from max.pipelines.kv_cache import (
     KVCacheParams,
     KVCacheStrategy,
     estimate_kv_cache_size,
-    infer_optimal_batch_size,
     load_kv_manager,
 )
 from nn import Linear
@@ -136,7 +135,7 @@ class MultimodalKVCacheManager(KVCacheManager):
         devices: list[Device],
     ) -> int:
         """Returns the estimated total memory usage of the kv cache."""
-        # TODO(bduke): this is incorrect. Estimated memory size should be an
+        # TODO(E2EOPT-29): this is incorrect. Estimated memory size should be an
         # instance method to account for different text and vision KV caches.
         return 2 * ContinuousBatchingKVCacheManager.estimated_memory_size(
             params,
@@ -157,10 +156,9 @@ class MultimodalKVCacheManager(KVCacheManager):
         devices: list[Device],
     ) -> int:
         """Returns the estimated optimal batch size for the kv cache."""
-        # TODO(austin): this is also incorrect, we should address this when addressing the estimated_memory_size method
-        return infer_optimal_batch_size(
-            params, max_seq_len, num_layers, available_cache_memory, devices
-        )
+        # TODO(E2EOPT-29): this is temporarily hard-coded while we work on
+        # a longer term solution.
+        return 1
 
     @final
     def _fetch(
@@ -986,6 +984,16 @@ class LlamaVision(PipelineModel):
             available_cache_memory=available_cache_memory,
             devices=devices,
         )
+
+    @classmethod
+    def infer_optimal_batch_size(
+        cls,
+        pipeline_config: PipelineConfig,
+        available_cache_memory: int,
+    ) -> int:
+        # TODO(E2EOPT-29): this is temporarily hard-coded while we work on
+        # a longer term solution.
+        return 1
 
     def load_model(
         self,
