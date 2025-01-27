@@ -18,7 +18,7 @@ import time
 from typing import Sequence, cast
 
 import numpy as np
-from max.driver import Tensor
+from max.driver import Device, Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
 from max.pipelines import (
@@ -122,15 +122,20 @@ class MistralModel(PipelineModel):
             input_row_offsets=next_row_offsets,
         )
 
-    def _get_kv_params(self) -> KVCacheParams:
+    @classmethod
+    def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
         return KVCacheParams(
-            dtype=self.pipeline_config.dtype,
-            n_kv_heads=self.pipeline_config.huggingface_config.num_key_value_heads,
-            head_dim=self.pipeline_config.huggingface_config.head_dim,
-            cache_strategy=self.pipeline_config.cache_strategy,
-            page_size=self.pipeline_config.kv_cache_page_size,
-            enable_prefix_caching=self.pipeline_config.enable_prefix_caching,
+            page_size=pipeline_config.kv_cache_page_size,
+            dtype=pipeline_config.dtype,
+            n_kv_heads=pipeline_config.huggingface_config.num_key_value_heads,
+            head_dim=pipeline_config.huggingface_config.head_dim,
+            cache_strategy=pipeline_config.cache_strategy,
+            enable_prefix_caching=pipeline_config.enable_prefix_caching,
         )
+
+    @classmethod
+    def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
+        return pipeline_config.huggingface_config.num_hidden_layers
 
     def load_kv_manager(
         self,
@@ -141,7 +146,7 @@ class MistralModel(PipelineModel):
             self.pipeline_config.devices
         ), "devices must be provided to load kv manager."
         return load_kv_manager(
-            params=self._get_kv_params(),
+            params=self.get_kv_params(self.pipeline_config),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
             max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
@@ -151,17 +156,22 @@ class MistralModel(PipelineModel):
             session=session,
         )
 
-    def estimate_kv_cache_size(self, available_cache_memory: int) -> int:
-        assert (
-            self.pipeline_config.devices
-        ), "devices must be provided to estimate kv cache size."
+    @classmethod
+    def estimate_kv_cache_size(
+        cls,
+        pipeline_config: PipelineConfig,
+        available_cache_memory: int,
+        devices: list[Device],
+    ) -> int:
+        """Estimates the size of the kv cache in bytes."""
+        assert devices, "devices must be provided to estimate kv cache size."
         return estimate_kv_cache_size(
-            params=self._get_kv_params(),
-            max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
-            num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
+            params=cls.get_kv_params(pipeline_config),
+            max_cache_batch_size=pipeline_config.max_cache_batch_size,
+            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            num_layers=pipeline_config.huggingface_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
-            devices=self.pipeline_config.devices,
+            devices=devices,
         )
 
     def load_model(self, session: InferenceSession) -> Model:
@@ -171,6 +181,9 @@ class MistralModel(PipelineModel):
 
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
+        assert (
+            self.pipeline_config.max_cache_batch_size
+        ), "Expected max_cache_batch_size to be set"
         self._input_row_offsets_prealloc = Tensor.from_numpy(
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
@@ -203,7 +216,7 @@ class MistralModel(PipelineModel):
             graph = _build_graph(
                 self.pipeline_config,
                 self._weights,
-                self._get_kv_params(),
+                self.get_kv_params(self.pipeline_config),
                 self.kv_manager,
             )
             logging.info("Compiling...")

@@ -7,6 +7,7 @@
 from typing import Any, Dict, List, Optional, Type
 
 from max.driver import Device
+from max.dtype import DType
 from max.engine import InferenceSession
 
 from .cache_params import KVCacheParams, KVCacheStrategy
@@ -38,7 +39,7 @@ CACHE_MANAGER_REGISTRY: dict[KVCacheStrategy, Type[KVCacheManager]] = {
 
 def load_kv_manager(
     params: KVCacheParams,
-    max_cache_batch_size: int,
+    max_cache_batch_size: Optional[int],
     max_seq_len: int,
     num_layers: int,
     devices: List[Device],
@@ -46,6 +47,7 @@ def load_kv_manager(
     available_cache_memory: Optional[int] = None,
     page_size: Optional[int] = 512,
 ) -> KVCacheManager:
+    assert max_cache_batch_size, "Expected max_cache_batch_size to be set"
     if params.cache_strategy == KVCacheStrategy.CONTINUOUS:
         return ContinuousBatchingKVCacheManager(
             params=params,
@@ -97,12 +99,13 @@ def load_kv_manager(
 
 def estimate_kv_cache_size(
     params: KVCacheParams,
-    max_cache_batch_size: int,
+    max_cache_batch_size: Optional[int],
     max_seq_len: int,
     num_layers: int,
     available_cache_memory: int,
     devices: List[Device],
 ) -> int:
+    assert max_cache_batch_size, "Expected max_cache_batch_size to be set"
     if params.cache_strategy not in CACHE_MANAGER_REGISTRY:
         msg = f"cache type: {params.cache_strategy} not supported."
         raise ValueError(msg)
@@ -110,6 +113,24 @@ def estimate_kv_cache_size(
     return CACHE_MANAGER_REGISTRY[params.cache_strategy].estimated_memory_size(
         params=params,
         max_cache_batch_size=max_cache_batch_size,
+        max_seq_len=max_seq_len,
+        num_layers=num_layers,
+        available_cache_memory=available_cache_memory,
+        devices=devices,
+    )
+
+
+def infer_optimal_batch_size(
+    params: KVCacheParams,
+    max_seq_len: int,
+    num_layers: int,
+    available_cache_memory: int,
+    devices: List[Device],
+) -> int:
+    return CACHE_MANAGER_REGISTRY[
+        params.cache_strategy
+    ].infer_optimal_batch_size(
+        params=params,
         max_seq_len=max_seq_len,
         num_layers=num_layers,
         available_cache_memory=available_cache_memory,

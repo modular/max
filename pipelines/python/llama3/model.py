@@ -73,6 +73,24 @@ class Llama3Model(PipelineModel):
         super().__init__(pipeline_config, session)
         self.model = self.load_model(session)
 
+    @classmethod
+    def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
+        return KVCacheParams(
+            dtype=pipeline_config.dtype,
+            n_kv_heads=pipeline_config.huggingface_config.num_key_value_heads,
+            head_dim=(
+                pipeline_config.huggingface_config.hidden_size
+                // pipeline_config.huggingface_config.num_attention_heads
+            ),
+            page_size=pipeline_config.kv_cache_page_size,
+            cache_strategy=pipeline_config.cache_strategy,
+            enable_prefix_caching=pipeline_config.enable_prefix_caching,
+        )
+
+    @classmethod
+    def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
+        return pipeline_config.huggingface_config.num_hidden_layers
+
     def execute(
         self,
         model_inputs: ModelInputs,
@@ -199,31 +217,13 @@ class Llama3Model(PipelineModel):
                 next_tokens, prev_model_inputs
             )
 
-    def _get_kv_params(self) -> KVCacheParams:
-        cache_dtype = (
-            DType.float32
-            if self.pipeline_config.quantization_encoding.quantization_encoding
-            is not None
-            else self.pipeline_config.dtype
-        )
-        return KVCacheParams(
-            dtype=cache_dtype,
-            n_kv_heads=self.pipeline_config.huggingface_config.num_key_value_heads,
-            head_dim=self.pipeline_config.huggingface_config.hidden_size
-            // self.pipeline_config.huggingface_config.num_attention_heads,
-            cache_strategy=self.pipeline_config.cache_strategy,
-            page_size=self.pipeline_config.kv_cache_page_size,
-            n_devices=len(self.pipeline_config.devices),
-            enable_prefix_caching=self.pipeline_config.enable_prefix_caching,
-        )
-
     def load_kv_manager(
         self,
         session: InferenceSession,
         available_cache_memory: int,
     ) -> KVCacheManager:
         return load_kv_manager(
-            params=self._get_kv_params(),
+            params=self.get_kv_params(self.pipeline_config),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
             max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
@@ -233,14 +233,21 @@ class Llama3Model(PipelineModel):
             session=session,
         )
 
-    def estimate_kv_cache_size(self, available_cache_memory: int) -> int:
+    @classmethod
+    def estimate_kv_cache_size(
+        cls,
+        pipeline_config: PipelineConfig,
+        available_cache_memory: int,
+        devices: List[Device],
+    ) -> int:
+        """Estimates the size of the kv cache in bytes."""
         return estimate_kv_cache_size(
-            params=self._get_kv_params(),
-            max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
-            num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
+            params=cls.get_kv_params(pipeline_config),
+            max_cache_batch_size=pipeline_config.max_cache_batch_size,
+            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            num_layers=pipeline_config.huggingface_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
-            devices=self.pipeline_config.devices,
+            devices=devices,
         )
 
     def load_model(
@@ -249,6 +256,9 @@ class Llama3Model(PipelineModel):
     ) -> Model:
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
+        assert (
+            self.pipeline_config.max_cache_batch_size
+        ), "Expected max_cache_batch_size to be set"
         self._input_row_offsets_prealloc = Tensor.from_numpy(
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
@@ -291,7 +301,7 @@ class Llama3Model(PipelineModel):
     def _unflatten_kv_inputs(
         self, kv_inputs_flat: Sequence[Tensor]
     ) -> List[tuple[Tensor, ...]]:
-        kv_params = self._get_kv_params()
+        kv_params = self.get_kv_params(self.pipeline_config)
         n_devices = kv_params.n_devices
         fetch_types = self.kv_manager.input_symbols()
         len_of_kv_tuple_per_dev = len(fetch_types[0])
@@ -338,7 +348,7 @@ class Llama3Model(PipelineModel):
                     graph,
                     self.pipeline_config,
                     weights,
-                    self._get_kv_params(),
+                    self.get_kv_params(self.pipeline_config),
                 )
                 tokens, input_row_offsets, *kv_cache = graph.inputs
                 kv_caches_per_dev = self._unflatten_kv_inputs(kv_cache)
@@ -365,7 +375,7 @@ class Llama3Model(PipelineModel):
                     graph,
                     self.pipeline_config,
                     weights,
-                    self._get_kv_params(),
+                    self.get_kv_params(self.pipeline_config),
                 )
                 tokens, input_row_offsets, *kv_cache = graph.inputs
                 outputs = model(
@@ -404,7 +414,7 @@ class Llama3Model(PipelineModel):
                 graph,
                 self.pipeline_config,
                 weights,
-                self._get_kv_params(),
+                self.get_kv_params(self.pipeline_config),
             )
             tokens, attention_mask, k_cache, v_cache, start_pos, _ = (
                 graph.inputs

@@ -75,6 +75,19 @@ class KVCacheManager(ABC):
         """Returns the estimated total memory usage of the kv cache."""
         ...
 
+    @classmethod
+    @abstractmethod
+    def infer_optimal_batch_size(
+        cls,
+        params: KVCacheParams,
+        max_seq_len: int,
+        num_layers: int,
+        available_cache_memory: int,
+        devices: List[Device],
+    ) -> int:
+        """Returns the estimated optimal batch size for the kv cache."""
+        ...
+
     @abstractmethod
     def _fetch(
         self,

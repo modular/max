@@ -32,6 +32,7 @@ from max.pipelines import (
     PipelineModel,
     TextContext,
 )
+from max.pipelines.kv_cache import KVCacheParams
 
 from .graph import build_graph
 
@@ -64,6 +65,23 @@ class MPNetPipelineModel(PipelineModel):
     ) -> None:
         super().__init__(pipeline_config, session)
         self.model = self.load_model(session)
+
+    @classmethod
+    def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
+        return KVCacheParams(
+            dtype=pipeline_config.dtype,
+            n_kv_heads=pipeline_config.huggingface_config.num_attention_heads,
+            head_dim=(
+                pipeline_config.huggingface_config.hidden_size
+                // pipeline_config.huggingface_config.num_attention_heads
+            ),
+            cache_strategy=pipeline_config.cache_strategy,
+            enable_prefix_caching=pipeline_config.enable_prefix_caching,
+        )
+
+    @classmethod
+    def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
+        return pipeline_config.huggingface_config.num_hidden_layers
 
     def execute(
         self,

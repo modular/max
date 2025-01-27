@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from functools import reduce
 from itertools import chain
+from operator import mul
 from typing import Dict, Iterator, Optional
 
 import numpy as np
@@ -266,6 +268,27 @@ class PagedKVCacheManager(KVCacheManager):
         devices: list[Device],
     ) -> int:
         return available_cache_memory
+
+    @classmethod
+    def infer_optimal_batch_size(
+        cls,
+        params: KVCacheParams,
+        max_seq_len: int,
+        num_layers: int,
+        available_cache_memory: int,
+        devices: list[Device],
+    ) -> int:
+        # hardcore assumption that the average sequence length in cache is
+        # half of max
+        average_seq_length = max_seq_len // 2
+
+        block_size_per_token = (
+            reduce(mul, cls._block_shape(params, 1, 1, num_layers), 1)
+            * params.dtype.size_in_bytes
+        )
+        num_tokens_in_cache = available_cache_memory // block_size_per_token
+        suggested_batch_size = int(num_tokens_in_cache // average_seq_length)
+        return suggested_batch_size
 
     @classmethod
     def _block_shape(

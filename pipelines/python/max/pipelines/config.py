@@ -447,8 +447,8 @@ class PipelineConfig:
     max_new_tokens: int = -1
     """Maximum number of new tokens to generate during a single inference pass of the model."""
 
-    max_cache_batch_size: int = 1
-    """Maximum cache size to reserve for a single batch.
+    max_cache_batch_size: Optional[int] = None
+    """Maximum batch size to execute with the model.
     This is set to one, to minimize memory consumption for the base case, in which a person is
     running a local server to test out MAX. For users launching in a server scenario, the expectation
     is that this value should be set higher based on server capacity."""
@@ -513,6 +513,9 @@ class PipelineConfig:
 
     _weights_repo_id: Optional[str] = None
     """Huggingface Repo id to load weights from only. This should only be set by internal code."""
+
+    _available_cache_memory: Optional[int] = None
+    """The amount of available cache memory in bytes. This should only be set by internal code."""
 
     def __post_init__(self) -> None:
         if not self.huggingface_repo_id:
@@ -580,6 +583,7 @@ class PipelineConfig:
         """Override `__getstate__` to exclude the HuggingFace config."""
         state = self.__dict__.copy()
         state.pop("_huggingface_config")
+        state["_devices"] = []
         return state
 
     def update_architecture(self) -> None:
@@ -708,7 +712,7 @@ class PipelineConfig:
             msg = f"weights type cannot be inferred from {self.weight_path}"
             raise ValueError(msg)
 
-    def weights_size(self) -> Optional[int]:
+    def weights_size(self) -> int:
         size = 0
         hf_repo = HuggingFaceRepo(
             (
@@ -726,7 +730,9 @@ class PipelineConfig:
             next_size = hf_repo.size_of(str(file_path))
 
             if next_size is None:
-                return None
+                raise ValueError(
+                    f"Failed to get size of weight file {file_path}"
+                )
             size += next_size
 
         return size

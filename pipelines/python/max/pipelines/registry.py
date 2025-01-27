@@ -25,8 +25,8 @@ from .config import (
 from .embeddings_pipeline import EmbeddingsPipeline
 from .hf_pipeline import HFTextGenerationPipeline
 from .interfaces import PipelineTask, PipelineTokenizer, TokenGenerator
-from .kv_cache import KVCacheStrategy
-from .pipeline import PipelineModel, TextGenerationPipeline
+from .kv_cache import KVCacheStrategy, infer_optimal_batch_size
+from .pipeline import KVCacheMixin, PipelineModel, TextGenerationPipeline
 from .tokenizer import TextAndVisionTokenizer, TextTokenizer
 
 # Store a map of checkpoint encodings that can be cast to another dtype while
@@ -315,9 +315,143 @@ class PipelineRegistry:
         if pipeline_config.rope_type is None:
             pipeline_config.rope_type = arch.rope_type
 
+        self._estimate_memory_footprint(pipeline_config, arch)
+
         # If we pass validation ensure, the engine is set as MAX.
         pipeline_config.engine = PipelineEngine.MAX
         return pipeline_config
+
+    def _estimate_memory_footprint(
+        self,
+        pipeline_config: PipelineConfig,
+        arch: SupportedArchitecture,
+    ):
+        def to_mib(bytes):
+            return round(bytes / 1024 / 1024)
+
+        kv_params = arch.pipeline_model.get_kv_params(pipeline_config)
+
+        free_memory = None
+        try:
+            # TODO(AIPIPE-200): change this back to free_memory.
+            # Currently, free_memory leads to issues with calculation on
+            # repeated model loads (like seen in tests). Based on the outputs,
+            # it seems like we are not freeing memory from a model until the
+            # next model is loading weights. As such, there is not enough free
+            # memory when running this check. Memory likely should be getting
+            # cleaned up much earlier.
+            free_memory = pipeline_config.device.stats["total_memory"]
+        except:
+            logging.warning(
+                "Unable to estimate memory footprint of model, can't query device stats."
+            )
+            return 0
+
+        model_cls = arch.pipeline_model
+        model_weights_size = model_cls.estimate_weights_size(pipeline_config)
+
+        weights_str = ""
+        if model_weights_size:
+            weights_str = f"\n\t    Weights:                {to_mib(model_weights_size)} MiB"
+
+        total_size = model_weights_size
+        available_kv_cache_memory = (
+            free_memory - model_weights_size
+        ) * pipeline_config.device_memory_utilization
+        if pipeline_config.max_length is None:
+            # TODO(AITLIB-11) TODO(zheng) retrieve this from the huggingface config.
+            # If it not available, hardcode a default value.
+            pipeline_config.max_length = self._infer_optimal_max_length(
+                pipeline_config
+            )
+            max_length_str = f"Auto-inferred max sequence length: {pipeline_config.max_length}"
+        else:
+            max_length_str = (
+                f"Current max sequence length: {pipeline_config.max_length}"
+            )
+
+        if pipeline_config.max_cache_batch_size is None:
+            pipeline_config.max_cache_batch_size = (
+                self._infer_optimal_batch_size(
+                    pipeline_config, model_cls, available_kv_cache_memory
+                )
+            )
+            max_batch_size_str = f"Auto-inferred max batch size: {pipeline_config.max_cache_batch_size}"
+        else:
+            max_batch_size_str = f"Current max batch size: {pipeline_config.max_cache_batch_size}"
+
+        if issubclass(model_cls, KVCacheMixin):
+            actual_kv_cache_size = model_cls.estimate_kv_cache_size(
+                pipeline_config=pipeline_config,
+                available_cache_memory=available_kv_cache_memory,
+                devices=pipeline_config.devices,
+            )
+        else:
+            actual_kv_cache_size = 0
+
+        pipeline_config._available_cache_memory = actual_kv_cache_size
+
+        total_size += actual_kv_cache_size
+
+        if free_memory:
+            free_memory_str = f" / {to_mib(free_memory)} MiB free"
+
+        vram_usage_limit_scale = 0.95
+        logging_str = (
+            "\n"
+            f"\n\tEstimated memory consumption:"
+            f"{weights_str}"
+            f"\n\t    KVCache allocation:     {to_mib(actual_kv_cache_size)} MiB"
+            f"\n\t    Total estimated:        {to_mib(model_weights_size + actual_kv_cache_size)} MiB used{free_memory_str}"
+            f"\n\t{max_length_str}"
+            f"\n\t{max_batch_size_str}\n"
+        )
+        if isinstance(free_memory, (int, float)):
+            if total_size > free_memory:
+                msg = f"Estimated model and kv cache memory use exceeds available memory ({to_mib(total_size)} MiB{free_memory_str})"
+
+                if pipeline_config.cache_strategy == KVCacheStrategy.PAGED:
+                    msg += ". Try reducing --gpu-memory-consumption to a smaller value."
+                else:
+                    max_batch_size_rec_str = (
+                        f" to {pipeline_config.max_cache_batch_size} "
+                        if pipeline_config.max_cache_batch_size
+                        else " "
+                    )
+                    msg += f". Try reducing your --max-cache-batch-size{max_batch_size_rec_str}or reducing the value passed to --max-seq-len."
+
+                raise RuntimeError(msg)
+            elif total_size > vram_usage_limit_scale * free_memory:
+                logging.warning(
+                    "Estimated model and kv cache memory use nears available memory. You may experience errors."
+                )
+
+        logging.info(logging_str)
+
+    def _infer_optimal_batch_size(
+        self,
+        pipeline_config: PipelineConfig,
+        model_cls: Type[PipelineModel],
+        available_kv_cache_memory: int,
+    ) -> int:
+        # TODO we should map HF configs to a unified MAX Config object
+        # this would help avoid these excessive calls to class methods.
+        n_layers = model_cls.get_num_layers(pipeline_config)
+        kv_params = model_cls.get_kv_params(pipeline_config)
+        return infer_optimal_batch_size(
+            kv_params,
+            pipeline_config.max_length,
+            n_layers,
+            available_kv_cache_memory,
+            pipeline_config.devices,
+        )
+
+    def _infer_optimal_max_length(self, pipeline_config: PipelineConfig) -> int:
+        # TODO(AITLIB-11) retrieve this from the huggingface config.
+        # If it not available, hardcode a default value.
+        raise NotImplementedError(
+            "_infer_optimal_max_length not implemented (yet)"
+        )
 
     def _load_logging_message(
         self,
