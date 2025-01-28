@@ -476,6 +476,9 @@ class PipelineConfig:
     enable_prefix_caching: bool = False
     """Whether to enable prefix caching for the paged attention KVCache."""
 
+    enable_constrained_decoding: bool = False
+    """Whether to enable constrained decoding in the text generation pipeline."""
+
     device_memory_utilization: float = 0.9
     """The fraction of available device memory that the process should consume.
 
@@ -583,6 +586,10 @@ class PipelineConfig:
             weight_paths.append(path)
 
         self.weight_path = weight_paths
+
+        if self.max_num_steps > 1 and self.enable_constrained_decoding:
+            msg = "max_num_steps > 1 not supported, when enable_constrained_decoding = True"
+            raise ValueError(msg)
 
     def __getstate__(self) -> dict[str, Any]:
         """Override `__getstate__` to exclude the HuggingFace config."""
@@ -800,6 +807,7 @@ class PipelineConfig:
             "pad_to_multiple_of": "Pad input tensors to be a multiple of value provided. Default is set to 2.",
             "kv_cache_page_size": "The number of tokens in a single page in the paged KVCache. Default is set to 512.",
             "enable_prefix_caching": "Whether to enable prefix caching for the paged attention KVCache. This defaults to false.",
+            "enable_constrained_decoding": "Whether to enable constrained decoding in the text generation pipeline. This defaults to false.",
             "device_memory_utilization": "The fraction of available device memory that the process should consume. This is used to inform the size of the KVCache workspace: kv_cache_workspace = (total_free_memory * device_memory_utilization) - model_weights_size. Default is set to 0.9.",
             "top_k": "Limit sampling to the top K most probable tokens during generation. This can help control randomness and improve output quality. This defaults to 1, which defaults to greedy sampling.",
             "trust_remote_code": "Indicate whether to allow custom modelling files from Huggingface repositories. Set this to true with caution, as it may introduce security risks.",
