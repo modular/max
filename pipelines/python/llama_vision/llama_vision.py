@@ -782,19 +782,19 @@ class LlamaVision(PipelineModel):
         final_images = np.concatenate(images, axis=0)
 
         pixel_values = Tensor.from_numpy(final_images).to(
-            self.pipeline_config.device
+            self.pipeline_config.devices[0]
         )
 
         final_aspect_ratio_ids = np.concatenate(aspect_ratio_ids_list, axis=0)
 
         aspect_ratio_ids = Tensor.from_numpy(final_aspect_ratio_ids).to(
-            self.pipeline_config.device
+            self.pipeline_config.devices[0]
         )
 
         final_aspect_ratio_mask = np.concatenate(aspect_ratio_mask_list, axis=0)
 
         aspect_ratio_mask = Tensor.from_numpy(final_aspect_ratio_mask).to(
-            self.pipeline_config.device
+            self.pipeline_config.devices[0]
         )
 
         return pixel_values, aspect_ratio_ids, aspect_ratio_mask
@@ -835,7 +835,7 @@ class LlamaVision(PipelineModel):
                 [0] + [ctx.seq_len for ctx in context_batch],
                 dtype=np.uint32,
             )
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         pixel_row_offsets = Tensor.from_numpy(
             np.cumsum(
@@ -849,13 +849,13 @@ class LlamaVision(PipelineModel):
                 ],
                 dtype=np.uint32,
             )
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         # Input Ids: ["total_seq_len"], Int64
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
         tokens = np.concatenate([ctx.next_tokens for ctx in context_batch])
         input_id_values = Tensor.from_numpy(tokens).to(
-            self.pipeline_config.device
+            self.pipeline_config.devices[0]
         )
         # This lives on host / in the CPU kernel, but is later casted to a scalar on
         # device kernel side. No need for explicit .to(pipeline_config.device) call here.
@@ -908,7 +908,7 @@ class LlamaVision(PipelineModel):
         cross_attention_states = Tensor.zeros(
             shape=[0, self.text_config.hidden_size],
             dtype=self.pipeline_config.dtype,
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         model_inputs = cast(LlamaVisionInputs, model_inputs)
         if model_inputs.has_vision_inputs:

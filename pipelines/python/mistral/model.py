@@ -97,12 +97,12 @@ class MistralModel(PipelineModel):
                 [0] + [ctx.seq_len for ctx in context_batch],
                 dtype=np.uint32,
             )
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
         next_tokens_batch = np.concatenate(tokens)
         next_tokens_batch = Tensor.from_numpy(next_tokens_batch).to(
-            self.pipeline_config.device
+            self.pipeline_config.devices[0]
         )
 
         return MistralInputs(
@@ -205,7 +205,7 @@ class MistralModel(PipelineModel):
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
             )
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         self._weights = self.pipeline_config.load_weights()
 

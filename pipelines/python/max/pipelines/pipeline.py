@@ -474,7 +474,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         generated_tokens = Tensor.zeros(
             (len(context_batch), 0),
             dtype=DType.int64,
-            device=self._pipeline_config.device,
+            device=self._pipeline_config.devices[0],
         )
 
         curr_step_inputs = model_inputs

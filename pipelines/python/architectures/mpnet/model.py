@@ -136,11 +136,11 @@ class MPNetPipelineModel(PipelineModel):
 
         return MPNetInputs(
             next_tokens_batch=Tensor.from_numpy(next_tokens_batch).to(
-                self.pipeline_config.device
+                self.pipeline_config.devices[0]
             ),
             extended_attention_mask=Tensor.from_numpy(
                 extended_attention_mask
-            ).to(self.pipeline_config.device),
+            ).to(self.pipeline_config.devices[0]),
         )
 
     def prepare_next_token_inputs(

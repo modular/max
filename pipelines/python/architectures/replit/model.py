@@ -113,9 +113,11 @@ class ReplitModel(PipelineModel):
         tokens = np.concatenate([ctx.next_tokens for ctx in context_batch])
 
         return ReplitInputs(
-            tokens=Tensor.from_numpy(tokens).to(self.pipeline_config.device),
+            tokens=Tensor.from_numpy(tokens).to(
+                self.pipeline_config.devices[0]
+            ),
             input_row_offsets=Tensor.from_numpy(input_row_offsets).to(
-                self.pipeline_config.device
+                self.pipeline_config.devices[0]
             ),
         )
 
@@ -212,7 +214,7 @@ class ReplitModel(PipelineModel):
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
             )
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         # Read in weights.
         weights = self.pipeline_config.load_weights()

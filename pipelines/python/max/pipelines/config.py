@@ -675,11 +675,6 @@ class PipelineConfig:
         return self._devices
 
     @property
-    def device(self) -> Device:
-        """Initialize and return a singular device, given a singular device spec."""
-        return self.devices[0]
-
-    @property
     def weights_format(self) -> WeightsFormat:
         """Identify which format our weights are expected in."""
 

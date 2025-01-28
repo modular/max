@@ -331,14 +331,9 @@ class PipelineRegistry:
 
         free_memory = None
         try:
-            # TODO(AIPIPE-200): change this back to free_memory.
-            # Currently, free_memory leads to issues with calculation on
-            # repeated model loads (like seen in tests). Based on the outputs,
-            # it seems like we are not freeing memory from a model until the
-            # next model is loading weights. As such, there is not enough free
-            # memory when running this check. Memory likely should be getting
-            # cleaned up much earlier.
-            free_memory = pipeline_config.device.stats["total_memory"]
+            free_memory = sum(
+                d.stats["free_memory"] for d in pipeline_config.devices
+            )
         except:
             logging.warning(
                 "Unable to estimate memory footprint of model, can't query device stats."

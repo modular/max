@@ -113,7 +113,7 @@ class PixtralModel(PipelineModel):
                     self.pipeline_config.huggingface_config.text_config.hidden_size,
                 ],
                 dtype=self.pipeline_config.dtype,
-            ).to(self.pipeline_config.device)
+            ).to(self.pipeline_config.devices[0])
 
         assert (
             kv_cache_inputs is not None
@@ -139,14 +139,16 @@ class PixtralModel(PipelineModel):
                 [0] + [ctx.seq_len for ctx in context_batch],
                 dtype=np.uint32,
             )
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         # Input Ids: ["total_seq_len"], Int64
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
         tokens = np.ascontiguousarray(
             np.concatenate([ctx.next_tokens for ctx in context_batch])
         )
-        input_ids = Tensor.from_numpy(tokens).to(self.pipeline_config.device)
+        input_ids = Tensor.from_numpy(tokens).to(
+            self.pipeline_config.devices[0]
+        )
 
         # TODO: change this to work with all contexts in the batch.
         if context_batch[
@@ -158,7 +160,7 @@ class PixtralModel(PipelineModel):
                 np.transpose(context_batch[0].pixel_values[0], (1, 2, 0))
             )
             pixel_values = Tensor.from_numpy(image).to(
-                self.pipeline_config.device
+                self.pipeline_config.devices[0]
             )
             # TODO(KERN-782): This should be -inf but softmax saturates with NaNs.
             fill_val = -10000.0
@@ -169,7 +171,7 @@ class PixtralModel(PipelineModel):
                 fill_val,
             )
             attention_mask = Tensor.from_numpy(attention_mask).to(
-                self.pipeline_config.device
+                self.pipeline_config.devices[0]
             )
             return PixtralInputs(
                 input_ids=input_ids,
@@ -278,7 +280,7 @@ class PixtralModel(PipelineModel):
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
             )
-        ).to(self.pipeline_config.device)
+        ).to(self.pipeline_config.devices[0])
 
         self._weights = self.pipeline_config.load_weights()
 
