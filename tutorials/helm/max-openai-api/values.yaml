@@ -74,7 +74,7 @@ volumeMounts:
   #   mountPath: /mnt/secret
 
 image:
-  repository: "modular/max-openai-api"
+  repository: "docker.modular.com/modular/max-openai-api"
   tag: "latest"
   pullPolicy: IfNotPresent
 
