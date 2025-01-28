@@ -29,6 +29,7 @@ from max.pipelines import (
     PipelineConfig,
     PipelineModel,
     TextContext,
+    upper_bounded_default,
 )
 from max.pipelines.kv_cache import (
     KVCacheManager,
@@ -149,6 +150,22 @@ class ReplitModel(PipelineModel):
             enable_prefix_caching=pipeline_config.enable_prefix_caching,
         )
 
+    @classmethod
+    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+        try:
+            return upper_bounded_default(
+                upper_bound=pipeline_config.huggingface_config.max_seq_len,
+                default=pipeline_config.max_length,
+            )
+        except ValueError as e:
+            msg = (
+                "Unable to infer max_length for Replit, the provided "
+                f"max_length ({pipeline_config.max_length}) exceeds the "
+                f"model's max_seq_len "
+                f"({pipeline_config.huggingface_config.max_seq_len})."
+            )
+            raise ValueError(msg) from e
+
     def load_kv_manager(
         self,
         session: InferenceSession,
@@ -157,7 +174,7 @@ class ReplitModel(PipelineModel):
         return load_kv_manager(
             params=self.get_kv_params(self.pipeline_config),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             num_layers=self.pipeline_config.huggingface_config.n_layers,
             devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
@@ -176,7 +193,7 @@ class ReplitModel(PipelineModel):
         return estimate_kv_cache_size(
             params=cls.get_kv_params(pipeline_config),
             max_cache_batch_size=pipeline_config.max_cache_batch_size,
-            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
             num_layers=pipeline_config.huggingface_config.n_layers,
             available_cache_memory=available_cache_memory,
             devices=devices,

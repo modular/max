@@ -30,6 +30,7 @@ from max.pipelines import (
     PipelineConfig,
     PipelineModel,
     TextAndVisionContext,
+    upper_bounded_default,
 )
 from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheManager,
@@ -44,13 +45,6 @@ from nn.layer import Layer
 
 from .language_model import CausalLanguageModel, instantiate_language_model
 from .vision_model import instantiate_vision_model
-
-
-def max_seq_len(config: PipelineConfig) -> int:
-    return min(
-        config.max_length,
-        config.huggingface_config.text_config.max_position_embeddings,
-    )
 
 
 class MultimodalKVCacheManager(KVCacheManager):
@@ -518,6 +512,7 @@ class LlamaVisionLanguageModel(Layer):
         pipeline_config: PipelineConfig,
         weights: Weights,
         kv_params: KVCacheParams,
+        max_seq_len: int,
         num_text_kv_cache_inputs: int,
     ) -> None:
         text_config = pipeline_config.huggingface_config.text_config
@@ -527,7 +522,7 @@ class LlamaVisionLanguageModel(Layer):
             hidden_size=text_config.hidden_size,
             n_heads=text_config.num_attention_heads,
             rope_theta=text_config.rope_theta,
-            max_seq_len=max_seq_len(pipeline_config),
+            max_seq_len=max_seq_len,
             num_hidden_layers=text_config.num_hidden_layers,
             cross_attention_layers=text_config.cross_attention_layers,
             vocab_size=text_config.vocab_size,
@@ -652,6 +647,22 @@ class LlamaVision(PipelineModel):
             input_types=input_types,
         )
 
+    @classmethod
+    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+        try:
+            return upper_bounded_default(
+                upper_bound=pipeline_config.huggingface_config.text_config.max_position_embeddings,
+                default=pipeline_config.max_length,
+            )
+        except ValueError as e:
+            msg = (
+                "Unable to infer max_length for Llama Vision, the provided "
+                f"max_length ({pipeline_config.max_length}) exceeds the "
+                f"model's max_position_embeddings "
+                f"({pipeline_config.huggingface_config.text_config.max_position_embeddings})."
+            )
+            raise ValueError(msg) from e
+
     def _llama3_vision_language_graph(self) -> Graph:
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
@@ -710,6 +721,7 @@ class LlamaVision(PipelineModel):
                 pipeline_config=self.pipeline_config,
                 weights=self.weights,
                 kv_params=self.get_kv_params(self.pipeline_config),
+                max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
                 num_text_kv_cache_inputs=len(text_kv_input_symbols),
             ),
             input_types=input_types,
@@ -957,7 +969,7 @@ class LlamaVision(PipelineModel):
         return MultimodalKVCacheManager(
             params=self.get_kv_params(self.pipeline_config),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            text_max_seq_len=max_seq_len(self.pipeline_config),
+            text_max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             vision_max_seq_len=self.vision_max_seq_len,
             text_num_layers=self.text_config.num_hidden_layers
             - num_cross_attn_layers,
@@ -979,7 +991,7 @@ class LlamaVision(PipelineModel):
         return estimate_kv_cache_size(
             params=cls.get_kv_params(pipeline_config),
             max_cache_batch_size=pipeline_config.max_cache_batch_size,
-            max_seq_len=max_seq_len(pipeline_config),
+            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
             num_layers=pipeline_config.huggingface_config.text_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
             devices=devices,

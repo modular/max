@@ -328,6 +328,7 @@ def distributed_transformer_opaque(
     graph: Graph,
     pipeline_config: PipelineConfig,
     weights: Weights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
 ) -> DistributedTransformer:
     devices = [
@@ -348,7 +349,7 @@ def distributed_transformer_opaque(
             dim=pipeline_config.huggingface_config.hidden_size,
             n_heads=pipeline_config.huggingface_config.num_attention_heads,
             theta=pipeline_config.huggingface_config.rope_theta,
-            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=max_seq_len,
             rope_scaling=rope_scaling,
             interleaved=interleaved_rope_weights,
         )
@@ -437,6 +438,7 @@ def _transformer_opaque(
     graph: Graph,
     pipeline_config: PipelineConfig,
     weights: Weights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
 ) -> Transformer:
     with graph:
@@ -453,7 +455,7 @@ def _transformer_opaque(
             dim=pipeline_config.huggingface_config.hidden_size,
             n_heads=pipeline_config.huggingface_config.num_attention_heads,
             theta=pipeline_config.huggingface_config.rope_theta,
-            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=max_seq_len,
             rope_scaling=rope_scaling,
             interleaved=interleaved_rope_weights,
         )
@@ -588,10 +590,17 @@ def transformer(
     graph: Graph,
     pipeline_config: PipelineConfig,
     weights: Weights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
 ) -> Union[Transformer, NaiveTransformer]:
     if pipeline_config.cache_strategy.uses_opaque():
-        return _transformer_opaque(graph, pipeline_config, weights, kv_params)
+        return _transformer_opaque(
+            graph=graph,
+            pipeline_config=pipeline_config,
+            weights=weights,
+            max_seq_len=max_seq_len,
+            kv_params=kv_params,
+        )
 
     with graph:
         if weights.rope_freqs.weight.exists():
@@ -607,7 +616,7 @@ def transformer(
             dim=pipeline_config.huggingface_config.hidden_size,
             n_heads=pipeline_config.huggingface_config.num_attention_heads,
             theta=pipeline_config.huggingface_config.rope_theta,
-            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=max_seq_len,
             rope_scaling=rope_scaling,
             interleaved=interleaved_rope_weights,
         )

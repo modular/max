@@ -33,6 +33,7 @@ from max.pipelines import (
     PipelineModel,
     SupportedEncoding,
     TextContext,
+    upper_bounded_default,
 )
 from max.pipelines.kv_cache import (
     KVCacheManager,
@@ -91,6 +92,7 @@ class Llama3Model(PipelineModel):
             page_size=pipeline_config.kv_cache_page_size,
             cache_strategy=pipeline_config.cache_strategy,
             enable_prefix_caching=pipeline_config.enable_prefix_caching,
+            n_devices=len(pipeline_config.devices),
         )
 
     @classmethod
@@ -223,6 +225,22 @@ class Llama3Model(PipelineModel):
                 next_tokens, prev_model_inputs
             )
 
+    @classmethod
+    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+        try:
+            return upper_bounded_default(
+                upper_bound=pipeline_config.huggingface_config.max_position_embeddings,
+                default=pipeline_config.max_length,
+            )
+        except ValueError as e:
+            msg = (
+                "Unable to infer max_length for Llama3, the provided "
+                f"max_length ({pipeline_config.max_length}) exceeds the "
+                f"model's max_position_embeddings "
+                f"({pipeline_config.huggingface_config.max_position_embeddings})."
+            )
+            raise ValueError(msg) from e
+
     def load_kv_manager(
         self,
         session: InferenceSession,
@@ -231,7 +249,7 @@ class Llama3Model(PipelineModel):
         return load_kv_manager(
             params=self.get_kv_params(self.pipeline_config),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
             devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
@@ -250,7 +268,7 @@ class Llama3Model(PipelineModel):
         return estimate_kv_cache_size(
             params=cls.get_kv_params(pipeline_config),
             max_cache_batch_size=pipeline_config.max_cache_batch_size,
-            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
             num_layers=pipeline_config.huggingface_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
             devices=devices,
@@ -351,10 +369,13 @@ class Llama3Model(PipelineModel):
                 ],
             ) as graph:
                 model = distributed_transformer_opaque(
-                    graph,
-                    self.pipeline_config,
-                    weights,
-                    self.get_kv_params(self.pipeline_config),
+                    graph=graph,
+                    pipeline_config=self.pipeline_config,
+                    weights=weights,
+                    max_seq_len=self.calculate_max_seq_len(
+                        self.pipeline_config
+                    ),
+                    kv_params=self.get_kv_params(self.pipeline_config),
                 )
                 tokens, input_row_offsets, *kv_cache = graph.inputs
                 kv_caches_per_dev = self._unflatten_kv_inputs(kv_cache)
@@ -378,10 +399,13 @@ class Llama3Model(PipelineModel):
                 ],
             ) as graph:
                 model = transformer(
-                    graph,
-                    self.pipeline_config,
-                    weights,
-                    self.get_kv_params(self.pipeline_config),
+                    graph=graph,
+                    pipeline_config=self.pipeline_config,
+                    weights=weights,
+                    max_seq_len=self.calculate_max_seq_len(
+                        self.pipeline_config
+                    ),
+                    kv_params=self.get_kv_params(self.pipeline_config),
                 )
                 tokens, input_row_offsets, *kv_cache = graph.inputs
                 outputs = model(
@@ -417,10 +441,11 @@ class Llama3Model(PipelineModel):
             ],
         ) as graph:
             model = transformer(
-                graph,
-                self.pipeline_config,
-                weights,
-                self.get_kv_params(self.pipeline_config),
+                graph=graph,
+                pipeline_config=self.pipeline_config,
+                weights=weights,
+                max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
+                kv_params=self.get_kv_params(self.pipeline_config),
             )
             tokens, attention_mask, k_cache, v_cache, start_pos, _ = (
                 graph.inputs

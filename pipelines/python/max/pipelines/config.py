@@ -441,7 +441,7 @@ class PipelineConfig:
     save_to_serialized_model_path: Optional[str] = None
     """If specified, tries to save a serialized model to this path."""
 
-    max_length: int = 512
+    max_length: Optional[int] = None
     """Maximum sequence length of the model."""
 
     max_new_tokens: int = -1
@@ -536,6 +536,11 @@ class PipelineConfig:
             )
             raise ValueError(msg)
 
+        # Validate if a provided max_length is non-negative.
+        if self.max_length is not None and self.max_length < 0:
+            msg = "max_length must be non-negative."
+            raise ValueError(msg)
+
         # Validate that if weight_paths are passed as strings, they are converted to Path.
         if isinstance(self.weight_path, tuple):
             self.weight_path = list(self.weight_path)
@@ -626,26 +631,9 @@ class PipelineConfig:
                 self.huggingface_repo_id,
                 trust_remote_code=self.trust_remote_code,
             )
-            # Update config for defaults.
-            # Not all Huggingface Configs have max_seq_len,
-            # if its provided, we update if needed,
-            # if its not provided, we set it based on the max_length.
-            assert self._huggingface_config is not None
-            if hasattr(self.huggingface_config, "max_seq_len"):
-                if self.max_length < self._huggingface_config.max_seq_len:
-                    self._huggingface_config.max_seq_len = self.max_length
-            elif hasattr(self.huggingface_config, "max_position_embeddings"):
-                if (
-                    self.max_length
-                    < self._huggingface_config.max_position_embeddings
-                ):
-                    self._huggingface_config.max_seq_len = self.max_length
-                else:
-                    self._huggingface_config.max_seq_len = (
-                        self._huggingface_config.max_position_embeddings
-                    )
-            else:
-                self._huggingface_config.max_seq_len = self.max_length
+            assert (
+                self._huggingface_config is not None
+            ), "Failed to load HuggingFace config"
 
         return self._huggingface_config
 
@@ -802,7 +790,7 @@ class PipelineConfig:
             "quantization_encoding": "Define the weight encoding type for quantization. This can help optimize performance and memory usage during inference. ie. q4_k, bfloat16 etc.",
             "serialized_model_path": "If specified, this flag attempts to load a serialized MEF model from the given path. This is useful for reusing previously saved models.",
             "save_to_serialized_model_path": "If specified, this flag attempts to save the current model state to a serialized format at the given path for later use.",
-            "max_length": "Set the maximum sequence length for input data processed by the model. The default is 512 tokens. This can be raised up until the maximum of the model provided. As this value increases memory consumed by the engine increases accordingly.",
+            "max_length": "Set the maximum sequence length for input data processed by the model. This must be less than the value specified in the HuggingFace configuration file. The default is derived from the HuggingFace configuration value. Larger values may consume more memory.",
             "max_new_tokens": "Specify the maximum number of new tokens to generate during a single inference pass of the model. Default is -1, which means the model will generate until the maximum sequence length is hit, or and eos token is generated.",
             "max_cache_batch_size": "Define the maximum cache size reserved for a single batch. This value defaults to 1. Increase this value based on server capacity when deploying in production.",
             "max_ce_batch_size": "Set the maximum cache size reserved for a single context encoding batch. The effective limit will be the lesser of this value and max-cache-batch-size. Default is 32.",

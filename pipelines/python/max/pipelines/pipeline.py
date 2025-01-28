@@ -42,6 +42,30 @@ ARCH_SAFE_VRAM_USAGE_LIMIT = {
 }
 
 
+def upper_bounded_default(upper_bound: int, default: int | None) -> int:
+    """
+    Given an upper bound and an optional default value, returns a final value
+    that cannot exceed the upper bound.
+
+    Args:
+        default: The default value to use, or None to use the upper bound.
+        upper_bound: The upper bound to use.
+
+    Raises:
+        ValueError: If the provided default value exceeds the upper bound.
+
+    Returns:
+        The final value.
+    """
+    if default is None:
+        return upper_bound
+    elif default > upper_bound:
+        raise ValueError(
+            f"default value provided ({default}) exceeds the upper bound ({upper_bound})"
+        )
+    return default
+
+
 class ModelInputs:
     """
     Base class for model inputs.
@@ -95,6 +119,35 @@ class PipelineModel(ABC):
 
     @classmethod
     @abstractmethod
+    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+        """Calculate the optimal max sequence length for the model.
+        Models are expected to implement this method.
+
+        Example:
+            >>> class MistralModel(PipelineModel):
+            ...     @classmethod
+            ...     def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+            ...         try:
+            ...             return upper_bounded_default(
+            ...                 upper_bound=pipeline_config.huggingface_config.max_seq_len,
+            ...                 default=pipeline_config.max_length,
+            ...             )
+            ...         except ValueError as e:
+            ...             msg = (
+            ...                 "Unable to infer max_length for Mistral, the provided "
+            ...                 f"max_length ({pipeline_config.max_length}) exceeds the "
+            ...                 f"model's max_seq_len "
+            ...                 f"({pipeline_config.huggingface_config.max_seq_len})."
+            ...             )
+            ...             raise ValueError(msg) from e
+            ...
+        """
+        raise NotImplementedError(
+            "PipelineModel must implement calculate_max_seq_len"
+        )
+
+    @classmethod
+    @abstractmethod
     def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
         """Returns the KV cache params for the pipeline model."""
         ...
@@ -129,11 +182,11 @@ class PipelineModel(ABC):
         n_layers = cls.get_num_layers(pipeline_config)
         kv_params = cls.get_kv_params(pipeline_config)
         return infer_optimal_batch_size(
-            kv_params,
-            pipeline_config.max_length,
-            n_layers,
-            available_cache_memory,
-            pipeline_config.devices,
+            params=kv_params,
+            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
+            num_layers=n_layers,
+            available_cache_memory=available_cache_memory,
+            devices=pipeline_config.devices,
         )
 
     @classmethod
@@ -315,13 +368,16 @@ class TextGenerationPipeline(TokenGenerator[T]):
         num_steps: int,
         context: T,
     ) -> int:
+        max_seq_len = self._pipeline_model.calculate_max_seq_len(
+            self._pipeline_config
+        )
         # this is effectively: max_seq_len - (num_tokens_in_kv_cache + num_new_tokens) - num_new_tokens
-        num_available_steps = self._pipeline_config.max_length - (
+        num_available_steps = max_seq_len - (
             context.current_length - context.seq_len
         )
         if num_available_steps <= 0:
             raise ValueError(
-                f"Request {context.cache_seq_id} length ({context.current_length}) is larger than or equal to the configured max_length ({self._pipeline_config.max_length})"
+                f"Request {context.cache_seq_id} length ({context.current_length}) is larger than or equal to the configured max_length ({max_seq_len})"
             )
 
         return (
@@ -516,9 +572,16 @@ class TextGenerationPipeline(TokenGenerator[T]):
                     new_token=next_token,
                 )
 
+                max_length = upper_bounded_default(
+                    upper_bound=self._pipeline_model.calculate_max_seq_len(
+                        self._pipeline_config
+                    ),
+                    default=context.max_length,
+                )
+
                 if (
                     next_token in self._eos_token_id
-                    or (context.current_length + step - 1) >= context.max_length
+                    or (context.current_length + step - 1) >= max_length
                 ):
                     step += 1
                     break

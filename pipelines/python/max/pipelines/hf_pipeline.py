@@ -22,6 +22,8 @@ from .interfaces import TokenGenerator
 from .kv_cache import ContinuousHFStaticCache
 from .response import TextResponse
 
+DEFAULT_MAX_SEQ_LEN = 512
+
 
 class HFTextGenerationPipeline(TokenGenerator[TextContext]):
     """HuggingFace text token generator pipeline."""
@@ -83,7 +85,9 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
         self._cache = ContinuousHFStaticCache(
             config=self._model.config,
             max_batch_size=max_cache_batch_size,
-            max_seq_len=pipeline_config.max_length,
+            max_seq_len=DEFAULT_MAX_SEQ_LEN
+            if pipeline_config.max_length is None
+            else pipeline_config.max_length,
             dtype=self._dtype,
             device=self._torch_device,
         )
@@ -177,9 +181,14 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
                     self._cache.tokens[context.cache_seq_id], next_tokens
                 )
 
+                max_length = (
+                    DEFAULT_MAX_SEQ_LEN
+                    if context.max_length is None
+                    else context.max_length
+                )
                 if (
                     next_token_id in self._eos_token_id
-                    or (context.current_length + step) >= context.max_length
+                    or (context.current_length + step) >= max_length
                 ):
                     is_done[request_id] = True
                 else:

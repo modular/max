@@ -156,6 +156,7 @@ def _transformer(
     graph: Graph,
     params: PipelineConfig,
     weights: SafetensorWeights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
 ):
     with graph:
@@ -164,7 +165,7 @@ def _transformer(
             * params.huggingface_config.text_config.head_dim,
             n_heads=params.huggingface_config.text_config.num_attention_heads,
             theta=params.huggingface_config.text_config.rope_theta,
-            max_seq_len=params.max_length,
+            max_seq_len=max_seq_len,
             rope_scaling=None,
             interleaved=False,
         )

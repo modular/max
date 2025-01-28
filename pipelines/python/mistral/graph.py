@@ -152,6 +152,7 @@ def _transformer(
     graph: Graph,
     params: PipelineConfig,
     weights: SafetensorWeights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
 ):
     with graph:
@@ -160,7 +161,7 @@ def _transformer(
             * params.huggingface_config.head_dim,
             n_heads=params.huggingface_config.num_attention_heads,
             theta=params.huggingface_config.rope_theta,
-            max_seq_len=params.max_length,
+            max_seq_len=max_seq_len,
             rope_scaling=None,
             interleaved=False,
         )
@@ -229,6 +230,7 @@ def _transformer(
 def _build_graph(
     pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
     kv_manager: KVCacheManager,
 ) -> Graph:
@@ -247,7 +249,13 @@ def _build_graph(
             *kv_cache_args,
         ],
     ) as graph:
-        model = _transformer(graph, pipeline_config, weights, kv_params)
+        model = _transformer(
+            graph=graph,
+            params=pipeline_config,
+            weights=weights,
+            max_seq_len=max_seq_len,
+            kv_params=kv_params,
+        )
         tokens, input_row_offsets, *kv_cache = graph.inputs
         outputs = model(tokens, kv_cache, input_row_offsets=input_row_offsets)
         graph.output(*outputs)

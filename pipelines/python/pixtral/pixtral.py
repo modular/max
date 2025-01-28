@@ -27,6 +27,7 @@ from max.pipelines import (
     PipelineConfig,
     PipelineModel,
     TextAndVisionContext,
+    upper_bounded_default,
 )
 from max.pipelines.kv_cache import (
     KVCacheManager,
@@ -214,6 +215,22 @@ class PixtralModel(PipelineModel):
             enable_prefix_caching=pipeline_config.enable_prefix_caching,
         )
 
+    @classmethod
+    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+        try:
+            return upper_bounded_default(
+                upper_bound=pipeline_config.huggingface_config.text_config.max_position_embeddings,
+                default=pipeline_config.max_length,
+            )
+        except ValueError as e:
+            msg = (
+                "Unable to infer max_length for Pixtral, the provided "
+                f"max_length ({pipeline_config.max_length}) exceeds the "
+                f"model's max_position_embeddings "
+                f"({pipeline_config.huggingface_config.text_config.max_position_embeddings})."
+            )
+            raise ValueError(msg) from e
+
     def load_kv_manager(
         self,
         session: InferenceSession,
@@ -222,7 +239,7 @@ class PixtralModel(PipelineModel):
         return load_kv_manager(
             params=self.get_kv_params(self.pipeline_config),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             num_layers=self.get_num_layers(self.pipeline_config),
             devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
@@ -241,7 +258,7 @@ class PixtralModel(PipelineModel):
         return estimate_kv_cache_size(
             params=cls.get_kv_params(pipeline_config),
             max_cache_batch_size=pipeline_config.max_cache_batch_size,
-            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
             num_layers=cls.get_num_layers(pipeline_config),
             available_cache_memory=available_cache_memory,
             devices=devices,
@@ -319,17 +336,18 @@ class PixtralModel(PipelineModel):
             export_path = self.pipeline_config.save_to_serialized_model_path
             logging.info("Building vision model...")
             vision_graph = _build_vision_graph(
-                self.pipeline_config,
-                self._weights,
+                pipeline_config=self.pipeline_config,
+                weights=self._weights,
             )
             vision_model = compile_model(vision_graph, "vision", export_path)
 
             logging.info("Building text model...")
             text_graph = _build_text_graph(
-                self.pipeline_config,
-                self._weights,
-                self.get_kv_params(self.pipeline_config),
-                self.kv_manager,
+                pipeline_config=self.pipeline_config,
+                weights=self._weights,
+                max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
+                kv_params=self.get_kv_params(self.pipeline_config),
+                kv_manager=self.kv_manager,
             )
             text_model = compile_model(text_graph, "text", export_path)
 

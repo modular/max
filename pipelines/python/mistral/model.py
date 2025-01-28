@@ -27,6 +27,7 @@ from max.pipelines import (
     PipelineConfig,
     PipelineModel,
     TextContext,
+    upper_bounded_default,
 )
 from max.pipelines.kv_cache import (
     KVCacheManager,
@@ -137,6 +138,22 @@ class MistralModel(PipelineModel):
     def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
         return pipeline_config.huggingface_config.num_hidden_layers
 
+    @classmethod
+    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+        try:
+            return upper_bounded_default(
+                upper_bound=pipeline_config.huggingface_config.max_seq_len,
+                default=pipeline_config.max_length,
+            )
+        except ValueError as e:
+            msg = (
+                "Unable to infer max_length for Mistral, the provided "
+                f"max_length ({pipeline_config.max_length}) exceeds the "
+                f"model's max_seq_len "
+                f"({pipeline_config.huggingface_config.max_seq_len})."
+            )
+            raise ValueError(msg) from e
+
     def load_kv_manager(
         self,
         session: InferenceSession,
@@ -148,7 +165,7 @@ class MistralModel(PipelineModel):
         return load_kv_manager(
             params=self.get_kv_params(self.pipeline_config),
             max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
             devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
@@ -168,7 +185,7 @@ class MistralModel(PipelineModel):
         return estimate_kv_cache_size(
             params=cls.get_kv_params(pipeline_config),
             max_cache_batch_size=pipeline_config.max_cache_batch_size,
-            max_seq_len=pipeline_config.huggingface_config.max_seq_len,
+            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
             num_layers=pipeline_config.huggingface_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
             devices=devices,
@@ -214,10 +231,11 @@ class MistralModel(PipelineModel):
         else:
             logging.info("Building model...")
             graph = _build_graph(
-                self.pipeline_config,
-                self._weights,
-                self.get_kv_params(self.pipeline_config),
-                self.kv_manager,
+                pipeline_config=self.pipeline_config,
+                weights=self._weights,
+                max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
+                kv_params=self.get_kv_params(self.pipeline_config),
+                kv_manager=self.kv_manager,
             )
             logging.info("Compiling...")
             before = time.perf_counter()

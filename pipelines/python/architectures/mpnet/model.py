@@ -31,6 +31,7 @@ from max.pipelines import (
     PipelineConfig,
     PipelineModel,
     TextContext,
+    upper_bounded_default,
 )
 from max.pipelines.kv_cache import KVCacheParams
 
@@ -82,6 +83,22 @@ class MPNetPipelineModel(PipelineModel):
     @classmethod
     def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
         return pipeline_config.huggingface_config.num_hidden_layers
+
+    @classmethod
+    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+        try:
+            return upper_bounded_default(
+                upper_bound=pipeline_config.huggingface_config.max_position_embeddings,
+                default=pipeline_config.max_length,
+            )
+        except ValueError as e:
+            msg = (
+                "Unable to infer max_length for MPNet, the provided "
+                f"max_length ({pipeline_config.max_length}) exceeds the "
+                f"model's max_position_embeddings "
+                f"({pipeline_config.huggingface_config.max_position_embeddings})."
+            )
+            raise ValueError(msg) from e
 
     def execute(
         self,

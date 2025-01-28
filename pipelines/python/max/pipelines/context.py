@@ -5,6 +5,8 @@
 # ===----------------------------------------------------------------------=== #
 """Standardized context object for Pipeline Inference."""
 
+from __future__ import annotations
+
 from typing import Any, Protocol, Sequence, Union, runtime_checkable
 
 import numpy as np
@@ -25,7 +27,7 @@ class InputContext(Protocol):
         ...
 
     @property
-    def max_length(self) -> int:
+    def max_length(self) -> int | None:
         """The maximum length of this sequence."""
         ...
 
@@ -76,7 +78,7 @@ class TextContext:
         self,
         cache_seq_id: int,
         prompt: Union[str, Sequence[int]],
-        max_length: int,
+        max_length: int | None,
         tokens: np.ndarray,
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
@@ -155,7 +157,7 @@ class TextAndVisionContext:
         self,
         cache_seq_id: int,
         prompt: Union[str, Sequence[int]],
-        max_length: int,
+        max_length: int | None,
         tokens: np.ndarray,
         pixel_values: Union[np.ndarray, list[np.ndarray]],
         extra_model_args: dict[str, Any],

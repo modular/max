@@ -33,6 +33,7 @@ from .pipeline import (
     ModelOutputs,
     PipelineModel,
     TextGenerationPipeline,
+    upper_bounded_default,
 )
 from .registry import PIPELINE_REGISTRY, SupportedArchitecture
 from .response import EmbeddingsResponse, LogProbabilities, TextResponse
@@ -80,4 +81,5 @@ __all__ = [
     "LogProbabilities",
     "EmbeddingsPipeline",
     "EmbeddingsResponse",
+    "upper_bounded_default",
 ]

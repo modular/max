@@ -16,8 +16,6 @@ from max.graph import Graph, TensorType
 from max.graph.weights import SafetensorWeights
 from max.pipelines import PipelineConfig
 from max.pipelines.kv_cache import KVCacheManager, KVCacheParams
-
-# from mistral.model.graph import _transformer
 from nn import Linear
 
 from ..llava.llava import (
@@ -91,10 +89,17 @@ def _llava_decoder(
     graph: Graph,
     pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
 ) -> LlavaConditionalGenerationTextOnly:
     # Weights of pixtral decoder have the same names and shapes as weights of mistral.
-    language_model = _transformer(graph, pipeline_config, weights, kv_params)
+    language_model = _transformer(
+        graph=graph,
+        params=pipeline_config,
+        weights=weights,
+        max_seq_len=max_seq_len,
+        kv_params=kv_params,
+    )
 
     return LlavaConditionalGenerationTextOnly(
         language_model=language_model,
@@ -107,15 +112,24 @@ def _llava(
     graph: Graph,
     pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
 ) -> LlavaConditionalGeneration:
     # TODO: Once we have mo.if, use this version of Llava rather than creating 2 graphs
     vision_encoder = _vision_encoder(graph, pipeline_config, weights)
     multi_modal_projector = _multi_modal_projector(
-        pipeline_config.dtype, pipeline_config, weights.multi_modal_projector
+        dtype=pipeline_config.dtype,
+        pipeline_config=pipeline_config,
+        weights=weights.multi_modal_projector,
     )
     # Weights of pixtral have the same names and shapes as weights of mistral.
-    language_model = _transformer(graph, pipeline_config, weights, kv_params)
+    language_model = _transformer(
+        graph=graph,
+        params=pipeline_config,
+        weights=weights,
+        max_seq_len=max_seq_len,
+        kv_params=kv_params,
+    )
 
     return LlavaConditionalGeneration(
         vision_encoder=vision_encoder,
@@ -132,6 +146,7 @@ def _llava(
 def _build_graph(
     pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
     kv_manager: KVCacheManager,
 ) -> Graph:
@@ -169,7 +184,13 @@ def _build_graph(
             *kv_cache_types,
         ],
     ) as graph:
-        model = _llava(graph, pipeline_config, weights, kv_params)
+        model = _llava(
+            graph=graph,
+            pipeline_config=pipeline_config,
+            weights=weights,
+            max_seq_len=max_seq_len,
+            kv_params=kv_params,
+        )
         (
             input_ids,
             pixel_values,
@@ -229,6 +250,7 @@ def _build_vision_graph(
 def _build_text_graph(
     pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
+    max_seq_len: int,
     kv_params: KVCacheParams,
     kv_manager: KVCacheManager,
 ) -> Graph:
@@ -266,7 +288,13 @@ def _build_text_graph(
             *kv_cache_types,
         ],
     ) as graph:
-        model = _llava_decoder(graph, pipeline_config, weights, kv_params)
+        model = _llava_decoder(
+            graph=graph,
+            pipeline_config=pipeline_config,
+            weights=weights,
+            max_seq_len=max_seq_len,
+            kv_params=kv_params,
+        )
         (
             input_ids,
             image_embeds,

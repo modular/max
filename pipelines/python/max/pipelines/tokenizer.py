@@ -5,6 +5,8 @@
 # ===----------------------------------------------------------------------=== #
 """Implementations of provided tokenizers."""
 
+from __future__ import annotations
+
 import asyncio
 import io
 import logging
@@ -110,12 +112,14 @@ class PreTrainedPipelineTokenizer(
 
 def max_tokens_to_generate(
     prompt_size: int,
-    max_length: int,
-    max_new_tokens: int = -1,
-) -> int:
+    max_length: int | None,
+    max_new_tokens: int | None = None,
+) -> int | None:
     """Returns the max number of new tokens to generate."""
+    if max_length is None:
+        return max_new_tokens
     _difference_between_max_and_prompt = max(max_length - prompt_size, 0)
-    if max_new_tokens < 0:
+    if max_new_tokens is None:
         return _difference_between_max_and_prompt
     return min(max_new_tokens, _difference_between_max_and_prompt)
 
@@ -195,14 +199,6 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         else:
             encoded_prompt = np.array(list(prompt))
 
-        if len(encoded_prompt) >= self.config.max_length:
-            msg = (
-                f"Prompt length of {len(encoded_prompt)} is greater than the"
-                " configured max model context length of"
-                f" {self.config.max_length}"
-            )
-            raise ValueError(msg)
-
         return encoded_prompt
 
     async def decode(
@@ -237,17 +233,25 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             raise ValueError(f"{request} does not provide messages or prompt.")
         encoded_prompt = await self.encode(prompt)
 
+        # TODO(zheng): We should probably just make max_new_tokens an optional
+        # instead of -1.
+        max_new_tokens = None
+        if request.max_new_tokens is not None:
+            max_new_tokens = request.max_new_tokens
+        elif self.config.max_new_tokens != -1:
+            max_new_tokens = self.config.max_new_tokens
+
         max_gen_tokens = max_tokens_to_generate(
             len(encoded_prompt),
             self.config.max_length,
-            request.max_new_tokens
-            if request.max_new_tokens is not None
-            else self.config.max_new_tokens,
+            max_new_tokens,
         )
         context = TextContext(
             prompt=prompt,
             cache_seq_id=request.index,
-            max_length=len(encoded_prompt) + max_gen_tokens,
+            max_length=len(encoded_prompt) + max_gen_tokens
+            if max_gen_tokens is not None
+            else None,
             tokens=np.array(encoded_prompt),
             log_probabilities=request.logprobs,
             log_probabilities_echo=request.echo,
@@ -347,14 +351,6 @@ class TextAndVisionTokenizer(
         else:
             encoded_prompt = np.array(list(prompt))
 
-        if len(encoded_prompt) >= self.config.max_length:
-            msg = (
-                f"Prompt length of {len(encoded_prompt)} is greater than the"
-                " configured max model context length of"
-                f" {self.config.max_length}"
-            )
-            raise ValueError(msg)
-
         return encoded_prompt
 
     async def decode(
@@ -399,12 +395,18 @@ class TextAndVisionTokenizer(
             raise ValueError(msg)
         encoded_prompt = np.array(inputs["input_ids"][0])
 
+        # TODO(zheng): We should probably just make max_new_tokens an optional
+        # instead of -1.
+        max_new_tokens = None
+        if request.max_new_tokens is not None:
+            max_new_tokens = request.max_new_tokens
+        elif self.config.max_new_tokens != -1:
+            max_new_tokens = self.config.max_new_tokens
+
         max_gen_tokens = max_tokens_to_generate(
             encoded_prompt.shape[0],
             self.config.max_length,
-            request.max_new_tokens
-            if request.max_new_tokens is not None
-            else self.config.max_new_tokens,
+            max_new_tokens,
         )
 
         extra_model_args = dict()
@@ -432,6 +434,8 @@ class TextAndVisionTokenizer(
             extra_model_args=extra_model_args,
             cache_seq_id=request.index,
             tokens=encoded_prompt,
-            max_length=encoded_prompt.shape[0] + max_gen_tokens,
+            max_length=encoded_prompt.shape[0] + max_gen_tokens
+            if max_gen_tokens is not None
+            else None,
         )
         return context

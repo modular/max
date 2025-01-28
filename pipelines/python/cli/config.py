@@ -194,11 +194,13 @@ def pipeline_config_options(func):
 
             # We check for --devices first. --use-gpu is kept for backwards compatibility.
             # If users pass in both, we only consider values from the --devices flag.
-            if kwargs["devices"] is not None:
-                if kwargs["devices"] == "gpu":
-                    gpu_devices_requested_set.add(0)
-                else:
-                    gpu_devices_requested_set.update(set(kwargs["devices"]))
+            if kwargs["devices"] == "gpu":
+                gpu_devices_requested_set.add(0)
+            elif (
+                isinstance(kwargs["devices"], list)
+                and len(kwargs["devices"]) > 0
+            ):
+                gpu_devices_requested_set.update(set(kwargs["devices"]))
             elif kwargs["use_gpu"] is not None:
                 gpu_devices_requested_set.update(set(kwargs["use_gpu"]))
 

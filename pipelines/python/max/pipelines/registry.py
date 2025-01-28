@@ -357,9 +357,7 @@ class PipelineRegistry:
             free_memory - model_weights_size
         ) * pipeline_config.device_memory_utilization
         if pipeline_config.max_length is None:
-            # TODO(AITLIB-11) TODO(zheng) retrieve this from the huggingface config.
-            # If it not available, hardcode a default value.
-            pipeline_config.max_length = self._infer_optimal_max_length(
+            pipeline_config.max_length = model_cls.calculate_max_seq_len(
                 pipeline_config
             )
             max_length_str = f"Auto-inferred max sequence length: {pipeline_config.max_length}"
@@ -416,7 +414,7 @@ class PipelineRegistry:
                         if pipeline_config.max_cache_batch_size
                         else " "
                     )
-                    msg += f". Try reducing your --max-cache-batch-size{max_batch_size_rec_str}or reducing the value passed to --max-seq-len."
+                    msg += f". Try reducing your --max-cache-batch-size{max_batch_size_rec_str}or reducing the value passed to --max-length."
 
                 raise RuntimeError(msg)
             elif total_size > vram_usage_limit_scale * free_memory:
@@ -435,13 +433,6 @@ class PipelineRegistry:
         return model_cls.infer_optimal_batch_size(
             pipeline_config,
             available_kv_cache_memory,
-        )
-
-    def _infer_optimal_max_length(self, pipeline_config: PipelineConfig) -> int:
-        # TODO(AITLIB-11) retrieve this from the huggingface config.
-        # If it not available, hardcode a default value.
-        raise NotImplementedError(
-            "_infer_optimal_max_length not implemented (yet)"
         )
 
     def _load_logging_message(
