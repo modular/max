@@ -207,9 +207,18 @@ class HuggingFaceRepo:
             raise ValueError(msg)
 
         if safetensor_paths:
-            weight_files[WeightsFormat.safetensors] = [
-                f.replace(f"{self.repo_id}/", "") for f in safetensor_paths
-            ]
+            if len(safetensor_paths) == 1:
+                # If there is only one weight allow any name.
+                weight_files[WeightsFormat.safetensors] = [
+                    safetensor_paths[0].replace(f"{self.repo_id}/", "")
+                ]
+            else:
+                # If there is more than one weight, ignore consolidated tensors.
+                weight_files[WeightsFormat.safetensors] = [
+                    f.replace(f"{self.repo_id}/", "")
+                    for f in safetensor_paths
+                    if "consolidated" not in f
+                ]
 
         if gguf_paths:
             weight_files[WeightsFormat.gguf] = [
