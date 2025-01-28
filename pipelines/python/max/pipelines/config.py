@@ -487,8 +487,8 @@ class PipelineConfig:
     """The target number of un-encoded tokens to include in each batch.
     If not set, this will be set to a best-guess optimal value based on model, hardware, and available memory."""
 
-    top_k: Optional[int] = None
-    """Limits the sampling to the K most probable tokens. If None, will default to greedy sampling."""
+    top_k: int = 1
+    """Limits the sampling to the K most probable tokens. This defaults to 1, which enables greedy sampling."""
 
     trust_remote_code: bool = False
     """Whether or not to allow for custom modelling files on Huggingface."""
@@ -801,7 +801,7 @@ class PipelineConfig:
             "kv_cache_page_size": "The number of tokens in a single page in the paged KVCache. Default is set to 512.",
             "enable_prefix_caching": "Whether to enable prefix caching for the paged attention KVCache. This defaults to false.",
             "device_memory_utilization": "The fraction of available device memory that the process should consume. This is used to inform the size of the KVCache workspace: kv_cache_workspace = (total_free_memory * device_memory_utilization) - model_weights_size. Default is set to 0.9.",
-            "top_k": "Limit sampling to the top K most probable tokens during generation. This can help control randomness and improve output quality. This defaults to 0, which defaults to greedy sampling.",
+            "top_k": "Limit sampling to the top K most probable tokens during generation. This can help control randomness and improve output quality. This defaults to 1, which defaults to greedy sampling.",
             "trust_remote_code": "Indicate whether to allow custom modelling files from Huggingface repositories. Set this to true with caution, as it may introduce security risks.",
             "force_download": "Specify whether to forcefully download a file even if it already exists in local cache. Set this to true if you want to ensure you have the latest version.",
             "enable_echo": "Whether the model should be built with echo capabilities. This defaults to false.",
