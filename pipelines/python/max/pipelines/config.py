@@ -58,6 +58,7 @@ class SupportedEncoding(str, Enum):
     q4_k = "q4_k"
     q4_0 = "q4_0"
     q6_k = "q6_k"
+    gptq = "gptq"
 
     def __repr__(self) -> str:
         return self.name
@@ -67,6 +68,7 @@ class SupportedEncoding(str, Enum):
 
     @classmethod
     def parse_from_file_name(cls, name: str):
+        # TODO(AITLIB-127): Robustify detection of quantization encoding
         name = name.lower()
         if "f32" in name or "float32" in name:
             return SupportedEncoding.float32
@@ -78,38 +80,42 @@ class SupportedEncoding(str, Enum):
             return SupportedEncoding.q4_0
         elif "q6_k" in name:
             return SupportedEncoding.q6_k
+        elif "gptq" in name:
+            return SupportedEncoding.gptq
         else:
             return None
 
     @property
     def quantization_encoding(self) -> Optional[QuantizationEncoding]:
-        if self in [SupportedEncoding.float32, SupportedEncoding.bfloat16]:
-            return None
-        elif self == SupportedEncoding.q4_k:
-            return QuantizationEncoding.Q4_K
-        elif self == SupportedEncoding.q4_0:
-            return QuantizationEncoding.Q4_0
-        elif self == SupportedEncoding.q6_k:
-            return QuantizationEncoding.Q6_K
-        else:
+        if self not in _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING:
             raise ValueError(
                 "SupportedEncoding does not have corresponding"
                 " QuantizationEncoding."
             )
+        return _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING[self]
 
     @property
     def dtype(self) -> DType:
         """The underlying model dtype associated with a quantization_encoding."""
-        if self == SupportedEncoding.bfloat16:
-            return DType.bfloat16
-        elif self in [
-            SupportedEncoding.q4_k,
-            SupportedEncoding.q4_0,
-            SupportedEncoding.q6_k,
-        ]:
-            return DType.uint8
+        return _SUPPORTED_ENCODING_TO_DTYPE.get(self, DType.float32)
 
-        return DType.float32
+
+_SUPPORTED_ENCODING_TO_DTYPE = {
+    SupportedEncoding.bfloat16: DType.bfloat16,
+    SupportedEncoding.q4_k: DType.uint8,
+    SupportedEncoding.q4_0: DType.uint8,
+    SupportedEncoding.q6_k: DType.uint8,
+    SupportedEncoding.gptq: DType.uint8,
+}
+
+_SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING = {
+    SupportedEncoding.float32: None,
+    SupportedEncoding.bfloat16: None,
+    SupportedEncoding.q4_k: QuantizationEncoding.Q4_K,
+    SupportedEncoding.q4_0: QuantizationEncoding.Q4_0,
+    SupportedEncoding.q6_k: QuantizationEncoding.Q6_K,
+    SupportedEncoding.gptq: QuantizationEncoding.GPTQ,
+}
 
 
 class WeightsFormat(str, Enum):
@@ -226,6 +232,7 @@ class HuggingFaceRepo:
 
     @cached_property
     def supported_encodings(self) -> list[SupportedEncoding]:
+        # TODO(AITLIB-128): Detection of supported encodings in weights can be cleaned up
         supported_encodings = set([])
 
         # Parse gguf file names.
@@ -276,6 +283,12 @@ class HuggingFaceRepo:
                             supported_encodings.add(SupportedEncoding.bfloat16)
                         elif "F32" in params:
                             supported_encodings.add(SupportedEncoding.float32)
+                if safetensors_config := self.info.config:
+                    if quant_config := safetensors_config.get(
+                        "quantization_config"
+                    ):
+                        if quant_config["quant_method"] == "gptq":
+                            supported_encodings.add(SupportedEncoding.gptq)
             else:
                 msg = f"Unsupported repo_type: {self.repo_type}"
                 raise ValueError(msg)
@@ -586,6 +599,11 @@ class PipelineConfig:
             weight_paths.append(path)
 
         self.weight_path = weight_paths
+
+        if self.quantization_encoding == SupportedEncoding.gptq:
+            self.quantization_encoding.quantization_encoding.config = (  # type: ignore[union-attr]
+                self.huggingface_config.quantization_config
+            )
 
         if self.max_num_steps > 1 and self.enable_constrained_decoding:
             msg = "max_num_steps > 1 not supported, when enable_constrained_decoding = True"
