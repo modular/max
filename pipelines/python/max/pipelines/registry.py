@@ -348,9 +348,10 @@ class PipelineRegistry:
             weights_str = f"\n\t    Weights:                {to_mib(model_weights_size)} MiB"
 
         total_size = model_weights_size
-        available_kv_cache_memory = (
-            free_memory - model_weights_size
-        ) * pipeline_config.device_memory_utilization
+        available_kv_cache_memory = int(
+            (free_memory - model_weights_size)
+            * pipeline_config.device_memory_utilization
+        )
         if pipeline_config.max_length is None:
             pipeline_config.max_length = model_cls.calculate_max_seq_len(
                 pipeline_config
