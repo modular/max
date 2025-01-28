@@ -142,15 +142,15 @@ class MistralModel(PipelineModel):
     def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
         try:
             return upper_bounded_default(
-                upper_bound=pipeline_config.huggingface_config.max_seq_len,
+                upper_bound=pipeline_config.huggingface_config.max_position_embeddings,
                 default=pipeline_config.max_length,
             )
         except ValueError as e:
             msg = (
                 "Unable to infer max_length for Mistral, the provided "
                 f"max_length ({pipeline_config.max_length}) exceeds the "
-                f"model's max_seq_len "
-                f"({pipeline_config.huggingface_config.max_seq_len})."
+                f"model's max_position_embeddings "
+                f"({pipeline_config.huggingface_config.max_position_embeddings})."
             )
             raise ValueError(msg) from e
 
@@ -210,10 +210,7 @@ class MistralModel(PipelineModel):
         self._weights = self.pipeline_config.load_weights()
 
         if not isinstance(self._weights, SafetensorWeights):
-            msg = (
-                "only safetensors weights are currently supported in Mistral"
-                " models."
-            )
+            msg = "only safetensors weights are currently supported in Mistral models."
             raise ValueError(msg)
 
         if serialized_path := self.pipeline_config.serialized_model_path:
