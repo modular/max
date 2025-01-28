@@ -582,9 +582,15 @@ class TextGenerationPipeline(TokenGenerator[T]):
                     default=context.max_length,
                 )
 
+                # The current length is incremented above, during context.update
+                # As such, if we are already at the max length, exiting here
+                # would cause us to miss updating the request.
+                # As such, we overrun here by 1, ensuring that the context object
+                # tracks special tokens like eos_token_id appropriately for benchmarking
+                # and other uses, but that they are not returned in the request.
                 if (
                     next_token in self._eos_token_id
-                    or (context.current_length + step - 1) >= max_length
+                    or context.current_length > max_length
                 ):
                     step += 1
                     break
