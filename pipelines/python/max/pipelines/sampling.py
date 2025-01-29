@@ -18,14 +18,20 @@ def token_sampler(top_k: int, in_dtype: DType, out_dtype: DType):
         logits, prev_tokens = (val.tensor for val in graph.inputs)
         logits = ops.cast(logits, out_dtype)
 
-        shape = Shape(logits.shape)
-        shape[-1] = Dim(1)
-        tokens = ops.custom(
-            "topk_fused_sampling",
-            [ops.constant(top_k, dtype=DType.int64), logits],
-            [TensorType(DType.int64, shape)],
-        )[0]
-        assert isinstance(tokens, TensorValue)
+        if top_k > 1:
+            shape = Shape(logits.shape)
+            shape[-1] = Dim(1)
+            tokens = ops.custom(
+                "topk_fused_sampling",
+                [ops.constant(top_k, dtype=DType.int64), logits],
+                [TensorType(DType.int64, shape)],
+            )[0]
+            assert isinstance(tokens, TensorValue)
+        else:
+            # When top_k == 1, argmax is equivalent to our topk_fused_sampling with k == 1
+            # However, switching to just using our topk_fused_sampling leads to a -37% perf
+            # drop in q4_k benchmarking for llama 3.
+            tokens = ops.argmax(logits)
 
         all_tokens = ops.concat([prev_tokens, tokens], -1)
         tokens = ops.squeeze(tokens, -1)
