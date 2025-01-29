@@ -27,6 +27,7 @@ from .interfaces import (
     TokenGeneratorRequestFunction,
     TokenGeneratorRequestMessage,
     TokenGeneratorRequestTool,
+    TokenGeneratorResponseFormat,
 )
 from .pipeline import (
     ModelInputs,
@@ -61,6 +62,7 @@ __all__ = [
     "TokenGeneratorRequest",
     "TokenGeneratorRequestMessage",
     "TokenGeneratorRequestTool",
+    "TokenGeneratorResponseFormat",
     "TokenGeneratorRequestFunction",
     "IdentityPipelineTokenizer",
     "InputContext",

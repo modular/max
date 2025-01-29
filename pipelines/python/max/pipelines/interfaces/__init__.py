@@ -14,6 +14,7 @@ from .text_generation import (
     TokenGeneratorRequestFunction,
     TokenGeneratorRequestMessage,
     TokenGeneratorRequestTool,
+    TokenGeneratorResponseFormat,
 )
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "TokenGeneratorRequestFunction",
     "TokenGeneratorRequestMessage",
     "TokenGeneratorRequestTool",
+    "TokenGeneratorResponseFormat",
 ]
