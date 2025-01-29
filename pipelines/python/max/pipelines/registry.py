@@ -394,7 +394,7 @@ class PipelineRegistry:
             f"\n\tEstimated memory consumption:"
             f"{weights_str}"
             f"\n\t    KVCache allocation:     {to_mib(actual_kv_cache_size)} MiB"
-            f"\n\t    Total estimated:        {to_mib(model_weights_size + actual_kv_cache_size)} MiB used{free_memory_str}"
+            f"\n\t    Total estimated:        {to_mib(total_size)} MiB used{free_memory_str}"
             f"\n\t{max_length_str}"
             f"\n\t{max_batch_size_str}\n"
         )
@@ -403,7 +403,7 @@ class PipelineRegistry:
                 msg = f"Estimated model and kv cache memory use exceeds available memory ({to_mib(total_size)} MiB{free_memory_str})"
 
                 if pipeline_config.cache_strategy == KVCacheStrategy.PAGED:
-                    msg += ". Try reducing --gpu-memory-consumption to a smaller value."
+                    msg += ". Try reducing --device-memory-utilization to a smaller value."
                 else:
                     max_batch_size_rec_str = (
                         f" to {pipeline_config.max_cache_batch_size} "
