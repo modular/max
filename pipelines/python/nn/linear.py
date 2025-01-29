@@ -28,23 +28,23 @@ from .layer import Layer
 class Linear(Layer):
     """A fully connected layer."""
 
-    weight: TensorValueLike
-    bias: TensorValueLike | None = None
+    weight: TensorValue
+    bias: TensorValue | None = None
 
     def __call__(self, x: TensorValue) -> TensorValue:
-        weight = TensorValue(self.weight)
+        weight = self.weight
         if (
             isinstance(self.weight, Weight)
             and self.weight.quantization_encoding is not None
         ):
             res = ops.qmatmul(self.weight.quantization_encoding, x, weight)
             if self.bias is not None:
-                res += TensorValue(self.bias)
+                res += self.bias
             return res
 
         res = x @ weight.T
         if self.bias is not None:
-            res += TensorValue(self.bias)
+            res += self.bias
         return res
 
 
