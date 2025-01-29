@@ -28,7 +28,7 @@ from max.pipelines.kv_cache import infer_optimal_batch_size
 from max.profiler import Tracer, traced
 
 from .config import PipelineConfig
-from .context import InputContext, TextContext
+from .context import InputContext
 from .interfaces import TokenGenerator
 from .kv_cache import KVCacheManager, KVCacheParams
 from .response import LogProbabilities, TextResponse
@@ -454,8 +454,6 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
         # Flatten our batch for consistent indexing.
         context_batch = list(batch.values())
-
-        assert isinstance(context_batch[0], TextContext)
 
         # # Get extra compute parameters for each input.
         batch_top_n = [context.log_probabilities for context in context_batch]
