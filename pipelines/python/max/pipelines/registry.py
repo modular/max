@@ -453,11 +453,15 @@ class PipelineRegistry:
             else ""
         )
 
+        devices_str = ", ".join(
+            f"{d.label}[{d.id}]" for d in pipeline_config.devices
+        )
         message = f"""
 
         Loading {tokenizer_type.__name__} and {pipeline_name}({pipeline_model}) {factory_str} for:
             engine:                 {pipeline_config.engine}
             architecture:           {pipeline_config.architecture}
+            devices:                {devices_str}
             huggingface_repo_id:    {pipeline_config.huggingface_repo_id}{weights_repo_str}
             quantization_encoding:  {pipeline_config.quantization_encoding}
             cache_strategy:         {pipeline_config.cache_strategy}
