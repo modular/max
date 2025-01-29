@@ -146,6 +146,9 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         self.delegate = AutoTokenizer.from_pretrained(
             config.huggingface_repo_id,
             trust_remote_code=config.trust_remote_code,
+            # The PipelineConfig.max_length attribute should always be set
+            # (not None) at this point.
+            model_max_length=config.max_length,
         )
 
         # configure Llama whitespace fix if needed
