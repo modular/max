@@ -8,26 +8,6 @@ from typing import Optional
 
 from max.dtype import DType
 
-VALID_KV_KERNELS = [
-    ("bf16", 1, 16),
-    ("f32", 1, 16),
-    ("bf16", 3, 64),  # SmolLM
-    ("f32", 3, 64),  # SmolLM
-    ("bf16", 8, 128),
-    ("f32", 8, 128),
-    ("bf16", 8, 32),
-    ("f32", 8, 32),
-    ("bf16", 8, 64),
-    ("f32", 8, 64),
-    ("bf16", 8, 512),
-    ("f32", 8, 512),
-    ("bf16", 32, 128),
-    ("f32", 32, 128),
-    ("bf16", 8, 80),
-    ("f32", 8, 80),
-    ("f32", 2, 2),
-]
-
 
 class KVCacheStrategy(str, Enum):
     MODEL_DEFAULT = "model_default"
@@ -71,21 +51,7 @@ class KVCacheParams:
         self.n_kv_heads_per_device = n_kv_heads // n_devices
         self.page_size = page_size
         self.enable_prefix_caching = enable_prefix_caching
-        # Validate inputs.
-        if (
-            cache_strategy == KVCacheStrategy.CONTINUOUS
-            and (
-                self.dtype_shorthand,
-                n_kv_heads,
-                head_dim,
-            )
-            not in VALID_KV_KERNELS
-        ):
-            raise ValueError(
-                "Unsupported KV Cache Configuration: got dtype:"
-                f" {self.dtype_shorthand}, n_kv_heads: {n_kv_heads}, head_dim:"
-                f" {head_dim}"
-            )
+
         if enable_prefix_caching and cache_strategy != KVCacheStrategy.PAGED:
             raise ValueError(
                 "Prefix caching is only supported for PAGED cache strategy"
