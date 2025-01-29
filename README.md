@@ -33,12 +33,12 @@ Then clone this repository:
 git clone https://github.com/modularml/max.git
 ```
 
-If you installed the nightly build, be sure you switch to the `nightly` branch,
-because the `main` branch is for stable releases and might not be compatible
-with nightly builds:
+If you installed the stable build (v24.6), be sure you switch to the `stable` branch,
+because the `main` branch is for nightly releases and might not be compatible
+with stable builds:
 
 ```bash
-git checkout nightly
+git checkout stable
 ```
 
 ## Running
