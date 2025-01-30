@@ -189,16 +189,17 @@ class PipelineModel(ABC):
         # this would help avoid these excessive calls to class methods.
         n_layers = cls.get_num_layers(pipeline_config)
         kv_params = cls.get_kv_params(pipeline_config)
-        return max(
-            1,
-            infer_optimal_batch_size(
-                params=kv_params,
-                max_seq_len=cls.calculate_max_seq_len(pipeline_config),
-                num_layers=n_layers,
-                available_cache_memory=available_cache_memory,
-                devices=pipeline_config.devices,
-            ),
+        inferred_batch_size = infer_optimal_batch_size(
+            params=kv_params,
+            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
+            num_layers=n_layers,
+            available_cache_memory=available_cache_memory,
+            devices=pipeline_config.devices,
         )
+
+        # clamp the floor of the inferred batch size to 1 and the ceiling to 4096
+        inferred_batch_size = max(1, min(inferred_batch_size, 4096))
+        return inferred_batch_size
 
     @classmethod
     def estimate_weights_size(cls, pipeline_config: PipelineConfig) -> int:

@@ -295,7 +295,10 @@ class PagedKVCacheManager(KVCacheManager):
             * params.dtype.size_in_bytes
         )
         num_tokens_in_cache = available_cache_memory // block_size_per_token
-        suggested_batch_size = int(num_tokens_in_cache // average_seq_length)
+
+        # clamp the floor of the paged cache to 32.
+        suggested_batch_size = num_tokens_in_cache // average_seq_length
+        suggested_batch_size = max(suggested_batch_size, 32)
         return suggested_batch_size
 
     @classmethod
