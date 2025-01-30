@@ -673,9 +673,9 @@ class PipelineConfig:
                 self.huggingface_repo_id,
                 trust_remote_code=self.trust_remote_code,
             )
-            assert (
-                self._huggingface_config is not None
-            ), "Failed to load HuggingFace config"
+            assert self._huggingface_config is not None, (
+                "Failed to load HuggingFace config"
+            )
 
         return self._huggingface_config
 

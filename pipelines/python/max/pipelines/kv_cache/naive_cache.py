@@ -38,9 +38,9 @@ class NaiveKVCacheManager(KVCacheManager):
         session: InferenceSession,
     ) -> None:
         assert len(devices) == 1, "Naive caching only supports a single device."
-        assert (
-            params.n_devices == 1
-        ), "Naive caching only supports a single device."
+        assert params.n_devices == 1, (
+            "Naive caching only supports a single device."
+        )
         if params.enable_prefix_caching:
             raise ValueError("Prefix caching is not supported for naive cache.")
         super().__init__(

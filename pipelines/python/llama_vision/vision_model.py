@@ -334,9 +334,9 @@ class VisionModel(Layer):
             attention_mask=attention_mask,
             output_hidden_states=True,
         )
-        assert (
-            all_intermediate_hidden_states is not None
-        ), "expect intermediate hidden states output"
+        assert all_intermediate_hidden_states is not None, (
+            "expect intermediate hidden states output"
+        )
 
         hidden_state = self.layernorm_post(hidden_state)
 

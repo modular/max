@@ -666,9 +666,9 @@ class LlamaVision(PipelineModel):
     def _llama3_vision_language_graph(self) -> Graph:
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
-        assert (
-            self.pipeline_config.max_cache_batch_size
-        ), "Expected max_cache_batch_size to be set"
+        assert self.pipeline_config.max_cache_batch_size, (
+            "Expected max_cache_batch_size to be set"
+        )
         self._input_row_offsets_prealloc = Tensor.from_numpy(
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32

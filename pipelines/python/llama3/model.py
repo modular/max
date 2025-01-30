@@ -280,9 +280,9 @@ class Llama3Model(PipelineModel):
     ) -> Model:
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
-        assert (
-            self.pipeline_config.max_cache_batch_size
-        ), "Expected max_cache_batch_size to be set"
+        assert self.pipeline_config.max_cache_batch_size, (
+            "Expected max_cache_batch_size to be set"
+        )
         self._input_row_offsets_prealloc = Tensor.from_numpy(
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
@@ -490,9 +490,9 @@ class Llama3Model(PipelineModel):
                     " model. Please ensure that this model is started with "
                     "`--enable-echo`."
                 )
-                assert (
-                    not self.pipeline_config.enable_echo
-                ), "Echo was enabled but logits were not returned."
+                assert not self.pipeline_config.enable_echo, (
+                    "Echo was enabled but logits were not returned."
+                )
                 return None
             logits = model_outputs.logits.to_numpy()
         next_token_logits = model_outputs.next_token_logits.to_numpy()

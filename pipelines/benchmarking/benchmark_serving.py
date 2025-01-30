@@ -154,9 +154,9 @@ async def async_request_openai_completions(
     pbar: Optional[tqdm] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
-    assert api_url.endswith(
-        ("completions", "profile")
-    ), "OpenAI Completions API URL must end with 'completions' or 'profile'."
+    assert api_url.endswith(("completions", "profile")), (
+        "OpenAI Completions API URL must end with 'completions' or 'profile'."
+    )
 
     async with aiohttp.ClientSession(timeout=AIOHTTP_TIMEOUT) as session:
         payload = {
@@ -237,9 +237,9 @@ async def async_request_openai_chat_completions(
     pbar: Optional[tqdm] = None,
 ) -> RequestFuncOutput:
     api_url = request_func_input.api_url
-    assert api_url.endswith(
-        "chat/completions"
-    ), "OpenAI Chat Completions API URL must end with 'chat/completions'."
+    assert api_url.endswith("chat/completions"), (
+        "OpenAI Chat Completions API URL must end with 'chat/completions'."
+    )
 
     async with aiohttp.ClientSession(timeout=AIOHTTP_TIMEOUT) as session:
         assert not request_func_input.use_beam_search
@@ -461,9 +461,9 @@ def sample_sonnet_requests(
     prefix_len: int,
     tokenizer: PreTrainedTokenizerBase,
 ) -> List[Tuple[str, str, int, int]]:
-    assert (
-        input_len > prefix_len
-    ), "'args.sonnet-input-len' must be greater than 'args.prefix-input-len'."
+    assert input_len > prefix_len, (
+        "'args.sonnet-input-len' must be greater than 'args.prefix-input-len'."
+    )
 
     # Load the dataset.
     with open(dataset_path) as f:
@@ -488,16 +488,16 @@ def sample_sonnet_requests(
     )
     base_prompt_offset = len(tokenizer(base_prompt_formatted).input_ids)
 
-    assert (
-        input_len > base_prompt_offset
-    ), f"Please set 'args.sonnet-input-len' higher than {base_prompt_offset}."
+    assert input_len > base_prompt_offset, (
+        f"Please set 'args.sonnet-input-len' higher than {base_prompt_offset}."
+    )
     num_input_lines = round((input_len - base_prompt_offset) / average_poem_len)
 
     # First approximately `prefix_len` number of tokens in the
     # prompt are fixed poem lines.
-    assert (
-        prefix_len > base_prompt_offset
-    ), f"Please set 'args.sonnet-prefix-len' higher than {base_prompt_offset}."
+    assert prefix_len > base_prompt_offset, (
+        f"Please set 'args.sonnet-prefix-len' higher than {base_prompt_offset}."
+    )
 
     num_prefix_lines = round(
         (prefix_len - base_prompt_offset) / average_poem_len
@@ -953,9 +953,9 @@ def main(args: argparse.Namespace):
                 for prompt, prompt_formatted, prompt_len, output_len in input_requests
             ]
         else:
-            assert (
-                tokenizer.chat_template or tokenizer.default_chat_template
-            ), "Tokenizer/model must have chat template for sonnet dataset."
+            assert tokenizer.chat_template or tokenizer.default_chat_template, (
+                "Tokenizer/model must have chat template for sonnet dataset."
+            )
             input_requests = sample_sonnet_requests(
                 dataset_path=args.dataset_path,
                 num_requests=args.num_prompts,

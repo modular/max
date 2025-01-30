@@ -52,9 +52,9 @@ def _starts_with(tokens: np.ndarray, prefix: np.ndarray) -> bool:
 
 
 def _token_to_key(tokens: np.ndarray, page_size: int) -> tuple[TokenId, ...]:
-    assert (
-        len(tokens) >= page_size
-    ), f"tokens must be at least page_size ({page_size}) long but is only {len(tokens)} tokens"
+    assert len(tokens) >= page_size, (
+        f"tokens must be at least page_size ({page_size}) long but is only {len(tokens)} tokens"
+    )
     return tuple(tokens[:page_size])
 
 

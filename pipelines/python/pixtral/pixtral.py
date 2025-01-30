@@ -115,9 +115,9 @@ class PixtralModel(PipelineModel):
                 dtype=self.pipeline_config.dtype,
             ).to(self.pipeline_config.devices[0])
 
-        assert (
-            kv_cache_inputs is not None
-        ), "Pixtral has KV cache inputs, but none were provided"
+        assert kv_cache_inputs is not None, (
+            "Pixtral has KV cache inputs, but none were provided"
+        )
         model_outputs = self.language_model.execute(
             model_inputs.input_ids,
             image_embeds,
@@ -273,9 +273,9 @@ class PixtralModel(PipelineModel):
 
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
-        assert (
-            self.pipeline_config.max_cache_batch_size
-        ), "Expected max_cache_batch_size to be set"
+        assert self.pipeline_config.max_cache_batch_size, (
+            "Expected max_cache_batch_size to be set"
+        )
         self._input_row_offsets_prealloc = Tensor.from_numpy(
             np.arange(
                 self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32

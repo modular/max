@@ -88,8 +88,8 @@ def main():
 
             if (i + 1) % 100 == 0:
                 print(
-                    f"Epoch [{epoch+1}/{num_epochs}], Step"
-                    f" [{i+1}/{total_steps}], Loss: {loss.item():.4f}"
+                    f"Epoch [{epoch + 1}/{num_epochs}], Step"
+                    f" [{i + 1}/{total_steps}], Loss: {loss.item():.4f}"
                 )
 
     model.eval()

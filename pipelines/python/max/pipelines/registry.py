@@ -392,9 +392,9 @@ class PipelineRegistry:
             )
             max_batch_size_str = f"Auto-inferred max batch size: {pipeline_config.max_cache_batch_size}"
         else:
-            assert (
-                pipeline_config.max_cache_batch_size is not None
-            ), "max_cache_batch_size must be set"
+            assert pipeline_config.max_cache_batch_size is not None, (
+                "max_cache_batch_size must be set"
+            )
             max_batch_size_str = f"Current max batch size: {pipeline_config.max_cache_batch_size}"
 
         actual_kv_cache_size = self._calculate_kv_cache_size(

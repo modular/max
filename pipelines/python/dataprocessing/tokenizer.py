@@ -117,8 +117,8 @@ def tokenizer_from_gguf(
     add_bos_token = True
     eos = eos_token
     add_eos_token = False
-    single = f"{(bos+':0 ') if add_bos_token else ''}$A:0{(' '+eos+':0') if add_eos_token else ''}"  # type: ignore
-    pair = f"{single}{(' '+bos+':1') if add_bos_token else ''} $B:1{(' '+eos+':1') if add_eos_token else ''}"  # type: ignore
+    single = f"{(bos + ':0 ') if add_bos_token else ''}$A:0{(' ' + eos + ':0') if add_eos_token else ''}"  # type: ignore
+    pair = f"{single}{(' ' + bos + ':1') if add_bos_token else ''} $B:1{(' ' + eos + ':1') if add_eos_token else ''}"  # type: ignore
     special_tokens = [(bos_token, bos_token_id)]
     tokenizer.post_processor = processors.TemplateProcessing(  # type: ignore
         single=single, pair=pair, special_tokens=special_tokens
