@@ -12,7 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 """Build a Llama3 model via Graph API from GGUF weights."""
 
-from typing import List, Optional, Union
+from typing import List, Optional, Union, cast
 
 from max.dtype import DType
 from max.graph import DeviceRef, Graph, TensorValue, TensorValueLike, ops
@@ -34,7 +34,9 @@ from nn import (
     DistributedTransformer,
     DistributedTransformerBlock,
     Embedding,
+    EmbeddingV2,
     Linear,
+    LinearV2,
     NaiveAttentionWithRope,
     NaiveTransformer,
     NaiveTransformerBlock,
@@ -389,25 +391,52 @@ def distributed_transformer_opaque(
             for i in range(pipeline_config.huggingface_config.num_hidden_layers)
         ]
 
-        embedding_layer = embedding(
-            pipeline_config,
-            pipeline_config.huggingface_config.vocab_size,
-            pipeline_config.huggingface_config.hidden_size,
-            weights.token_embd,
-        )
-
-        # Smaller model variants lack dedicated weights for a final linear
-        # layer, and share the embedding layer.
-        if weights.output.weight.exists():
-            output = linear(
-                pipeline_config.dtype,
-                pipeline_config.quantization_encoding.quantization_encoding,
+        # TODO(max.nn.Model): We still rely on the `Weights` mechanism for
+        # constructing the Python-side weights registry.
+        # So we have to "allocate" a spot in the weights registry for
+        # output/embedding weights here.
+        embedding_weight = weights.token_embd.weight.allocate(
+            pipeline_config.dtype,
+            [
                 pipeline_config.huggingface_config.vocab_size,
                 pipeline_config.huggingface_config.hidden_size,
-                weights.output,
-            )
-        else:
-            output = Linear(embedding_layer.weights)
+            ],
+        )
+        weights.output.weight.allocate(
+            pipeline_config.dtype,
+            [
+                pipeline_config.huggingface_config.vocab_size,
+                pipeline_config.huggingface_config.hidden_size,
+            ],
+        )
+
+        embedding_layer = EmbeddingV2(
+            vocab_size=pipeline_config.huggingface_config.vocab_size,
+            hidden_dim=pipeline_config.huggingface_config.hidden_size,
+            dtype=pipeline_config.dtype,
+            device=devices[0],
+            # Use the embedding weight's name, which mismatches between
+            # Safetensors and GGUF Llama 3.
+            name=embedding_weight.name,
+        )
+
+        output = LinearV2(
+            in_dim=pipeline_config.huggingface_config.hidden_size,
+            out_dim=pipeline_config.huggingface_config.vocab_size,
+            dtype=pipeline_config.dtype,
+            # Only compute output embedding on device 0 for now.
+            # TODO(MODELS-378): More optimal would be to:
+            # - Shard embedding table across devices.
+            # - Compute output on all devices for multistep.
+            device=devices[0],
+            # Smaller model variants lack dedicated weights for a final linear
+            # layer, and share the embedding layer.
+            name=(
+                weights.output.name
+                if weights.output.weight.exists()
+                else cast(embedding_layer.weights, Weights).name
+            ),
+        )
 
         if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
             kv_collection_cls = FetchContinuousBatchingKVCacheCollection

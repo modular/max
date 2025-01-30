@@ -27,7 +27,7 @@ from max.pipelines.kv_cache import (
 from ..attention.interfaces import DistributedAttentionImpl
 from ..embedding import Embedding
 from ..layer import Layer
-from ..linear import DistributedMLP, Linear
+from ..linear import DistributedMLP, LinearV2
 from ..norm import DistributedRMSNorm, LPLayerNorm, RMSNorm
 
 
@@ -72,7 +72,7 @@ class DistributedTransformer(Layer):
     n_heads: int
     layers: list[DistributedTransformerBlock]
     norm: RMSNorm | LPLayerNorm
-    output: Linear
+    output: LinearV2
     embedding: Embedding
     kv_params: KVCacheParams
     kv_collection_constructor: FetchContinuousBatchingKVCacheCollection

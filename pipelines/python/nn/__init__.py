@@ -24,9 +24,9 @@ from .attention import (
     NaiveAttentionWithRope,
 )
 from .conv import Conv1D, Conv2D
-from .embedding import Embedding
+from .embedding import Embedding, EmbeddingV2
 from .kernels import MHAMaskVariant
-from .linear import MLP, DistributedMLP, Linear
+from .linear import MLP, DistributedMLP, Linear, LinearV2
 from .norm import DistributedRMSNorm, LPLayerNorm, RMSNorm
 from .rotary_embedding import OptimizedRotaryEmbedding, RotaryEmbedding
 from .sequential import Sequential
@@ -55,7 +55,9 @@ __all__ = [
     "Conv1D",
     "Conv2D",
     "Embedding",
+    "EmbeddingV2",
     "Linear",
+    "LinearV2",
     "LPLayerNorm",
     "MHAMaskVariant",
     "MLP",
