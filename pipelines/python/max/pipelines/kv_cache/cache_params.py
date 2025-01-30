@@ -62,10 +62,10 @@ class KVCacheParams:
 
         if enable_prefix_caching and cache_strategy != KVCacheStrategy.PAGED:
             raise ValueError(
-                "Prefix caching is only supported for PAGED cache strategy"
+                "Prefix caching is only supported for paged cache strategy"
             )
         if page_size is None and cache_strategy == KVCacheStrategy.PAGED:
-            raise ValueError("Page size is required for PAGED cache strategy")
+            raise ValueError("Page size is required for paged cache strategy")
 
     @property
     def dtype_shorthand(self) -> str:
