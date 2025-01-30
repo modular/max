@@ -40,7 +40,7 @@ following:
 Clone the repository and navigate to the `benchmarks` directory.
 
 ```bash
-git clone -b nightly https://github.com/modularml/max.git
+git clone https://github.com/modularml/max.git
 cd pipelines/benchmarking
 ```
 
