@@ -52,6 +52,7 @@ __all__ = [
     "DistributedTransformer",
     "DistributedTransformerBlock",
     "NaiveAttentionWithRope",
+    "Conv1D",
     "Conv2D",
     "Embedding",
     "Linear",
