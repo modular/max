@@ -626,6 +626,11 @@ class PipelineConfig:
             msg = "max_num_steps > 1 not supported, when enable_constrained_decoding = True"
             raise ValueError(msg)
 
+        if self.enable_constrained_decoding:
+            if self.device_specs[0] == DeviceSpec.cpu():
+                msg = "enable_constrained_decoding is not currently supported on CPU."
+                raise ValueError(msg)
+
     def __getstate__(self) -> dict[str, Any]:
         """Override `__getstate__` to exclude the HuggingFace config."""
         state = self.__dict__.copy()

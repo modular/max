@@ -68,6 +68,7 @@ __all__ = [
     "TokenGeneratorContext",
     "TokenGeneratorRequest",
     "TokenGeneratorRequestMessage",
+    "TokenGeneratorResponseFormat",
     "TokenGeneratorRequestTool",
     "TokenGeneratorResponseFormat",
     "TokenGeneratorRequestFunction",

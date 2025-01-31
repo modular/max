@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, Sequence, Union, runtime_checkable
+from typing import Any, Optional, Protocol, Sequence, Union, runtime_checkable
 
 import numpy as np
 
@@ -78,6 +78,11 @@ class InputContext(Protocol):
         """Trims the current prompt by the given number of tokens."""
         ...
 
+    @property
+    def matcher(self) -> Optional["xgr.GrammarMatcher"]:  # type: ignore
+        """An optional xgr Grammar Matcher provided when using constrained_decoding."""
+        ...
+
 
 class TextContext:
     """A base class for model context, specifically for Text model variants."""
@@ -90,6 +95,7 @@ class TextContext:
         tokens: np.ndarray,
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
+        matcher: Optional["xgr.GrammarMatcher"] = None,  # type: ignore
     ) -> None:
         self.cache_seq_id = cache_seq_id
         self.prompt = prompt
@@ -115,6 +121,8 @@ class TextContext:
 
         self.log_probabilities = log_probabilities
         self.log_probabilities_echo = log_probabilities_echo
+
+        self.matcher = matcher
 
     @property
     def seq_len(self) -> int:
@@ -171,6 +179,7 @@ class TextAndVisionContext:
         extra_model_args: dict[str, Any],
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
+        matcher: Optional["xgr.GrammarMatcher"] = None,  # type: ignore
     ) -> None:
         self.cache_seq_id = cache_seq_id
         self.prompt = prompt
@@ -199,6 +208,8 @@ class TextAndVisionContext:
 
         self.log_probabilities = log_probabilities
         self.log_probabilities_echo = log_probabilities_echo
+
+        self.matcher = matcher
 
     @property
     def next_tokens(self) -> np.ndarray:

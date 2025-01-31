@@ -10,13 +10,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
-
+# mypy: disable-error-code="import-not-found"
 """Implementations of provided tokenizers."""
 
 from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 from typing import Optional, Sequence, Union, cast
 
@@ -24,6 +25,7 @@ import numpy as np
 import torch
 from PIL import Image
 from transformers import (
+    AutoConfig,
     AutoProcessor,
     AutoTokenizer,
     CodeLlamaTokenizer,
@@ -168,6 +170,18 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             self._llama_whitespace_fix_dummy_token_len,
         ) = self._llama_whitespace_fix_dummy_token
 
+        # Load xgrammar GrammarCompiler.
+        if self.config.enable_constrained_decoding:
+            import xgrammar as xgr
+
+            hf_config = AutoConfig.from_pretrained(config.huggingface_repo_id)
+            tokenizer_info = xgr.TokenizerInfo.from_huggingface(
+                self.delegate, vocab_size=hf_config.vocab_size
+            )
+
+            # This defaults to compiling with 8 threads.
+            self._grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+
     def apply_chat_template(
         self,
         messages: list[TokenGeneratorRequestMessage],
@@ -235,13 +249,28 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         """Create a new TextContext object, leveraging necessary information like
         cache_seq_id and prompt from TokenGeneratorRequest."""
 
-        prompt: Union[str, Sequence[int]]
+        prompt: Union[str, list[int]]
         if request.prompt is not None:
-            prompt = request.prompt
+            if isinstance(request.prompt, str):
+                prompt = str(request.prompt)
+            else:
+                prompt = [int(t) for t in request.prompt]
         elif request.messages is not None:
             prompt = self.apply_chat_template(request.messages, request.tools)
         else:
             raise ValueError(f"{request} does not provide messages or prompt.")
+
+        # Create a xgr.GrammarMatcher, if a json_schema is provided.
+        if self.config.enable_constrained_decoding and request.response_format:
+            import xgrammar as xgr
+
+            compiled_grammar = self._grammar_compiler.compile_json_schema(
+                json.dumps(request.response_format["json_schema"])
+            )
+            matcher = xgr.GrammarMatcher(compiled_grammar)
+        else:
+            matcher = None
+
         encoded_prompt = await self.encode(prompt)
 
         # TODO(zheng): We should probably just make max_new_tokens an optional
@@ -257,6 +286,7 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             self.config.max_length,
             max_new_tokens,
         )
+
         context = TextContext(
             prompt=prompt,
             cache_seq_id=request.index,
@@ -266,6 +296,7 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             tokens=np.array(encoded_prompt),
             log_probabilities=request.logprobs,
             log_probabilities_echo=request.echo,
+            matcher=matcher,
         )
         return context
 
