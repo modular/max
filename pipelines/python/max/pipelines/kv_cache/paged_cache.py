@@ -193,7 +193,10 @@ class PagedKVCacheManager(KVCacheManager):
             * page_size
             * params.dtype.size_in_bytes
         )
-        self.total_num_blocks = int((cache_memory) // single_page_size_bytes)
+        cache_memory_per_device = cache_memory // len(devices)
+        self.total_num_blocks = int(
+            cache_memory_per_device // single_page_size_bytes
+        )
 
         super().__init__(
             params=params,
