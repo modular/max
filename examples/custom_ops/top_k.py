@@ -23,6 +23,24 @@ from max.engine.api import InferenceSession
 from max.graph import Graph, TensorType, ops
 from numpy.typing import NDArray
 
+INPUT_TEXT = """
+The quick rabbit runs past the brown fox
+The quick rabbit jumps over the brown dog
+The quick dog chases past the lazy fox
+The quick dog runs through the tall trees
+The quick brown fox jumps over the lazy dog
+The brown dog sleeps under the shady tree
+The brown rabbit hops under the tall tree
+The brown fox runs through the forest trees
+The brown fox watches the sleeping rabbit
+The lazy fox watches over the sleeping dog
+The lazy dog watches the quick rabbit
+The shady tree shelters the brown rabbit
+The shady fox sleeps under the old tree
+The sleeping fox rests beside the shady tree
+The lazy rabbit rests beside the brown fox
+"""
+
 
 class NextWordFrequency:
     def __init__(self, text):
@@ -39,19 +57,43 @@ class NextWordFrequency:
             next_word = words[i + 1]
             self.word_frequencies[current_word][next_word] += 1
 
-    def next_word_probabilities(self, current_word) -> NDArray[np.float32]:
-        if current_word not in self.word_frequencies:
-            return np.empty(0, dtype=np.float32)
+    def next_word_probabilities(self, words) -> NDArray[np.float32]:
+        # List to store the probability distributions for each word
+        prob_distributions = []
 
-        frequencies = self.word_frequencies[current_word]
-        freq_list = np.array(
-            [value for value in frequencies.values()], dtype=np.float32
-        )
-        freq_list /= freq_list.sum()
-        return freq_list
+        # Find the maximum length of the frequency lists
+        max_len = 0
 
-    def get_key(self, word, idx):
-        return list(self.word_frequencies[word].keys())[idx]
+        for word in words:
+            if word not in self.word_frequencies:
+                # If any word is not found, return an empty array
+                return np.empty(0, dtype=np.float32)
+
+            frequencies = self.word_frequencies[word]
+            freq_list = np.array(
+                [value for value in frequencies.values()], dtype=np.float32
+            )
+            freq_list /= freq_list.sum()  # Normalize to get probabilities
+
+            # Update max_len if this word's frequency list is longer
+            if len(freq_list) > max_len:
+                max_len = len(freq_list)
+
+            prob_distributions.append(freq_list)
+
+        # Pad each probability distribution to the maximum length
+        padded_distributions = []
+        for dist in prob_distributions:
+            pad_width = max_len - len(dist)
+            padded_dist = np.pad(
+                dist, (0, pad_width), mode="constant", constant_values=0
+            )
+            padded_distributions.append(padded_dist)
+
+        # Stack the padded distributions into a single array
+        result_array = np.stack(padded_distributions, axis=0)
+
+        return result_array
 
     def __getitem__(self, idx):
         return self.word_frequencies[idx]
@@ -65,110 +107,74 @@ if __name__ == "__main__":
 
     path = Path(__file__).parent / "kernels.mojopkg"
 
-    input_text = """
-    The quick rabbit runs past the brown fox
-    The quick rabbit jumps over the brown dog
-    The quick dog chases past the lazy fox
-    The quick dog runs through the tall trees
-    The quick brown fox jumps over the lazy dog
-    The brown dog sleeps under the shady tree
-    The brown rabbit hops under the tall tree
-    The brown fox runs through the forest trees
-    The brown fox watches the sleeping rabbit
-    The lazy fox watches over the sleeping dog
-    The lazy dog watches the quick rabbit
-    The shady tree shelters the brown rabbit
-    The shady fox sleeps under the old tree
-    The sleeping fox rests beside the shady tree
-    The lazy rabbit rests beside the brown fox
-    """
-
-    # initial word to predict the next word for
-    first_word = "the"
-
     # Initialize the next word frequency for each unique word
-    frequencies = NextWordFrequency(input_text)
+    frequencies = NextWordFrequency(INPUT_TEXT)
+
+    word_predictions = ["the", "quick", "brown"]
 
     # Get probabilities of each next word after `first_word`
-    logit_values = frequencies.next_word_probabilities(first_word)
+    logit_values = frequencies.next_word_probabilities(word_predictions)
 
-    batch_size = 1
-    token_length = len(logit_values)
-    # The amount of top results to find and sort
-    k = 10
-    # Make sure we don't have a higher k than elements passed in
-    k = min(k, token_length)
-    dtype = DType.float32
+    batch_size = len(logit_values)
+    k = len(logit_values[0])
 
     # Configure our simple one-operation graph.
-    with Graph(
-        "sampler",
-        input_types=[
-            TensorType(dtype, shape=[batch_size, token_length]),
-        ],
-    ) as graph:
+    # fmt: off
+    with Graph("top_k_sampler", input_types=[TensorType(DType.float32, shape=[batch_size, k])]) as graph:
         # Take in the single input to the graph.
         x, *_ = graph.inputs
 
-        # The custom Mojo operation is referenced by its string name, and we
-        # need to provide inputs as a list as well as expected output types.
+        # The custom Mojo operation is referenced by its string name, we provide input/output types as lists.
         results = ops.custom(
-            # Can change this to use `mo.top_k` which is the MAX internal
-            # implementation. This one is using the implementation from
-            # `./examples/kernels/top_k_sampler.mojo` which is more concise for
-            # learning purposes.
             name="top_k_custom",
             values=[
-                x,
-                ops.constant(k, dtype=DType.int64),
-                ops.constant(1, dtype=DType.int64),  # axis
-                ops.constant(True, dtype=DType.bool),  # sorted
+                x,                                                       # input values
+                ops.constant(k, dtype=DType.int64),                      # k (amount of top results)
+                ops.constant(1, dtype=DType.int64),                      # axis
             ],
             out_types=[
-                TensorType(
-                    dtype=x.tensor.dtype, shape=x.tensor.shape
-                ),  # values
-                TensorType(dtype=DType.int64, shape=x.tensor.shape),  # indices
+                TensorType(dtype=x.tensor.dtype, shape=x.tensor.shape),  # output values
+                TensorType(dtype=DType.int64, shape=x.tensor.shape),     # output indices
             ],
         )
         graph.output(*results)
+    # fmt: on
 
     # Place the graph on a GPU, if available. Fall back to CPU if not.
     device = CPU() if accelerator_count() == 0 else Accelerator()
 
     # Set up an inference session for running the graph.
-    session = InferenceSession(
-        devices=[device],
-        custom_extensions=path,
-    )
+    session = InferenceSession(devices=[device], custom_extensions=path)
 
     # Compile the graph.
     model = session.load(graph)
 
     # Create a driver tensor from the next word probabilities, adding a rank
     # for the batch size of 1, and move it to the accelerator.
-    logits = Tensor.from_numpy(logit_values.reshape(1, -1)).to(device)
+    logits = Tensor.from_numpy(logit_values).to(device)
 
+    print(f"Sampling top_k for batch size: {batch_size}\n")
     # Perform the calculation on the target device.
     values, indices = model.execute(logits)
 
     # Copy values and indices back to the CPU to be read.
     assert isinstance(values, Tensor)
     values = values.to(CPU())
-    np_values = values.to_numpy()[0]
+    np_values = values.to_numpy()
 
     assert isinstance(indices, Tensor)
     indices = indices.to(CPU())
-    np_indices = indices.to_numpy()[0]
+    np_indices = indices.to_numpy()
 
-    num_values = min(len(np_indices), k)
+    for i in range(batch_size):
+        print(f"Predicted word after `{word_predictions[i]}`")
+        print("------------------------------")
+        print("| word         | confidence  |")
+        print("------------------------------")
+        keys = list(frequencies.word_frequencies[word_predictions[i]].keys())
 
-    print(f"Predicting word after `{first_word}`")
-    print("------------------------------")
-    print("| word         | confidence  |")
-    print("------------------------------")
-    for i in range(num_values):
-        print(
-            f"| {frequencies.get_key(first_word, np_indices[i]):<13}| {np_values[i]:<11.8} |"
-        )
-    print("------------------------------")
+        for j in range(len(np_indices[i])):
+            if j > len(keys) - 1:
+                break
+            print(f"| {keys[j]:<13}| {np_values[i][j]:<11.8} |")
+        print("------------------------------\n")
