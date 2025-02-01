@@ -183,8 +183,23 @@ class PagedKVCacheManager(KVCacheManager):
         cache_memory: int,
         page_size: int = 128,
     ):
+        """
+        Args:
+            params: The KVCacheParams for the given pipeline.
+            max_cache_batch_size: The maximum number of active
+                requests that the manager should support.
+            max_seq_len: The maximum sequence length we will generate.
+            num_layers: The number of layers in the model.
+            devices: The devices on which the manager will allocate memory.
+            session: The inference session to load ops from.
+            cache_memory: The total amount of memory available for caching.
+                This is aggregated across all devices.
+            page_size: The number of tokens that will be stored in a single page.
+        """
+        # The number of tokens in a single page.
         self.page_size = page_size
 
+        # The number of bytes that a single page will occupy.
         single_page_size_bytes = (
             2
             * num_layers
@@ -193,11 +208,16 @@ class PagedKVCacheManager(KVCacheManager):
             * page_size
             * params.dtype.size_in_bytes
         )
+
+        # Normalize cache_memory across all devices.
         cache_memory_per_device = cache_memory // len(devices)
-        self.total_num_blocks = int(
+
+        # The total number of pages we'll have per-device.
+        self.total_num_pages = int(
             cache_memory_per_device // single_page_size_bytes
         )
 
+        # call our base class constructor
         super().__init__(
             params=params,
             max_cache_batch_size=max_cache_batch_size,
@@ -208,14 +228,17 @@ class PagedKVCacheManager(KVCacheManager):
             is_ragged=True,
         )
 
-        self.available_blocks = set(range(self.total_num_blocks))
+        # Initialize the set of available blocks.
+        self.available_blocks = set(range(self.total_num_pages))
+
+        # Initialize the blocks for each device.
         self.blocks: list[Tensor] = []
         for device in self.devices:
             self.blocks.append(
                 Tensor.zeros(
                     self._block_shape(
                         self.params,
-                        self.total_num_blocks,
+                        self.total_num_pages,
                         self.page_size,
                         self.num_layers,
                     ),
@@ -226,6 +249,7 @@ class PagedKVCacheManager(KVCacheManager):
 
         self.active_requests: Dict[int, _PagedCacheMetadata] = {}
 
+        # Initialize the radix trie if prefix caching is enabled.
         self.radix_trie: Optional[RadixTrie] = None
         if params.enable_prefix_caching:
             self.radix_trie = RadixTrie(page_size=self.page_size)
@@ -238,7 +262,7 @@ class PagedKVCacheManager(KVCacheManager):
         # trie leaves.
         evicted_blocks = self.radix_trie.evict_blocks(
             desired_num_evicted=int(
-                max(1, self.total_num_blocks * percentage_to_evict)
+                max(1, self.total_num_pages * percentage_to_evict)
             )
         )
 
@@ -308,7 +332,7 @@ class PagedKVCacheManager(KVCacheManager):
     def _block_shape(
         cls,
         params: KVCacheParams,
-        total_num_blocks: int,
+        total_num_pages: int,
         page_size: int,
         num_layers: int,
     ) -> list[int]:
@@ -319,7 +343,7 @@ class PagedKVCacheManager(KVCacheManager):
         return [
             num_layers,
             kv_dim,
-            total_num_blocks,
+            total_num_pages,
             page_size,
             params.n_kv_heads_per_device,
             params.head_dim,
@@ -483,7 +507,7 @@ class PagedKVCacheManager(KVCacheManager):
                     shape=[
                         self.num_layers,
                         2,
-                        self.total_num_blocks,
+                        self.total_num_pages,
                         self.page_size,
                         self.params.n_kv_heads_per_device,
                         self.params.head_dim,
