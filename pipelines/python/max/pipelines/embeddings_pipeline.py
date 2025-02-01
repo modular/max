@@ -22,13 +22,14 @@ from max.profiler import Tracer, traced
 
 from .config import PipelineConfig
 from .context import InputContext
+from .interfaces import EmbeddingsGenerator
 from .pipeline import PipelineModel
 from .response import EmbeddingsResponse
 
 T = TypeVar("T", bound=InputContext)
 
 
-class EmbeddingsPipeline:
+class EmbeddingsPipeline(EmbeddingsGenerator[T]):
     """Generalized token generator pipeline."""
 
     def __init__(

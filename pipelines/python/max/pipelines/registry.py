@@ -33,7 +33,12 @@ from .config import (
 )
 from .embeddings_pipeline import EmbeddingsPipeline
 from .hf_pipeline import HFTextGenerationPipeline
-from .interfaces import PipelineTask, PipelineTokenizer, TokenGenerator
+from .interfaces import (
+    EmbeddingsGenerator,
+    PipelineTask,
+    PipelineTokenizer,
+    TokenGenerator,
+)
 from .kv_cache import KVCacheStrategy
 from .pipeline import KVCacheMixin, PipelineModel, TextGenerationPipeline
 from .tokenizer import TextAndVisionTokenizer, TextTokenizer
@@ -847,7 +852,7 @@ class PipelineRegistry:
         task: PipelineTask = PipelineTask.TEXT_GENERATION,
     ) -> tuple[
         PipelineTokenizer,
-        Callable[[], TokenGenerator | EmbeddingsPipeline],
+        Callable[[], TokenGenerator | EmbeddingsGenerator],
     ]:
         tokenizer: PipelineTokenizer
         pipeline_factory: Callable[[], TokenGenerator]
@@ -937,7 +942,7 @@ class PipelineRegistry:
         self,
         pipeline_config: PipelineConfig,
         task: PipelineTask = PipelineTask.TEXT_GENERATION,
-    ) -> tuple[PipelineTokenizer, TokenGenerator | EmbeddingsPipeline]:
+    ) -> tuple[PipelineTokenizer, TokenGenerator | EmbeddingsGenerator]:
         tokenizer, pipeline_factory = self.retrieve_factory(
             pipeline_config, task
         )

@@ -13,6 +13,9 @@
 
 """Top level imports for pipeline interfaces."""
 
+from .embeddings_generation import (
+    EmbeddingsGenerator,
+)
 from .tasks import PipelineTask
 from .text_generation import (
     PipelineTokenizer,
@@ -35,4 +38,5 @@ __all__ = [
     "TokenGeneratorRequestMessage",
     "TokenGeneratorRequestTool",
     "TokenGeneratorResponseFormat",
+    "EmbeddingsGenerator",
 ]

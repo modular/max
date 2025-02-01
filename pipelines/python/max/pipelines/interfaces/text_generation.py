@@ -11,7 +11,7 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-"""Interfaces for different pipeline behaviors."""
+"""Interfaces for text generation pipeline behaviors."""
 
 from dataclasses import dataclass
 from typing import (

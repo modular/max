@@ -27,6 +27,7 @@ from .context import InputContext, TextAndVisionContext, TextContext
 from .embeddings_pipeline import EmbeddingsPipeline
 from .hf_utils import HuggingFaceFile
 from .interfaces import (
+    EmbeddingsGenerator,
     PipelineTask,
     PipelineTokenizer,
     TokenGenerator,
@@ -53,7 +54,7 @@ from .tokenizer import (
     TextTokenizer,
 )
 
-PipelinesFactory = _Callable[[], _Union[TokenGenerator, EmbeddingsPipeline]]
+PipelinesFactory = _Callable[[], _Union[TokenGenerator, EmbeddingsGenerator]]
 
 
 __all__ = [
@@ -88,6 +89,7 @@ __all__ = [
     "ModelOutputs",
     "TextResponse",
     "LogProbabilities",
+    "EmbeddingsGenerator",
     "EmbeddingsPipeline",
     "EmbeddingsResponse",
     "upper_bounded_default",
