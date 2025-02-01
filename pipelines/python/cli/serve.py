@@ -17,7 +17,7 @@ import logging
 from typing import Optional, Union
 
 import uvloop
-from max.pipelines import PIPELINE_REGISTRY, PipelineConfig
+from max.pipelines import PIPELINE_REGISTRY, PipelineConfig, PipelineTask
 from max.pipelines.kv_cache import KVCacheStrategy
 from max.serve.api_server import (
     ServingTokenGeneratorSettings,
@@ -53,6 +53,15 @@ def serve_pipeline(
             pipeline_config
         )
 
+    # TODO: This is a workaround to support embeddings generation until the
+    # changes to tie pipelines to tasks is complete. This will be removed.
+    pipeline_task = PipelineTask.TEXT_GENERATION
+    if (
+        pipeline_config.huggingface_repo_id
+        == "sentence-transformers/all-mpnet-base-v2"
+    ):
+        pipeline_task = PipelineTask.EMBEDDINGS_GENERATION
+
     if performance_fake == "none":
         logger.info(
             f"Starting server using {pipeline_config.huggingface_repo_id}"
@@ -60,6 +69,7 @@ def serve_pipeline(
         # Load tokenizer and pipeline from PIPELINE_REGISTRY.
         tokenizer, pipeline_factory = PIPELINE_REGISTRY.retrieve_factory(
             pipeline_config,
+            task=pipeline_task,
         )
     else:
         logger.info(
@@ -83,6 +93,7 @@ def serve_pipeline(
     # Load batch config.
     batch_config = batch_config_from_pipeline_config(
         pipeline_config=pipeline_config,
+        pipeline_task=pipeline_task,
         batch_timeout=batch_timeout,
     )
 
