@@ -16,36 +16,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
+import numpy as np
 from max.dtype import DType
 from max.graph import DeviceRef, TensorValue, TensorValueLike, Weight, ops
+from max.graph.quantization import QuantizationEncoding
+from max.graph.weights import Weights
 
 from .kernels import swish_glu
 from .layer import Layer
-
-
-@dataclass
-class Linear(Layer):
-    """A fully connected layer."""
-
-    weight: TensorValue
-    bias: TensorValue | None = None
-
-    def __call__(self, x: TensorValue) -> TensorValue:
-        weight = self.weight
-        if (
-            isinstance(self.weight, Weight)
-            and self.weight.quantization_encoding is not None
-        ):
-            res = ops.qmatmul(self.weight.quantization_encoding, x, weight)
-            if self.bias is not None:
-                res += self.bias
-            return res
-
-        res = x @ weight.T
-        if self.bias is not None:
-            res += self.bias
-        return res
 
 
 class LinearV2(Layer):
@@ -146,6 +126,202 @@ class LinearV2(Layer):
         res = x @ weight.T
         if self.bias is not None:
             res += TensorValue(self.bias).to(self.device)
+        return res
+
+
+@dataclass
+class Linear(Layer):
+    """A unified linear layer that delegates to either regular or quantized implementation."""
+
+    weight: TensorValueLike
+    bias: Optional[TensorValueLike] = None
+
+    def __call__(self, x: TensorValue) -> TensorValue:
+        weight = TensorValue(self.weight)
+        res = x @ weight.T
+        if self.bias is not None:
+            res += self.bias
+        return res
+
+    @classmethod
+    def create(
+        cls,
+        dtype: DType,
+        quantization_encoding: Optional[QuantizationEncoding],
+        in_features: int,
+        out_features: int,
+        weights: Weights,
+        bias: Optional[Weights] = None,
+    ) -> "Linear":
+        """Factory method to create a Linear layer with appropriate implementation."""
+        if not quantization_encoding:
+            weight = weights.weight.allocate(dtype, [in_features, out_features])
+            bias_weight = (
+                bias.weight.allocate(dtype, [out_features]) if bias else None
+            )
+            return Linear(weight=weight, bias=bias_weight)
+        else:
+            return QLinear._create(
+                dtype,
+                quantization_encoding,
+                in_features,
+                out_features,
+                weights,
+                bias,
+            )
+
+
+@dataclass
+class QLinear(Linear):
+    """A quantized fully connected layer."""
+
+    # Because Linear.bias is optional and Linear is a dataclass and we inherit from Linear, all our fields must be optional even if it doesn't make logical sense
+    quantization_encoding: QuantizationEncoding | None = None
+
+    @classmethod
+    def _create(
+        cls,
+        dtype: DType,
+        quantization_encoding: QuantizationEncoding,
+        in_features: int,
+        out_features: int,
+        weights: Weights,
+        bias: Optional[Weights],
+    ) -> "Linear":
+        if quantization_encoding != QuantizationEncoding.GPTQ:
+            weight = weights.weight.allocate(dtype, [in_features, out_features])
+            bias_weight = (
+                bias.weight.allocate(dtype, [out_features]) if bias else None
+            )
+            return QLinear(
+                weight=weight,
+                bias=bias_weight,
+                # GGUF weights can have different quantization per weight
+                quantization_encoding=weight.quantization_encoding,
+            )
+        else:
+            return GPTQLinear._create(
+                dtype,
+                quantization_encoding,
+                in_features,
+                out_features,
+                weights,
+                bias,
+            )
+
+    def __call__(self, x: TensorValue) -> TensorValue:
+        assert self.quantization_encoding is not None
+        weight = TensorValue(self.weight)
+        res = ops.qmatmul(
+            self.quantization_encoding,
+            x,
+            weight,
+        )
+        if self.bias is not None:
+            res += TensorValue(self.bias)
+        return res
+
+
+@dataclass
+class GPTQLinear(QLinear):
+    "A Linear layer for GPTQ encoding"
+
+    # Because QLinear has optional fields, so must we, since we subclass QLinear
+    quantization_config: dict | None = None
+    desc_act: bool | None = None
+    perm_idx: Optional[TensorValueLike] | None = None
+
+    @classmethod
+    def _create(
+        cls,
+        dtype: DType,
+        quantization_encoding: QuantizationEncoding,
+        in_features: int,
+        out_features: int,
+        weights: Weights,
+        bias: Optional[Weights],
+    ) -> "Linear":
+        """Internal method to create a Linear layer from GPTQ weights."""
+        assert hasattr(quantization_encoding, "config"), (
+            "quantization_encoding must have config set for GPTQ encoding"
+        )
+
+        quantization_config: dict = quantization_encoding.config
+
+        assert "desc_act" in quantization_config, (
+            "'desc_act' must be set in config for GPTQ"
+        )
+        desc_act = quantization_config["desc_act"]
+
+        assert quantization_config.get("sym", False), (
+            "GPTQ with sym=False is not supported."
+        )
+
+        perm_idx = None
+        if weights.qweight.exists():
+            orig_quantized_weights = [weights.qweight, weights.scales]
+            quantized_weights = []
+            for idx, qw in enumerate(orig_quantized_weights):
+                orig = qw.allocate()
+                # TODO(AITLIB-135): allocate_as_bytes is only available for
+                # safetensors. This isn't a problem right now because gptq is
+                # only present for safetensors
+                weight_bytes = qw.allocate_as_bytes()  # type: ignore
+                assert len(orig.shape) == 2
+                reshaped = ops.reshape(
+                    weight_bytes,
+                    (orig.shape[0] * orig.dtype.size_in_bytes, orig.shape[1]),
+                ).transpose(0, 1)
+                quantized_weights.append(reshaped)
+
+            weight = ops.concat(
+                (quantized_weights[0], quantized_weights[1]), axis=1
+            ).transpose(0, 1)
+
+            if desc_act:
+                perm_idx = weights.g_idx.allocate(
+                    DType.int32,
+                    [out_features],
+                )
+                # hack: argsort the perm_idx array
+                weights._allocated[perm_idx.name] = np.argsort(  # type: ignore
+                    weights._allocated[perm_idx.name]  # type: ignore
+                ).astype(np.int32)
+
+            return GPTQLinear(
+                weight=weight,
+                bias=None,
+                quantization_encoding=quantization_encoding,
+                quantization_config=quantization_config,
+                desc_act=desc_act,
+                perm_idx=perm_idx,
+            )
+
+        else:
+            weight = weights.weight.allocate(
+                DType.bfloat16, [in_features, out_features]
+            )
+            return Linear(weight)
+
+    def __call__(self, x: TensorValue) -> TensorValue:
+        assert self.quantization_encoding is not None
+        weight = TensorValue(self.weight)
+        if self.perm_idx is not None:
+            perm_idx = TensorValue(self.perm_idx)
+            res = ops.qmatmul(
+                self.quantization_encoding,
+                ops.gather(x, perm_idx, axis=2),
+                weight,
+                perm_idx,
+            )
+        else:
+            res = ops.qmatmul(
+                self.quantization_encoding,
+                x,
+                weight,
+            )
+        if self.bias is not None:
+            res += TensorValue(self.bias)
         return res
 
 
