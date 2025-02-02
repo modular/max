@@ -39,6 +39,7 @@ llama_arch = SupportedArchitecture(
     ],
     default_encoding=SupportedEncoding.q4_k,
     supported_encodings={
+        SupportedEncoding.gptq: [KVCacheStrategy.NAIVE],
         SupportedEncoding.q4_k: [KVCacheStrategy.NAIVE],
         SupportedEncoding.q4_0: [KVCacheStrategy.NAIVE],
         SupportedEncoding.q6_k: [KVCacheStrategy.NAIVE],

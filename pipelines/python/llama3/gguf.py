@@ -86,41 +86,27 @@ def feed_forward(
     weights: Weights,
 ) -> MLP:
     return MLP(
-        linear(
+        Linear.create(
             dtype,
             quantization_encoding,
             feed_forward_length,
             hidden_dim,
             weights.ffn_gate,
         ),
-        linear(
+        Linear.create(
             dtype,
             quantization_encoding,
             hidden_dim,
             feed_forward_length,
             weights.ffn_down,
         ),
-        linear(
+        Linear.create(
             dtype,
             quantization_encoding,
             feed_forward_length,
             hidden_dim,
             weights.ffn_up,
         ),
-    )
-
-
-def linear(
-    dtype: DType,
-    quantization_encoding: Optional[QuantizationEncoding],
-    in_features: int,
-    out_features: int,
-    weights: Weights,
-) -> Linear:
-    return Linear(
-        weights.weight.allocate(
-            dtype, [in_features, out_features], quantization_encoding
-        )
     )
 
 
@@ -148,13 +134,23 @@ def embedding(
     hidden_dim: int,
     weights: Weights,
 ) -> Embedding:
-    return Embedding(
-        weights.weight.allocate(
-            pipeline_config.dtype,
-            [vocab_size, hidden_dim],
-            pipeline_config.quantization_encoding.quantization_encoding,
+    if pipeline_config.quantization_encoding == "gptq":
+        return Embedding(
+            weights.weight.allocate(
+                DType.bfloat16,
+                [vocab_size, hidden_dim],
+                None,
+            )
         )
-    )
+
+    else:
+        return Embedding(
+            weights.weight.allocate(
+                pipeline_config.dtype,
+                [vocab_size, hidden_dim],
+                pipeline_config.quantization_encoding.quantization_encoding,
+            )
+        )
 
 
 def distributed_feed_forward(
@@ -314,7 +310,7 @@ def _attention_opaque(
         n_heads=pipeline_config.huggingface_config.num_attention_heads,
         kv_params=kv_params,
         wqkv=wqkv,
-        wo=linear(
+        wo=Linear.create(
             pipeline_config.dtype,
             pipeline_config.quantization_encoding.quantization_encoding,
             pipeline_config.huggingface_config.hidden_size,
@@ -533,7 +529,7 @@ def _transformer_opaque(
         # Smaller model variants lack dedicated weights for a final linear
         # layer, and share the embedding layer.
         if weights.output.weight.exists():
-            output = linear(
+            output = Linear.create(
                 pipeline_config.dtype,
                 pipeline_config.quantization_encoding.quantization_encoding,
                 pipeline_config.huggingface_config.vocab_size,
@@ -583,28 +579,28 @@ def attention(
         n_heads=pipeline_config.huggingface_config.num_attention_heads,
         kv_params=kv_params,
         dim=pipeline_config.huggingface_config.hidden_size,
-        wk=linear(
+        wk=Linear.create(
             pipeline_config.dtype,
             pipeline_config.quantization_encoding.quantization_encoding,
             kv_weight_dim,
             pipeline_config.huggingface_config.hidden_size,
             weights.attn_k,
         ),
-        wv=linear(
+        wv=Linear.create(
             pipeline_config.dtype,
             pipeline_config.quantization_encoding.quantization_encoding,
             kv_weight_dim,
             pipeline_config.huggingface_config.hidden_size,
             weights.attn_v,
         ),
-        wq=linear(
+        wq=Linear.create(
             pipeline_config.dtype,
             pipeline_config.quantization_encoding.quantization_encoding,
             pipeline_config.huggingface_config.hidden_size,
             pipeline_config.huggingface_config.hidden_size,
             weights.attn_q,
         ),
-        wo=linear(
+        wo=Linear.create(
             pipeline_config.dtype,
             pipeline_config.quantization_encoding.quantization_encoding,
             pipeline_config.huggingface_config.hidden_size,
@@ -690,7 +686,7 @@ def transformer(
         # Smaller model variants lack dedicated weights for a final linear
         # layer, and share the embedding layer.
         if weights.output.weight.exists():
-            output = linear(
+            output = Linear.create(
                 pipeline_config.dtype,
                 pipeline_config.quantization_encoding.quantization_encoding,
                 pipeline_config.huggingface_config.vocab_size,

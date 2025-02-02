@@ -457,7 +457,11 @@ class Llama3Model(PipelineModel):
                     SupportedEncoding.float32,
                     SupportedEncoding.bfloat16,
                 ]
-                else DType.float32
+                else (
+                    DType.float32
+                    if self.pipeline_config.devices[0].label == "cpu"
+                    else DType.bfloat16
+                )
             )
             logits = model(
                 tokens,
