@@ -83,6 +83,12 @@ class InputContext(Protocol):
         """An optional xgr Grammar Matcher provided when using constrained_decoding."""
         ...
 
+    def reset(self) -> None:
+        """Resets the context's state by combining all tokens into a new prompt.
+        This method is used when a request is evicted, meaning that the context
+        needed to be re-encoded in the following CE iteration."""
+        ...
+
 
 class TextContext:
     """A base class for model context, specifically for Text model variants."""
@@ -164,6 +170,14 @@ class TextContext:
         assert trim_len < (self.active_idx - self.start_idx)
         self.start_idx += trim_len
         self.active_length = self.active_idx - self.start_idx
+
+    def reset(self) -> None:
+        """Resets the context's state by combining all tokens into a new prompt."""
+        tokens_in_new_prompt = self.active_idx
+        self.start_idx = 0
+        self.active_idx = tokens_in_new_prompt
+        self.current_length = tokens_in_new_prompt
+        self.active_length = tokens_in_new_prompt
 
 
 class TextAndVisionContext:
@@ -254,3 +268,11 @@ class TextAndVisionContext:
         assert trim_len < (self.active_idx - self.start_idx)
         self.start_idx += trim_len
         self.active_length = self.active_idx - self.start_idx
+
+    def reset(self) -> None:
+        """Resets the context's state by combining all tokens into a new prompt."""
+        tokens_in_new_prompt = self.active_idx
+        self.start_idx = 0
+        self.active_idx = tokens_in_new_prompt
+        self.current_length = tokens_in_new_prompt
+        self.active_length = tokens_in_new_prompt

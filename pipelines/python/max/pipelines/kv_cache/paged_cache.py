@@ -365,6 +365,68 @@ class PagedKVCacheManager(KVCacheManager):
             params.head_dim,
         ]
 
+    def get_num_free_blocks(self) -> int:
+        if self.radix_trie is None:
+            return len(self.available_blocks)
+        else:
+            return len(self.available_blocks) + len(
+                self.radix_trie.get_evictable_blocks()
+            )
+
+    def can_fetch(
+        self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
+    ) -> bool:
+        """Checks if there are sufficient KV pages to run `fetch` on given batch.
+
+        It is OK if some seq_id are not in the cache. We assume the cache lengths
+        are zero in those cases.
+        """
+
+        total_blocks_to_allocate = 0
+        all_cache_hit_blocks: set[int] = set()
+
+        for seq_id, prompt in seq_ids_and_prompts.items():
+            metadata = self.active_requests.get(seq_id, _PagedCacheMetadata())
+
+            # Extend the kv cache for given request with any cached prefixes.
+            cached_blocks: list[int] = []
+            if self.radix_trie is not None and len(prompt) > 1:
+                # Attempt to match all but the last token in the prompt. This is
+                # because the model expects a prompt of length at least 1.
+                _, cached_blocks = self.radix_trie.match_prefix(
+                    prompt[:-1], node=metadata.node
+                )
+
+            cache_length = self.cache_lengths.get(seq_id, 0)
+
+            # Compute the total sequence length and the number of pages required to store it.
+            total_sequence_length = cache_length + len(prompt) + num_steps - 1
+            num_pages_required = ceildiv(total_sequence_length, self.page_size)
+
+            # Compute the number of *new* pages we need to allocate.
+            assert len(metadata.inflight_blocks) <= 1
+            blocks_to_allocate = (
+                num_pages_required
+                - len(metadata.committed_blocks)
+                - len(metadata.inflight_blocks)
+                - len(cached_blocks)
+            )
+
+            total_blocks_to_allocate += blocks_to_allocate
+            all_cache_hit_blocks.update(cached_blocks)
+
+        num_evictable_blocks = 0
+        if self.radix_trie is not None:
+            # the blocks in the prefix cache that will be used by sequences in
+            # this batch are no longer eligible for eviction / allocation.
+            num_evictable_blocks = len(
+                self.radix_trie.get_evictable_blocks() - all_cache_hit_blocks
+            )
+
+        num_free_blocks = len(self.available_blocks) + num_evictable_blocks
+
+        return total_blocks_to_allocate <= num_free_blocks
+
     def _fetch(
         self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
     ) -> Sequence[tuple[Tensor, ...]]:
@@ -406,7 +468,8 @@ class PagedKVCacheManager(KVCacheManager):
         max_seq_length = 0
         max_cache_length = 0
 
-        # Iterate over requests in the batch.
+        # Iterate over requests and query prefix cache, marking cached pages
+        # as in use so they don't get evicted when we start allocating pages.
         for batch_idx, (seq_id, prompt) in enumerate(
             seq_ids_and_prompts.items()
         ):
@@ -452,6 +515,12 @@ class PagedKVCacheManager(KVCacheManager):
                 assert inflight_metadata.node is not None
                 self.radix_trie.mark_in_use_by(inflight_metadata.node, seq_id)
 
+        # Allocate additional pages for each request in the batch
+        for batch_idx, (seq_id, prompt) in enumerate(
+            seq_ids_and_prompts.items()
+        ):
+            inflight_metadata = self.active_requests[seq_id]
+
             # Get the existing cache length for this sequence.
             cache_length = self.cache_lengths[seq_id]
             cache_lengths_np[batch_idx] = cache_length
@@ -461,7 +530,6 @@ class PagedKVCacheManager(KVCacheManager):
             num_pages_required = ceildiv(total_sequence_length, self.page_size)
 
             # Compute the number of *new* pages we need to allocate.
-            # Note that inflight_blocks may contain one partially filled block.
             assert len(inflight_metadata.inflight_blocks) <= 1
             num_new_pages = (
                 num_pages_required
