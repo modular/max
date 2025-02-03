@@ -242,7 +242,7 @@ async def async_request_openai_chat_completions(
     )
 
     async with aiohttp.ClientSession(timeout=AIOHTTP_TIMEOUT) as session:
-        assert not request_func_input.use_beam_search
+        assert not request_func_input.use_beam_search  # type: ignore
         payload = {
             "model": request_func_input.model,
             "messages": [
@@ -330,7 +330,7 @@ def remove_prefix(text: str, prefix: str) -> str:
 
 def get_model(pretrained_model_name_or_path: str) -> str:
     if os.getenv("VLLM_USE_MODELSCOPE", "False").lower() == "true":
-        from modelscope import snapshot_download
+        from modelscope import snapshot_download  # type: ignore
 
         model_path = snapshot_download(
             model_id=pretrained_model_name_or_path,
@@ -647,30 +647,30 @@ def calculate_metrics(
         request_throughput=completed / dur_s,
         input_throughput=total_input / dur_s,
         output_throughput=sum(actual_output_lens) / dur_s,
-        mean_ttft_ms=np.mean(ttfts or 0)
+        mean_ttft_ms=float(np.mean(ttfts or 0))
         * 1000,  # ttfts is empty if streaming is not supported by backend
-        median_ttft_ms=np.median(ttfts or 0) * 1000,
-        std_ttft_ms=np.std(ttfts or 0) * 1000,
-        p99_ttft_ms=np.percentile(ttfts or 0, 99) * 1000,
-        mean_tpot_ms=np.mean(tpots or 0) * 1000,
-        median_tpot_ms=np.median(tpots or 0) * 1000,
-        std_tpot_ms=np.std(tpots or 0) * 1000,
-        p99_tpot_ms=np.percentile(tpots or 0, 99) * 1000,
-        mean_itl_ms=np.mean(itls or 0) * 1000,
-        median_itl_ms=np.median(itls or 0) * 1000,
-        std_itl_ms=np.std(itls or 0) * 1000,
-        p99_itl_ms=np.percentile(itls or 0, 99) * 1000,
+        median_ttft_ms=float(np.median(ttfts or 0)) * 1000,
+        std_ttft_ms=float(np.std(ttfts or 0)) * 1000,
+        p99_ttft_ms=float(np.percentile(ttfts or 0, 99)) * 1000,
+        mean_tpot_ms=float(np.mean(tpots or 0)) * 1000,
+        median_tpot_ms=float(np.median(tpots or 0)) * 1000,
+        std_tpot_ms=float(np.std(tpots or 0)) * 1000,
+        p99_tpot_ms=float(np.percentile(tpots or 0, 99)) * 1000,
+        mean_itl_ms=float(np.mean(itls or 0)) * 1000,
+        median_itl_ms=float(np.median(itls or 0)) * 1000,
+        std_itl_ms=float(np.std(itls or 0)) * 1000,
+        p99_itl_ms=float(np.percentile(itls or 0, 99)) * 1000,
         max_input=max_input,
         max_output=max_output,
         max_total=max_total,
-        peak_gpu_memory_mib=gpu_metrics.get(
-            "benchmark/gpu:0/memory_used (MiB)/max"
+        peak_gpu_memory_mib=float(
+            gpu_metrics.get("benchmark/gpu:0/memory_used (MiB)/max")  # type: ignore
         ),
-        available_gpu_memory_mib=gpu_metrics.get(
-            "benchmark/gpu:0/memory_free (MiB)/min"
+        available_gpu_memory_mib=float(
+            gpu_metrics.get("benchmark/gpu:0/memory_free (MiB)/min")  # type: ignore
         ),
-        gpu_utilization=gpu_metrics.get(
-            "benchmark/gpu:0/gpu_utilization (%)/mean"
+        gpu_utilization=float(
+            gpu_metrics.get("benchmark/gpu:0/gpu_utilization (%)/mean")  # type: ignore
         ),
     )
 
@@ -940,7 +940,7 @@ def main(args: argparse.Namespace):
     elif args.dataset_name == "sonnet":
         # Do not format the prompt, pass to message directly
         if args.backend == "openai-chat":
-            input_requests = sample_sonnet_requests(
+            input_requests = sample_sonnet_requests(  # type: ignore
                 dataset_path=args.dataset_path,
                 num_requests=args.num_prompts,
                 input_len=args.sonnet_input_len,
@@ -948,7 +948,7 @@ def main(args: argparse.Namespace):
                 prefix_len=args.sonnet_prefix_len,
                 tokenizer=tokenizer,
             )
-            input_requests = [
+            input_requests = [  # type: ignore
                 (prompt, prompt_len, output_len)
                 for prompt, prompt_formatted, prompt_len, output_len in input_requests
             ]
@@ -956,7 +956,7 @@ def main(args: argparse.Namespace):
             assert tokenizer.chat_template or tokenizer.default_chat_template, (
                 "Tokenizer/model must have chat template for sonnet dataset."
             )
-            input_requests = sample_sonnet_requests(
+            input_requests = sample_sonnet_requests(  # type: ignore
                 dataset_path=args.dataset_path,
                 num_requests=args.num_prompts,
                 input_len=args.sonnet_input_len,
@@ -964,7 +964,7 @@ def main(args: argparse.Namespace):
                 prefix_len=args.sonnet_prefix_len,
                 tokenizer=tokenizer,
             )
-            input_requests = [
+            input_requests = [  # type: ignore
                 (prompt_formatted, prompt_len, output_len)
                 for prompt, prompt_formatted, prompt_len, output_len in input_requests
             ]
