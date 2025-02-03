@@ -113,6 +113,8 @@ class RadixTrie:
         """Constructs a RadixTrie."""
         self.root = TrieNode()
         self.page_size = page_size
+        self.evictable_blocks: set[BlockId] = set()
+        self.all_blocks: set[BlockId] = set()
 
     def _check_node_valid(self, node: TrieNode):
         """Rudimentary checks of data structure invariants for TrieNode."""
@@ -170,6 +172,8 @@ class RadixTrie:
                 curr.tokens = tokens
                 curr.blocks = blocks
                 prev.children[key] = curr
+                self.evictable_blocks.update(blocks)
+                self.all_blocks.update(blocks)
 
             curr = prev.children[key]
             prefix_len = _token_prefix_match_len(
@@ -333,6 +337,8 @@ class RadixTrie:
             # assume that it is already marked for its parents as well
             if seq_id in curr.active_seqs:
                 break
+            if not curr.active_seqs:
+                self.evictable_blocks -= set(curr.blocks)
             curr.active_seqs.add(seq_id)
             assert curr.parent is not None
             curr = curr.parent
@@ -345,9 +351,11 @@ class RadixTrie:
         curr = node
         while curr != self.root:
             assert curr is not None
-            assert seq_id in curr.active_seqs, f"{curr.active_seqs}, {seq_id}"
+            assert seq_id in curr.active_seqs
             curr.last_access_time = time.time()
             curr.active_seqs.remove(seq_id)
+            if not curr.active_seqs:
+                self.evictable_blocks.update(curr.blocks)
             assert curr.parent is not None
             curr = curr.parent
 
@@ -409,7 +417,20 @@ class RadixTrie:
                 if len(leaf.parent.children) == 0:
                     heapq.heappush(leaves, leaf.parent)
 
+        self.evictable_blocks.difference_update(evicted_blocks)
+        self.all_blocks.difference_update(evicted_blocks)
+        if len(evicted_blocks) < desired_num_evicted:
+            assert not self.evictable_blocks
+
         return evicted_blocks
+
+    def get_all_blocks(self) -> set[BlockId]:
+        """Returns the total number of blocks in the trie."""
+        return self.all_blocks
+
+    def get_evictable_blocks(self) -> set[BlockId]:
+        """Returns the number of blocks that are eligible for eviction."""
+        return self.evictable_blocks
 
     def pretty_format(self, print_blocks: bool = False) -> List[str]:
         """Formats the contents of the trie."""
