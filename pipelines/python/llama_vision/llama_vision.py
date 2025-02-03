@@ -40,6 +40,7 @@ from max.pipelines.kv_cache import (
     estimate_kv_cache_size,
     load_kv_manager,
 )
+from max.pipelines.kv_cache._utils import build_max_lengths_tensor
 from nn import Linear
 from nn.layer import Layer
 
@@ -197,15 +198,9 @@ class MultimodalKVCacheManager(KVCacheManager):
 
         # Build a tensor of maximum lengths. Each step slices the first row to
         # advance to the values for the next row.
-        max_lengths_np = np.empty((num_steps, 2), np.uint32)
-        step_max_seq_length = max_seq_length
-        step_max_cache_length = max_cache_length
-        for step in range(num_steps):
-            max_lengths_np[step, 0] = step_max_seq_length
-            max_lengths_np[step, 1] = step_max_cache_length
-            step_max_cache_length += step_max_seq_length
-            step_max_seq_length = 0
-        max_lengths_host = Tensor.from_numpy(max_lengths_np)
+        max_lengths_host = build_max_lengths_tensor(
+            num_steps, max_seq_length, max_cache_length
+        )
 
         vision_fetch_results = (
             # Block 0 for the first device (since MultimodalKVCacheManager

@@ -32,6 +32,7 @@ from max.graph import (
     ops,
 )
 
+from ._utils import build_max_lengths_tensor
 from .cache_params import KVCacheParams
 from .manager import KVCacheManager
 
@@ -276,15 +277,9 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
 
         # Build a tensor of maximum lengths. Each step slices the first row to
         # advance to the values for the next row.
-        max_lengths_np = np.empty((num_steps, 2), np.uint32)
-        step_max_seq_length = max_seq_length
-        step_max_cache_length = max_cache_length
-        for step in range(num_steps):
-            max_lengths_np[step, 0] = step_max_seq_length
-            max_lengths_np[step, 1] = step_max_cache_length
-            step_max_cache_length += step_max_seq_length
-            step_max_seq_length = 1
-        max_lengths_host = Tensor.from_numpy(max_lengths_np)
+        max_lengths_host = build_max_lengths_tensor(
+            num_steps, max_seq_length, max_cache_length
+        )
 
         return [
             (
