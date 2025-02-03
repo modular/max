@@ -354,8 +354,8 @@ class PipelineRegistry:
                 "Unable to estimate memory footprint of model, can't query device stats: "
                 + str(e)
             )
-            if not pipeline_config.max_cache_batch_size:
-                pipeline_config.max_cache_batch_size = 1
+            if not pipeline_config.max_batch_size:
+                pipeline_config.max_batch_size = 1
             if not pipeline_config.max_length:
                 pipeline_config.max_length = model_cls.calculate_max_seq_len(
                     pipeline_config
@@ -375,8 +375,8 @@ class PipelineRegistry:
         )
 
         user_provided_max_length = pipeline_config.max_length is not None
-        user_provided_max_cache_batch_size = (
-            pipeline_config.max_cache_batch_size is not None
+        user_provided_max_batch_size = (
+            pipeline_config.max_batch_size is not None
         )
         if not user_provided_max_length:
             pipeline_config.max_length = model_cls.calculate_max_seq_len(
@@ -388,18 +388,18 @@ class PipelineRegistry:
                 f"Current max sequence length: {pipeline_config.max_length}"
             )
 
-        if not user_provided_max_cache_batch_size:
-            pipeline_config.max_cache_batch_size = (
-                self._infer_optimal_batch_size(
-                    pipeline_config, model_cls, available_kv_cache_memory
-                )
+        if not user_provided_max_batch_size:
+            pipeline_config.max_batch_size = self._infer_optimal_batch_size(
+                pipeline_config, model_cls, available_kv_cache_memory
             )
-            max_batch_size_str = f"Auto-inferred max batch size: {pipeline_config.max_cache_batch_size}"
+            max_batch_size_str = f"Auto-inferred max batch size: {pipeline_config.max_batch_size}"
         else:
-            assert pipeline_config.max_cache_batch_size is not None, (
-                "max_cache_batch_size must be set"
+            assert pipeline_config.max_batch_size is not None, (
+                "max_batch_size must be set"
             )
-            max_batch_size_str = f"Current max batch size: {pipeline_config.max_cache_batch_size}"
+            max_batch_size_str = (
+                f"Current max batch size: {pipeline_config.max_batch_size}"
+            )
 
         actual_kv_cache_size = self._calculate_kv_cache_size(
             model_cls,
@@ -431,7 +431,7 @@ class PipelineRegistry:
                 self._raise_oom_error(
                     pipeline_config,
                     user_provided_max_length,
-                    user_provided_max_cache_batch_size,
+                    user_provided_max_batch_size,
                     model_cls,
                     total_size,
                     free_memory,
@@ -448,7 +448,7 @@ class PipelineRegistry:
         self,
         pipeline_config: PipelineConfig,
         user_provided_max_length: bool,
-        user_provided_max_cache_batch_size: bool,
+        user_provided_max_batch_size: bool,
         model_cls: Type[PipelineModel],
         total_size: int,
         original_free_memory: int,
@@ -460,7 +460,7 @@ class PipelineRegistry:
 
         The approach is to:
         1. Binary search max_length until we find a setting that works
-        2. If user provided max_cache_batch_size, binary search that too
+        2. If user provided max_batch_size, binary search that too
         3. Generate appropriate suggestions based on this truth table:
 
                                                             max_length
@@ -478,9 +478,7 @@ class PipelineRegistry:
             )
 
         original_max_length = cast(int, pipeline_config.max_length)
-        original_max_cache_batch_size = cast(
-            int, pipeline_config.max_cache_batch_size
-        )
+        original_max_batch_size = cast(int, pipeline_config.max_batch_size)
 
         # Find valid configurations through binary search
         (
@@ -491,10 +489,10 @@ class PipelineRegistry:
             pipeline_config,
             model_cls,
             available_kv_cache_memory,
-            user_provided_max_cache_batch_size,
+            user_provided_max_batch_size,
         )
 
-        pipeline_config.max_cache_batch_size = original_max_cache_batch_size
+        pipeline_config.max_batch_size = original_max_batch_size
 
         found_valid_max_batch_size, inferred_max_batch_size = (
             self._find_valid_batch_size(
@@ -502,7 +500,7 @@ class PipelineRegistry:
                 model_cls,
                 available_kv_cache_memory,
                 original_max_length,
-                user_provided_max_cache_batch_size,
+                user_provided_max_batch_size,
             )
         )
 
@@ -511,7 +509,7 @@ class PipelineRegistry:
             total_size=total_size,
             original_free_memory=original_free_memory,
             user_provided_max_length=user_provided_max_length,
-            user_provided_max_cache_batch_size=user_provided_max_cache_batch_size,
+            user_provided_max_batch_size=user_provided_max_batch_size,
             found_valid_max_length=found_valid_max_length,
             found_valid_max_batch_size=found_valid_max_batch_size,
             inferred_max_length=inferred_max_length,
@@ -527,7 +525,7 @@ class PipelineRegistry:
         pipeline_config: PipelineConfig,
         model_cls: Type[PipelineModel],
         available_kv_cache_memory: int,
-        user_provided_max_cache_batch_size: bool,
+        user_provided_max_batch_size: bool,
     ) -> tuple[bool, int, int]:
         """Binary search to find a valid max_length configuration.
 
@@ -538,7 +536,7 @@ class PipelineRegistry:
             - inferred_max_length_compatible_batch_size: Compatible batch size for the max_length
         """
         assert pipeline_config.max_length is not None
-        assert pipeline_config.max_cache_batch_size is not None
+        assert pipeline_config.max_batch_size is not None
 
         found_valid_max_length = False
         lower = 1
@@ -549,11 +547,9 @@ class PipelineRegistry:
             inferred_max_length = (lower + upper) // 2
             pipeline_config.max_length = inferred_max_length
 
-            if not user_provided_max_cache_batch_size:
-                pipeline_config.max_cache_batch_size = (
-                    self._infer_optimal_batch_size(
-                        pipeline_config, model_cls, available_kv_cache_memory
-                    )
+            if not user_provided_max_batch_size:
+                pipeline_config.max_batch_size = self._infer_optimal_batch_size(
+                    pipeline_config, model_cls, available_kv_cache_memory
                 )
 
             kv_cache_size = self._calculate_kv_cache_size(
@@ -574,7 +570,7 @@ class PipelineRegistry:
         return (
             found_valid_max_length,
             inferred_max_length,
-            pipeline_config.max_cache_batch_size,
+            pipeline_config.max_batch_size,
         )
 
     def _find_valid_batch_size(
@@ -583,7 +579,7 @@ class PipelineRegistry:
         model_cls: Type[PipelineModel],
         available_kv_cache_memory: int,
         original_max_length: int,
-        user_provided_max_cache_batch_size: bool,
+        user_provided_max_batch_size: bool,
     ) -> tuple[bool, int]:
         """Binary search to find a valid batch size configuration.
 
@@ -593,20 +589,18 @@ class PipelineRegistry:
             - inferred_max_batch_size: The suggested batch size value.
                 If the user did not provide a batch size, this will be -1.
         """
-        if not user_provided_max_cache_batch_size:
+        if not user_provided_max_batch_size:
             return False, -1
 
         found_valid_max_batch_size = False
         pipeline_config.max_length = original_max_length
-        inferred_max_batch_size = cast(
-            int, pipeline_config.max_cache_batch_size
-        )
+        inferred_max_batch_size = cast(int, pipeline_config.max_batch_size)
         lower = 1
-        upper = cast(int, pipeline_config.max_cache_batch_size)
+        upper = cast(int, pipeline_config.max_batch_size)
 
         while not found_valid_max_batch_size:
             inferred_max_batch_size = (lower + upper) // 2
-            pipeline_config.max_cache_batch_size = inferred_max_batch_size
+            pipeline_config.max_batch_size = inferred_max_batch_size
 
             kv_cache_size = self._calculate_kv_cache_size(
                 model_cls, pipeline_config, available_kv_cache_memory
@@ -646,7 +640,7 @@ class PipelineRegistry:
         total_size: int,
         original_free_memory: int,
         user_provided_max_length: bool,
-        user_provided_max_cache_batch_size: bool,
+        user_provided_max_batch_size: bool,
         found_valid_max_length: bool,
         found_valid_max_batch_size: bool,
         inferred_max_length: int,
@@ -668,13 +662,13 @@ class PipelineRegistry:
 
         if not found_valid_max_length and not found_valid_max_batch_size:
             msg.write(
-                "reducing --max-length or --max-cache-batch-size, finding a smaller model, or using a device with more memory."
+                "reducing --max-length or --max-batch-size, finding a smaller model, or using a device with more memory."
             )
 
         elif user_provided_max_length:
             self._add_user_provided_max_length_suggestions(
                 msg,
-                user_provided_max_cache_batch_size,
+                user_provided_max_batch_size,
                 found_valid_max_length,
                 found_valid_max_batch_size,
                 inferred_max_length,
@@ -684,7 +678,7 @@ class PipelineRegistry:
         else:
             self._add_default_max_length_suggestions(
                 msg,
-                user_provided_max_cache_batch_size,
+                user_provided_max_batch_size,
                 found_valid_max_length,
                 found_valid_max_batch_size,
                 inferred_max_length,
@@ -699,7 +693,7 @@ class PipelineRegistry:
     def _add_user_provided_max_length_suggestions(
         self,
         msg: StringIO,
-        user_provided_max_cache_batch_size: bool,
+        user_provided_max_batch_size: bool,
         found_valid_max_length: bool,
         found_valid_max_batch_size: bool,
         inferred_max_length: int,
@@ -712,39 +706,39 @@ class PipelineRegistry:
 
         Args:
             msg: StringIO buffer to write message to
-            user_provided_max_cache_batch_size: Whether user provided batch size
+            user_provided_max_batch_size: Whether user provided batch size
             found_valid_max_length: Whether valid max_length was found
             found_valid_max_batch_size: Whether valid batch size was found
             inferred_max_length: Suggested max_length value
             inferred_max_batch_size: Suggested batch size value
             inferred_max_length_compatible_batch_size: Compatible batch size for max_length
         """
-        if not user_provided_max_cache_batch_size:
+        if not user_provided_max_batch_size:
             if found_valid_max_length:
                 msg.write(
                     f"reducing --max-length to {inferred_max_length} "
                     f"(supports batch size of {inferred_max_length_compatible_batch_size})"
                 )
             else:
-                msg.write("reducing --max-length or --max-cache-batch-size")
+                msg.write("reducing --max-length or --max-batch-size")
         else:
             if found_valid_max_length:
                 msg.write(
                     f"reducing --max-length to {inferred_max_length} and "
-                    f"--max-cache-batch-size to {inferred_max_length_compatible_batch_size})"
+                    f"--max-batch-size to {inferred_max_length_compatible_batch_size})"
                 )
 
             if found_valid_max_batch_size:
                 if found_valid_max_length:
                     msg.write(" or ")
                 msg.write(
-                    f"reducing --max-cache-batch-size to {inferred_max_batch_size}"
+                    f"reducing --max-batch-size to {inferred_max_batch_size}"
                 )
 
     def _add_default_max_length_suggestions(
         self,
         msg: StringIO,
-        user_provided_max_cache_batch_size: bool,
+        user_provided_max_batch_size: bool,
         found_valid_max_length: bool,
         found_valid_max_batch_size: bool,
         inferred_max_length: int,
@@ -758,7 +752,7 @@ class PipelineRegistry:
 
         Args:
             msg: StringIO buffer to write message to
-            user_provided_max_cache_batch_size: Whether user provided batch size
+            user_provided_max_batch_size: Whether user provided batch size
             found_valid_max_length: Whether valid max_length was found
             found_valid_max_batch_size: Whether valid batch size was found
             inferred_max_length: Suggested max_length value
@@ -766,24 +760,24 @@ class PipelineRegistry:
             inferred_max_length_compatible_batch_size: Compatible batch size for max_length
             original_max_length: Original max_length value before modifications
         """
-        if not user_provided_max_cache_batch_size:
+        if not user_provided_max_batch_size:
             if found_valid_max_length:
                 msg.write(
                     f"setting --max-length to {inferred_max_length} and "
-                    f"--max-cache-batch-size to {inferred_max_length_compatible_batch_size})"
+                    f"--max-batch-size to {inferred_max_length_compatible_batch_size})"
                 )
 
             if found_valid_max_batch_size:
                 if found_valid_max_length:
                     msg.write(" or ")
                 msg.write(
-                    f"setting --max-cache-batch-size to {inferred_max_batch_size}"
+                    f"setting --max-batch-size to {inferred_max_batch_size}"
                 )
 
         else:
             if found_valid_max_batch_size:
                 msg.write(
-                    f"reducing --max-cache-batch-size to {inferred_max_batch_size}"
+                    f"reducing --max-batch-size to {inferred_max_batch_size}"
                 )
             if found_valid_max_length:
                 if found_valid_max_batch_size:

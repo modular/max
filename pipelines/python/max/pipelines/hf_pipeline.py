@@ -86,13 +86,13 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
 
-        max_cache_batch_size = pipeline_config.max_cache_batch_size
-        assert max_cache_batch_size is not None, (
-            "max_cache_batch_size must be set before constructing ContinuousHFStaticCache"
+        max_batch_size = pipeline_config.max_batch_size
+        assert max_batch_size is not None, (
+            "max_batch_size must be set before constructing ContinuousHFStaticCache"
         )
         self._cache = ContinuousHFStaticCache(
             config=self._model.config,
-            max_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=DEFAULT_MAX_SEQ_LEN
             if pipeline_config.max_length is None
             else pipeline_config.max_length,

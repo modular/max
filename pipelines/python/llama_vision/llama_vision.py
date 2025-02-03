@@ -72,7 +72,7 @@ class MultimodalKVCacheManager(KVCacheManager):
     def __init__(
         self,
         params: KVCacheParams,
-        max_cache_batch_size: Optional[int],
+        max_batch_size: Optional[int],
         text_max_seq_len: int,
         vision_max_seq_len: int,
         text_num_layers: int,
@@ -82,10 +82,10 @@ class MultimodalKVCacheManager(KVCacheManager):
         available_cache_memory: int,
         page_size: int,
     ) -> None:
-        assert max_cache_batch_size, "Expected max_cache_batch_size to be set"
+        assert max_batch_size, "Expected max_batch_size to be set"
         self.text_kv_manager = load_kv_manager(
             params=params,
-            max_cache_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=text_max_seq_len,
             num_layers=text_num_layers,
             devices=devices,
@@ -99,7 +99,7 @@ class MultimodalKVCacheManager(KVCacheManager):
         # multi-image, at least.
         self.vision_kv_manager = ContinuousBatchingKVCacheManager(
             params=params,
-            max_cache_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=vision_max_seq_len,
             num_layers=vision_num_layers,
             devices=devices,
@@ -110,7 +110,7 @@ class MultimodalKVCacheManager(KVCacheManager):
         # superclass ctor calls methods that use the modality KV managers.
         super().__init__(
             params,
-            max_cache_batch_size,
+            max_batch_size,
             text_max_seq_len,
             text_num_layers,
             devices,
@@ -123,7 +123,7 @@ class MultimodalKVCacheManager(KVCacheManager):
     def estimated_memory_size(
         cls,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         available_cache_memory: int,
@@ -134,7 +134,7 @@ class MultimodalKVCacheManager(KVCacheManager):
         # instance method to account for different text and vision KV caches.
         return 2 * ContinuousBatchingKVCacheManager.estimated_memory_size(
             params,
-            max_cache_batch_size,
+            max_batch_size,
             max_seq_len,
             num_layers,
             available_cache_memory,
@@ -661,13 +661,11 @@ class LlamaVision(PipelineModel):
     def _llama3_vision_language_graph(self) -> Graph:
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
-        assert self.pipeline_config.max_cache_batch_size, (
-            "Expected max_cache_batch_size to be set"
+        assert self.pipeline_config.max_batch_size, (
+            "Expected max_batch_size to be set"
         )
         self._input_row_offsets_prealloc = Tensor.from_numpy(
-            np.arange(
-                self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
-            )
+            np.arange(self.pipeline_config.max_batch_size + 1, dtype=np.uint32)
         ).to(self.pipeline_config.devices[0])
 
         input_ids_type = TensorType(DType.int64, shape=["total_seq_len"])
@@ -963,7 +961,7 @@ class LlamaVision(PipelineModel):
         num_cross_attn_layers = len(self.text_config.cross_attention_layers)
         return MultimodalKVCacheManager(
             params=self.get_kv_params(self.pipeline_config),
-            max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
+            max_batch_size=self.pipeline_config.max_batch_size,
             text_max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             vision_max_seq_len=self.vision_max_seq_len,
             text_num_layers=self.text_config.num_hidden_layers
@@ -985,7 +983,7 @@ class LlamaVision(PipelineModel):
         """Estimates the size of the kv cache in bytes."""
         return estimate_kv_cache_size(
             params=cls.get_kv_params(pipeline_config),
-            max_cache_batch_size=pipeline_config.max_cache_batch_size,
+            max_batch_size=pipeline_config.max_batch_size,
             max_seq_len=cls.calculate_max_seq_len(pipeline_config),
             num_layers=pipeline_config.huggingface_config.text_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,

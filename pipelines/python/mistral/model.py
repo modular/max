@@ -164,7 +164,7 @@ class MistralModel(PipelineModel):
         )
         return load_kv_manager(
             params=self.get_kv_params(self.pipeline_config),
-            max_cache_batch_size=self.pipeline_config.max_cache_batch_size,
+            max_batch_size=self.pipeline_config.max_batch_size,
             max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
             devices=self.pipeline_config.devices,
@@ -184,7 +184,7 @@ class MistralModel(PipelineModel):
         assert devices, "devices must be provided to estimate kv cache size."
         return estimate_kv_cache_size(
             params=cls.get_kv_params(pipeline_config),
-            max_cache_batch_size=pipeline_config.max_cache_batch_size,
+            max_batch_size=pipeline_config.max_batch_size,
             max_seq_len=cls.calculate_max_seq_len(pipeline_config),
             num_layers=pipeline_config.huggingface_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
@@ -198,13 +198,11 @@ class MistralModel(PipelineModel):
 
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
-        assert self.pipeline_config.max_cache_batch_size, (
-            "Expected max_cache_batch_size to be set"
+        assert self.pipeline_config.max_batch_size, (
+            "Expected max_batch_size to be set"
         )
         self._input_row_offsets_prealloc = Tensor.from_numpy(
-            np.arange(
-                self.pipeline_config.max_cache_batch_size + 1, dtype=np.uint32
-            )
+            np.arange(self.pipeline_config.max_batch_size + 1, dtype=np.uint32)
         ).to(self.pipeline_config.devices[0])
 
         self._weights = self.pipeline_config.load_weights()

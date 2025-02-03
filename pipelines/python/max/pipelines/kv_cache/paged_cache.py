@@ -176,7 +176,7 @@ class PagedKVCacheManager(KVCacheManager):
     def __init__(
         self,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         devices: list[Device],
@@ -187,7 +187,7 @@ class PagedKVCacheManager(KVCacheManager):
         """
         Args:
             params: The KVCacheParams for the given pipeline.
-            max_cache_batch_size: The maximum number of active
+            max_batch_size: The maximum number of active
                 requests that the manager should support.
             max_seq_len: The maximum sequence length we will generate.
             num_layers: The number of layers in the model.
@@ -221,7 +221,7 @@ class PagedKVCacheManager(KVCacheManager):
         # call our base class constructor
         super().__init__(
             params=params,
-            max_cache_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=max_seq_len,
             num_layers=num_layers,
             devices=devices,
@@ -306,13 +306,13 @@ class PagedKVCacheManager(KVCacheManager):
     def estimated_memory_size(
         cls,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         available_cache_memory: int,
         devices: list[Device],
     ) -> int:
-        # Determine how much size is necessary to store the full cache based on max_cache_batch_size and max_seq_len.
+        # Determine how much size is necessary to store the full cache based on max_batch_size and max_seq_len.
         # If that's less than available_cache_memory, return that.
         # Otherwise, return available_cache_memory.
         # This is to prevent over-allocation on devices with a large amount of free memory (e.g. CPUs).
@@ -320,7 +320,7 @@ class PagedKVCacheManager(KVCacheManager):
             params, num_layers
         ) * len(devices)
         size_to_support_full_cache = (
-            block_size_per_token * max_cache_batch_size * max_seq_len
+            block_size_per_token * max_batch_size * max_seq_len
         )
         return min(available_cache_memory, size_to_support_full_cache)
 

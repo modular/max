@@ -134,7 +134,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
     def __init__(
         self,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         devices: List[Device],
@@ -142,7 +142,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
     ) -> None:
         super().__init__(
             params=params,
-            max_cache_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=max_seq_len,
             num_layers=num_layers,
             devices=devices,
@@ -155,7 +155,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         for i in range(len(self.devices)):
             self.blocks.append(
                 Tensor.zeros(
-                    self.block_shape(self.max_cache_batch_size),
+                    self.block_shape(self.max_batch_size),
                     self.params.dtype,
                     device=self.devices[i],
                 )
@@ -165,7 +165,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
     def estimated_memory_size(
         cls,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         available_cache_memory: int,
@@ -175,13 +175,13 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             reduce(
                 mul,
                 cls._block_shape(
-                    params, max_cache_batch_size, max_seq_len, num_layers
+                    params, max_batch_size, max_seq_len, num_layers
                 ),
             )
             * params.dtype.size_in_bytes
         )
-        lengths_size = max_cache_batch_size * DType.uint32.size_in_bytes
-        lookup_table_size = max_cache_batch_size * DType.uint32.size_in_bytes
+        lengths_size = max_batch_size * DType.uint32.size_in_bytes
+        lookup_table_size = max_batch_size * DType.uint32.size_in_bytes
         size = cache_size + lengths_size + lookup_table_size
         return size * len(devices)
 
@@ -217,7 +217,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         Args:
             seq_ids_and_prompts: Dictionary of sequence IDs to fetch cache state for and the
                 new prompt we plan to add to the cache. Each ID must be within
-                the max_cache_batch_size and must exist in the current cache.
+                the max_batch_size and must exist in the current cache.
             num_steps: Number of steps to run for multi-step scheduling.
 
         Returns:
@@ -228,7 +228,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             - max_lengths: Tensor containing [max_seq_length, max_cache_length]
 
         Raises:
-            ValueError: If any seq_id exceeds max_cache_batch_size or doesn't exist in cache
+            ValueError: If any seq_id exceeds max_batch_size or doesn't exist in cache
         """
         active_batch_size = len(seq_ids_and_prompts)
 
@@ -242,10 +242,10 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         max_cache_length = 0
 
         for i, (seq_id, prompt) in enumerate(seq_ids_and_prompts.items()):
-            if seq_id > self.max_cache_batch_size:
+            if seq_id > self.max_batch_size:
                 msg = (
-                    f"seq_id: {seq_id}, beyond max_cache_batch_size, you may"
-                    " want to increase `max_cache_batch_size` in the pipeline"
+                    f"seq_id: {seq_id}, beyond max_batch_size, you may"
+                    " want to increase `max_batch_size` in the pipeline"
                     " config."
                 )
                 raise ValueError(msg)

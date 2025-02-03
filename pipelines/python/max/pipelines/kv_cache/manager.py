@@ -42,7 +42,7 @@ class KVCacheManager(ABC):
     def __init__(
         self,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         devices: List[Device],
@@ -50,14 +50,14 @@ class KVCacheManager(ABC):
         is_ragged: bool = False,
     ) -> None:
         self.params = params
-        self.max_cache_batch_size = max_cache_batch_size
+        self.max_batch_size = max_batch_size
         self.max_seq_len = max_seq_len
         self.num_layers = num_layers
         self.devices = devices
         self.session = session
 
         # Attributes for managing available slots.
-        self.available = set(range(self.max_cache_batch_size))
+        self.available = set(range(self.max_batch_size))
         self.cache_lengths: dict[int, int] = {}
 
         self.is_ragged = is_ragged
@@ -74,7 +74,7 @@ class KVCacheManager(ABC):
     def estimated_memory_size(
         cls,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         available_cache_memory: int,

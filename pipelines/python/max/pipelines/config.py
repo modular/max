@@ -477,7 +477,7 @@ class PipelineConfig:
     max_new_tokens: int = -1
     """Maximum number of new tokens to generate during a single inference pass of the model."""
 
-    max_cache_batch_size: Optional[int] = None
+    max_batch_size: Optional[int] = None
     """Maximum batch size to execute with the model.
     This is set to one, to minimize memory consumption for the base case, in which a person is
     running a local server to test out MAX. For users launching in a server scenario, the expectation
@@ -485,7 +485,7 @@ class PipelineConfig:
 
     max_ce_batch_size: int = 32
     """Maximum cache size to reserve for a single context encoding batch.
-    The actual limit is the lesser of this and max_cache_batch_size."""
+    The actual limit is the lesser of this and max_batch_size."""
 
     cache_strategy: KVCacheStrategy = KVCacheStrategy.MODEL_DEFAULT
     """The cache strategy to use. This defaults to 'model_default', which will set the cache
@@ -550,6 +550,9 @@ class PipelineConfig:
     _available_cache_memory: Optional[int] = None
     """The amount of available cache memory in bytes. This should only be set by internal code."""
 
+    max_cache_batch_size: Optional[int] = None
+    """DEPRECATED: The maximum cache batch size to use for the model. Use max_batch_size instead."""
+
     def __post_init__(self) -> None:
         if not self.huggingface_repo_id:
             msg = "huggingface_repo_id must be provided and must be a valid HuggingFace repo or local directory"
@@ -580,6 +583,11 @@ class PipelineConfig:
 
         elif not isinstance(self.weight_path, list):
             self.weight_path = [self.weight_path]
+
+        if self.max_cache_batch_size is not None:
+            msg = "--max-cache-batch-size is deprecated, use `--max-batch-size` instead. This setting will stop working in a future release."
+            logging.warning(msg)
+            self.max_batch_size = self.max_cache_batch_size
 
         weight_paths = []
         for path in self.weight_path:
@@ -834,8 +842,9 @@ class PipelineConfig:
             "save_to_serialized_model_path": "If specified, this flag attempts to save the current model state to a serialized format at the given path for later use.",
             "max_length": "Set the maximum sequence length for input data processed by the model. This must be less than the value specified in the HuggingFace configuration file. The default is derived from the HuggingFace configuration value. Larger values may consume more memory.",
             "max_new_tokens": "Specify the maximum number of new tokens to generate during a single inference pass of the model. Default is -1, which means the model will generate until the maximum sequence length is hit, or and eos token is generated.",
-            "max_cache_batch_size": "Define the maximum cache size reserved for a single batch. This value defaults to 1. Increase this value based on server capacity when deploying in production.",
+            "max_batch_size": "Define the maximum cache size reserved for a single batch. This value defaults to 1. Increase this value based on server capacity when deploying in production.",
             "max_ce_batch_size": "Set the maximum cache size reserved for a single context encoding batch. The effective limit will be the lesser of this value and max-cache-batch-size. Default is 32.",
+            "max_cache_batch_size": "DEPRECATED: Use max_batch_size instead.",
             "cache_strategy": "Force a specific cache strategy: 'naive' or 'continuous'. If not provided, the optimal caching strategy for the model requested will be selected.",
             "rope_type": "Force using a specific rope type, 'none', 'normal', or 'neox'. Only matters for GGUF weights.",
             "max_num_steps": "Specify the number of steps to run for multi-step scheduling during inference. Default is set to 1.",

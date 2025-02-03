@@ -128,7 +128,7 @@ pipeline:
   (Default value: `3.1`)
 - `--weight-path`: Overrides the default URL, and allows for an
   already-downloaded pretrained weight file to be used with the model.
-- `--max-cache-batch-size`: Specifies the maximum batch size to be used.
+- `--max-batch-size`: Specifies the maximum batch size to be used.
   Default is 1.
 - `--devices`: Specifies the device(s) to use for the model. This can optionally
   be "cpu", "gpu", or a comma-separated list of GPU ID(s) like "gpu-0,gpu-1".

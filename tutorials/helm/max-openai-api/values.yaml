@@ -82,7 +82,7 @@ image:
 maxServe:
   huggingfaceRepoId: modularai/llama-3.1
   maxLength: "2048"
-  maxCacheBatchSize: "250"
+  maxBatchSize: "250"
   cacheStrategy: "continuous"
   maxNumSteps: "10"
 
@@ -152,7 +152,7 @@ inferenceServer:
   args: []
   # - "--huggingface-repo-id=modularai/llama-3.1",
   # - "--max-length=2048",
-  # - "--max-cache-batch-size=250",
+  # - "--max-batch-size=250",
   # - "--cache-strategy=continuous",
   # - "--max-num-steps=10",
 

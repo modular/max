@@ -104,7 +104,7 @@ pipeline:
 - `--force-download`: Specify whether to force a download of configuration
   files and weights even if they already exist in the local cache. Set this
   if you want to ensure you have the correct version of the model.
-- `--max-cache-batch-size`: Specifies the maximum batch size to be used.
+- `--max-batch-size`: Specifies the maximum batch size to be used.
   Default is 1.
 - `--max-ce-batch-size`: Set the maximum cache size reserved for a single
   context encoding batch. The effective limit will be the lesser of this value

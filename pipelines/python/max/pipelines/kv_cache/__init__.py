@@ -46,7 +46,7 @@ CACHE_MANAGER_REGISTRY: dict[KVCacheStrategy, Type[KVCacheManager]] = {
 
 def load_kv_manager(
     params: KVCacheParams,
-    max_cache_batch_size: Optional[int],
+    max_batch_size: Optional[int],
     max_seq_len: int,
     num_layers: int,
     devices: List[Device],
@@ -54,16 +54,12 @@ def load_kv_manager(
     available_cache_memory: Optional[int] = None,
     page_size: Optional[int] = 512,
 ) -> KVCacheManager:
-    assert max_cache_batch_size is not None, (
-        "Expected max_cache_batch_size to be set"
-    )
-    assert max_cache_batch_size > 0, (
-        "max_cache_batch_size must be greater than 0"
-    )
+    assert max_batch_size is not None, "Expected max_batch_size to be set"
+    assert max_batch_size > 0, "max_batch_size must be greater than 0"
     if params.cache_strategy == KVCacheStrategy.CONTINUOUS:
         return ContinuousBatchingKVCacheManager(
             params=params,
-            max_cache_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=max_seq_len,
             num_layers=num_layers,
             devices=devices,
@@ -72,7 +68,7 @@ def load_kv_manager(
     elif params.cache_strategy == KVCacheStrategy.NAIVE:
         return NaiveKVCacheManager(
             params=params,
-            max_cache_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=max_seq_len,
             num_layers=num_layers,
             devices=devices,
@@ -96,7 +92,7 @@ def load_kv_manager(
 
         return PagedKVCacheManager(
             params=params,
-            max_cache_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=max_seq_len,
             num_layers=num_layers,
             devices=devices,
@@ -111,25 +107,21 @@ def load_kv_manager(
 
 def estimate_kv_cache_size(
     params: KVCacheParams,
-    max_cache_batch_size: Optional[int],
+    max_batch_size: Optional[int],
     max_seq_len: int,
     num_layers: int,
     available_cache_memory: int,
     devices: List[Device],
 ) -> int:
-    assert max_cache_batch_size is not None, (
-        "Expected max_cache_batch_size to be set"
-    )
-    assert max_cache_batch_size > 0, (
-        "max_cache_batch_size must be greater than 0"
-    )
+    assert max_batch_size is not None, "Expected max_batch_size to be set"
+    assert max_batch_size > 0, "max_batch_size must be greater than 0"
     if params.cache_strategy not in CACHE_MANAGER_REGISTRY:
         msg = f"cache type: {params.cache_strategy} not supported."
         raise ValueError(msg)
 
     return CACHE_MANAGER_REGISTRY[params.cache_strategy].estimated_memory_size(
         params=params,
-        max_cache_batch_size=max_cache_batch_size,
+        max_batch_size=max_batch_size,
         max_seq_len=max_seq_len,
         num_layers=num_layers,
         available_cache_memory=available_cache_memory,

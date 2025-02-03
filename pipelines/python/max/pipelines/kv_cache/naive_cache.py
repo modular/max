@@ -31,7 +31,7 @@ class NaiveKVCacheManager(KVCacheManager):
     def __init__(
         self,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         devices: List[Device],
@@ -45,7 +45,7 @@ class NaiveKVCacheManager(KVCacheManager):
             raise ValueError("Prefix caching is not supported for naive cache.")
         super().__init__(
             params=params,
-            max_cache_batch_size=max_cache_batch_size,
+            max_batch_size=max_batch_size,
             max_seq_len=max_seq_len,
             num_layers=num_layers,
             devices=devices,
@@ -69,7 +69,7 @@ class NaiveKVCacheManager(KVCacheManager):
     def estimated_memory_size(
         cls,
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
         available_cache_memory: int,
@@ -79,7 +79,7 @@ class NaiveKVCacheManager(KVCacheManager):
             reduce(
                 mul,
                 cls._cache_shape(
-                    params, max_cache_batch_size, max_seq_len, num_layers
+                    params, max_batch_size, max_seq_len, num_layers
                 ),
             )
             * params.dtype.size_in_bytes
@@ -109,7 +109,7 @@ class NaiveKVCacheManager(KVCacheManager):
     def cache_shape(self) -> list[int]:
         return self._cache_shape(
             self.params,
-            self.max_cache_batch_size,
+            self.max_batch_size,
             self.max_seq_len,
             self.num_layers,
         )
@@ -117,14 +117,14 @@ class NaiveKVCacheManager(KVCacheManager):
     @staticmethod
     def _cache_shape(
         params: KVCacheParams,
-        max_cache_batch_size: int,
+        max_batch_size: int,
         max_seq_len: int,
         num_layers: int,
     ):
         return [
             max_seq_len,
             num_layers,
-            max_cache_batch_size,
+            max_batch_size,
             params.n_kv_heads,
             params.head_dim,
         ]
