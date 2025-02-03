@@ -238,7 +238,6 @@ class PipelineRegistry:
                 msg = f"encoding not provided, using default encoding of {arch.default_encoding}"
                 logging.info(msg)
                 pipeline_config.quantization_encoding = arch.default_encoding
-
         # by this point, the quantization_encoding must be provided. verify it is supported.
         if (
             pipeline_config.quantization_encoding

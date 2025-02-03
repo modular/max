@@ -293,6 +293,15 @@ class PagedKVCacheManager(KVCacheManager):
             self.available_blocks.add(block)
 
     @classmethod
+    def _block_size_per_token(
+        cls, params: KVCacheParams, num_layers: int
+    ) -> int:
+        return (
+            reduce(mul, cls._block_shape(params, 1, 1, num_layers), 1)
+            * params.dtype.size_in_bytes
+        )
+
+    @classmethod
     def estimated_memory_size(
         cls,
         params: KVCacheParams,
@@ -302,7 +311,17 @@ class PagedKVCacheManager(KVCacheManager):
         available_cache_memory: int,
         devices: list[Device],
     ) -> int:
-        return available_cache_memory
+        # Determine how much size is necessary to store the full cache based on max_cache_batch_size and max_seq_len.
+        # If that's less than available_cache_memory, return that.
+        # Otherwise, return available_cache_memory.
+        # This is to prevent over-allocation on devices with a large amount of free memory (e.g. CPUs).
+        block_size_per_token = cls._block_size_per_token(
+            params, num_layers
+        ) * len(devices)
+        size_to_support_full_cache = (
+            block_size_per_token * max_cache_batch_size * max_seq_len
+        )
+        return min(available_cache_memory, size_to_support_full_cache)
 
     @classmethod
     def infer_optimal_batch_size(
@@ -317,10 +336,7 @@ class PagedKVCacheManager(KVCacheManager):
         # half of max
         average_seq_length = max_seq_len // 2
 
-        block_size_per_token = (
-            reduce(mul, cls._block_shape(params, 1, 1, num_layers), 1)
-            * params.dtype.size_in_bytes
-        )
+        block_size_per_token = cls._block_size_per_token(params, num_layers)
         num_tokens_in_cache = available_cache_memory // block_size_per_token
 
         # clamp the floor of the paged cache to 32.
