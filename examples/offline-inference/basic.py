@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import os
 
-from architectures import register_all_models
 from max.llm import LLM
 from max.pipelines import PipelineConfig
+from max.pipelines.architectures import register_all_models
 
 
 def main():

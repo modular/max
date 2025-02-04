@@ -16,7 +16,6 @@ import logging
 import os
 
 import click
-from architectures import register_all_models
 from cli import (
     generate_text_for_pipeline,
     list_pipelines_to_console,
@@ -25,6 +24,7 @@ from cli import (
     serve_pipeline,
 )
 from max.pipelines import PIPELINE_REGISTRY, PipelineConfig
+from max.pipelines.architectures import register_all_models
 
 logger = logging.getLogger(__name__)
 try:
