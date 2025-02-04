@@ -116,29 +116,27 @@ if __name__ == "__main__":
     logit_values = frequencies.next_word_probabilities(word_predictions)
 
     batch_size = len(logit_values)
-    k = len(logit_values[0])
+    K = len(logit_values[0])
 
     # Configure our simple one-operation graph.
-    # fmt: off
-    with Graph("top_k_sampler", input_types=[TensorType(DType.float32, shape=[batch_size, k])]) as graph:
+    with Graph(
+        "top_k_sampler",
+        input_types=[TensorType(DType.float32, shape=[batch_size, K])],
+    ) as graph:
         # Take in the single input to the graph.
         x, *_ = graph.inputs
 
-        # The custom Mojo operation is referenced by its string name, we provide input/output types as lists.
+        # The top_k_custom op is referenced by its string name.
         results = ops.custom(
             name="top_k_custom",
-            values=[
-                x,                                                       # input values
-                ops.constant(k, dtype=DType.int64),                      # k (amount of top results)
-                ops.constant(1, dtype=DType.int64),                      # axis
-            ],
+            parameters={"K": K},
+            values=[x],
             out_types=[
-                TensorType(dtype=x.tensor.dtype, shape=x.tensor.shape),  # output values
-                TensorType(dtype=DType.int64, shape=x.tensor.shape),     # output indices
+                TensorType(x.tensor.dtype, x.tensor.shape),
+                TensorType(DType.int32, x.tensor.shape),
             ],
         )
         graph.output(*results)
-    # fmt: on
 
     # Place the graph on a GPU, if available. Fall back to CPU if not.
     device = CPU() if accelerator_count() == 0 else Accelerator()
@@ -153,7 +151,7 @@ if __name__ == "__main__":
     # for the batch size of 1, and move it to the accelerator.
     logits = Tensor.from_numpy(logit_values).to(device)
 
-    print(f"Sampling top_k for batch size: {batch_size}\n")
+    print(f"Sampling top k: {K} for batch size: {batch_size}")
     # Perform the calculation on the target device.
     values, indices = model.execute(logits)
 
@@ -167,7 +165,7 @@ if __name__ == "__main__":
     np_indices = indices.to_numpy()
 
     for i in range(batch_size):
-        print(f"Predicted word after `{word_predictions[i]}`")
+        print(f"\nPredicted word after `{word_predictions[i]}`")
         print("------------------------------")
         print("| word         | confidence  |")
         print("------------------------------")
@@ -176,5 +174,5 @@ if __name__ == "__main__":
         for j in range(len(np_indices[i])):
             if j > len(keys) - 1:
                 break
-            print(f"| {keys[j]:<13}| {np_values[i][j]:<11.8} |")
-        print("------------------------------\n")
+            print(f"| {keys[np_indices[i][j]]:<13}| {np_values[i][j]:<11.8} |")
+        print("------------------------------")
