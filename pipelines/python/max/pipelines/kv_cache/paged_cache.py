@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from functools import reduce
 from itertools import chain
 from operator import mul
-from typing import Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, Optional
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -311,6 +311,7 @@ class PagedKVCacheManager(KVCacheManager):
         num_layers: int,
         available_cache_memory: int,
         devices: list[Device],
+        **kwargs: Any,
     ) -> int:
         # Determine how much size is necessary to store the full cache based on max_batch_size and max_seq_len.
         # If that's less than available_cache_memory, return that.
@@ -332,6 +333,7 @@ class PagedKVCacheManager(KVCacheManager):
         num_layers: int,
         available_cache_memory: int,
         devices: list[Device],
+        **kwargs: Any,
     ) -> int:
         # hardcore assumption that the average sequence length in cache is
         # half of max

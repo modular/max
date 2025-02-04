@@ -79,6 +79,7 @@ class KVCacheManager(ABC):
         num_layers: int,
         available_cache_memory: int,
         devices: List[Device],
+        **kwargs: Any,
     ) -> int:
         """Returns the estimated total memory usage of the kv cache."""
         ...
@@ -92,6 +93,7 @@ class KVCacheManager(ABC):
         num_layers: int,
         available_cache_memory: int,
         devices: List[Device],
+        **kwargs: Any,
     ) -> int:
         """Returns the estimated optimal batch size for the kv cache."""
         ...

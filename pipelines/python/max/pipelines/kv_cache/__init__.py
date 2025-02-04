@@ -112,6 +112,7 @@ def estimate_kv_cache_size(
     num_layers: int,
     available_cache_memory: int,
     devices: List[Device],
+    **kwargs: Any,
 ) -> int:
     assert max_batch_size is not None, "Expected max_batch_size to be set"
     assert max_batch_size > 0, "max_batch_size must be greater than 0"
@@ -126,6 +127,7 @@ def estimate_kv_cache_size(
         num_layers=num_layers,
         available_cache_memory=available_cache_memory,
         devices=devices,
+        **kwargs,
     )
 
 
@@ -135,6 +137,7 @@ def infer_optimal_batch_size(
     num_layers: int,
     available_cache_memory: int,
     devices: List[Device],
+    **kwargs: Any,
 ) -> int:
     return CACHE_MANAGER_REGISTRY[
         params.cache_strategy
@@ -144,6 +147,7 @@ def infer_optimal_batch_size(
         num_layers=num_layers,
         available_cache_memory=available_cache_memory,
         devices=devices,
+        **kwargs,
     )
 
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from functools import reduce
 from operator import mul
-from typing import List
+from typing import Any, List
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -170,6 +170,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         num_layers: int,
         available_cache_memory: int,
         devices: List[Device],
+        **kwargs: Any,
     ) -> int:
         cache_size = (
             reduce(
@@ -193,6 +194,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         num_layers: int,
         available_cache_memory: int,
         devices: List[Device],
+        **kwargs: Any,
     ) -> int:
         cache_size_per_sequence = (
             reduce(

@@ -38,6 +38,7 @@ from max.pipelines.kv_cache import (
     KVCacheParams,
     KVCacheStrategy,
     estimate_kv_cache_size,
+    infer_optimal_batch_size,
     load_kv_manager,
 )
 from max.pipelines.kv_cache._utils import build_max_lengths_tensor
@@ -128,18 +129,36 @@ class MultimodalKVCacheManager(KVCacheManager):
         num_layers: int,
         available_cache_memory: int,
         devices: list[Device],
+        **kwargs: Any,
     ) -> int:
         """Returns the estimated total memory usage of the kv cache."""
-        # TODO(E2EOPT-29): this is incorrect. Estimated memory size should be an
-        # instance method to account for different text and vision KV caches.
-        return 2 * ContinuousBatchingKVCacheManager.estimated_memory_size(
-            params,
-            max_batch_size,
-            max_seq_len,
-            num_layers,
-            available_cache_memory,
-            devices,
+        assert "num_vision_layers" in kwargs, "num_vision_layers must be set"
+        num_vision_layers = kwargs["num_vision_layers"]
+        assert "max_vision_seq_len" in kwargs, "max_vision_seq_len must be set"
+        max_vision_seq_len = kwargs["max_vision_seq_len"]
+
+        vision_kv_cache_size = (
+            ContinuousBatchingKVCacheManager.estimated_memory_size(
+                params,
+                max_batch_size,
+                max_vision_seq_len,
+                num_vision_layers,
+                available_cache_memory,
+                devices,
+            )
         )
+
+        remaining_memory = available_cache_memory - vision_kv_cache_size
+        if remaining_memory > 0:
+            text_kv_cache_size = estimate_kv_cache_size(
+                params,
+                max_batch_size,
+                max_seq_len,
+                num_layers,
+                remaining_memory,
+                devices,
+            )
+        return vision_kv_cache_size + text_kv_cache_size
 
     @classmethod
     def infer_optimal_batch_size(
@@ -149,11 +168,44 @@ class MultimodalKVCacheManager(KVCacheManager):
         num_layers: int,
         available_cache_memory: int,
         devices: list[Device],
+        **kwargs: Any,
     ) -> int:
         """Returns the estimated optimal batch size for the kv cache."""
-        # TODO(E2EOPT-29): this is temporarily hard-coded while we work on
-        # a longer term solution.
-        return 1
+        assert "num_vision_layers" in kwargs, "num_vision_layers must be set"
+        num_vision_layers = kwargs["num_vision_layers"]
+        assert "max_vision_seq_len" in kwargs, "max_vision_seq_len must be set"
+        max_vision_seq_len = kwargs["max_vision_seq_len"]
+
+        # figure out the relative sizes of caches based on KV Cach settings
+        text_size_per_token = num_layers * max_seq_len
+        vision_size_per_token = num_vision_layers * max_vision_seq_len
+        text_to_vision_ratio = text_size_per_token / (
+            text_size_per_token + vision_size_per_token
+        )
+
+        # divvy up our allocation based on this ratio
+        text_cache_size = available_cache_memory * text_to_vision_ratio
+        vision_cache_size = available_cache_memory - text_cache_size
+
+        # infer the optimal batch size for each modality based on its cache size
+        text_batch_size = infer_optimal_batch_size(
+            params,
+            max_seq_len,
+            num_layers,
+            text_cache_size,
+            devices,
+        )
+        vision_batch_size = (
+            ContinuousBatchingKVCacheManager.infer_optimal_batch_size(
+                params,
+                max_vision_seq_len,
+                num_vision_layers,
+                vision_cache_size,
+                devices,
+            )
+        )
+
+        return min(text_batch_size, vision_batch_size)
 
     @final
     def _fetch(
@@ -723,11 +775,16 @@ class LlamaVision(PipelineModel):
     @property
     def vision_max_seq_len(self) -> int:
         """Returns the maximum number of vision tokens."""
+        return self._calculate_vision_max_seq_len(self.pipeline_config)
+
+    @classmethod
+    def _calculate_vision_max_seq_len(cls, config: PipelineConfig) -> int:
+        """Returns the maximum number of vision tokens."""
         # Marshal out hyperparameters.
-        height = self.vision_config.image_size
-        width = self.vision_config.image_size
-        max_num_tiles = self.vision_config.max_num_tiles
-        patch_size = self.vision_config.patch_size
+        height = config.huggingface_config.vision_config.image_size
+        width = config.huggingface_config.vision_config.image_size
+        max_num_tiles = config.huggingface_config.vision_config.max_num_tiles
+        patch_size = config.huggingface_config.vision_config.patch_size
         # TODO(bduke): account for the actual instead of max number of tiles.
         # num_tiles * (image_dim**2 // patch_dim**2 + 1 (cls token))
         return max_num_tiles * ((height * width) // patch_size**2 + 1)
@@ -980,14 +1037,19 @@ class LlamaVision(PipelineModel):
         available_cache_memory: int,
         devices: list[Device],
     ) -> int:
+        assert pipeline_config.max_batch_size is not None
         """Estimates the size of the kv cache in bytes."""
-        return estimate_kv_cache_size(
+        return MultimodalKVCacheManager.estimated_memory_size(
             params=cls.get_kv_params(pipeline_config),
             max_batch_size=pipeline_config.max_batch_size,
             max_seq_len=cls.calculate_max_seq_len(pipeline_config),
             num_layers=pipeline_config.huggingface_config.text_config.num_hidden_layers,
             available_cache_memory=available_cache_memory,
             devices=devices,
+            max_vision_seq_len=cls._calculate_vision_max_seq_len(
+                pipeline_config
+            ),
+            num_vision_layers=pipeline_config.huggingface_config.vision_config.num_hidden_layers,
         )
 
     @classmethod
@@ -996,9 +1058,17 @@ class LlamaVision(PipelineModel):
         pipeline_config: PipelineConfig,
         available_cache_memory: int,
     ) -> int:
-        # TODO(E2EOPT-29): this is temporarily hard-coded while we work on
-        # a longer term solution.
-        return 1
+        return MultimodalKVCacheManager.infer_optimal_batch_size(
+            params=cls.get_kv_params(pipeline_config),
+            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
+            num_layers=pipeline_config.huggingface_config.text_config.num_hidden_layers,
+            available_cache_memory=available_cache_memory,
+            devices=pipeline_config.devices,
+            max_vision_seq_len=cls._calculate_vision_max_seq_len(
+                pipeline_config
+            ),
+            num_vision_layers=pipeline_config.huggingface_config.vision_config.num_hidden_layers,
+        )
 
     def load_model(
         self,
