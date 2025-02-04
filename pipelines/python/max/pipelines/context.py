@@ -162,6 +162,10 @@ class TextContext:
         self.current_length += 1
         self.active_length = 1
 
+        # Accept the token, and move the FSM for constrained decoding forward.
+        if self.matcher:
+            assert self.matcher.accept_token(new_token)
+
     def trim_prompt(self, trim_len: int) -> None:
         """Trims the current prompt by the given number of tokens."""
         if trim_len == 0:
@@ -259,6 +263,10 @@ class TextAndVisionContext:
         # Update context not to re-encode the same image in next steps. There are no image tokens
         # expected after context encoding.
         self.pixel_values = []
+
+        # Accept the token, and move the FSM for constrained decoding forward.
+        if self.matcher:
+            assert self.matcher.accept_token(new_token)
 
     def trim_prompt(self, trim_len: int) -> None:
         """Trims the current prompt by the given number of tokens."""

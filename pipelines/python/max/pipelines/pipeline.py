@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
-
+# mypy: disable-error-code="import-not-found"
 """HF Token Generation Pipeline"""
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from typing import (
     runtime_checkable,
 )
 
+import torch
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
@@ -41,6 +42,11 @@ from .interfaces import TokenGenerator
 from .kv_cache import KVCacheManager, KVCacheParams
 from .response import LogProbabilities, TextResponse
 from .sampling import token_sampler
+
+try:
+    import xgrammar as xgr
+except ImportError:
+    pass
 
 ARCH_SAFE_VRAM_USAGE_LIMIT = {
     "DeepseekCoder": 0.96,
@@ -397,12 +403,24 @@ class TextGenerationPipeline(TokenGenerator[T]):
         self,
         batch: list[T],
         num_steps: int,
-    ) -> tuple[ModelInputs, Any, int]:
+    ) -> tuple[ModelInputs, Any, int, Optional[torch.Tensor]]:
         tracer: Tracer = Tracer("prepare_batch")
+
+        if self._pipeline_config.enable_constrained_decoding:
+            bitmask = torch.ones(
+                xgr.get_bitmask_shape(
+                    len(batch),
+                    self._pipeline_config.huggingface_config.vocab_size,
+                ),
+                dtype=torch.int32,
+            )
+        else:
+            bitmask = None
+
         seq_ids_and_prompts = {}
         seq_ids_and_untrimmed_lengths = {}
         tracer.next("claim_cache_rows")
-        for context in batch:
+        for i, context in enumerate(batch):
             # Claim cache rows for context.
             if not self._pipeline_model.kv_manager.contains(
                 context.cache_seq_id
@@ -420,6 +438,13 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
             # Update num_steps.
             num_steps = self.calculate_num_steps(num_steps, context)
+
+            # Update bitmask
+            if (
+                self._pipeline_config.enable_constrained_decoding
+                and context.matcher
+            ):
+                context.matcher.fill_next_token_bitmask(bitmask, index=i)
 
         # `fetch` mutates the seq_ids_and_prompts input in place when tokens are
         # retrieved from the cache. This shortens the prompt in the event that
@@ -442,7 +467,26 @@ class TextGenerationPipeline(TokenGenerator[T]):
             self._pipeline_model.prepare_initial_token_inputs(batch),
             kv_cache_inputs,
             num_steps,
+            bitmask,
         )
+
+    @traced
+    def sample_logits(
+        self,
+        logits: Tensor,
+        prev_tokens: Tensor,
+        bitmask: Optional[Tensor],
+    ) -> tuple[Tensor, Tensor]:
+        if bitmask is not None:
+            a, b = self._sampler(logits, prev_tokens, bitmask)[:2]
+        else:
+            a, b = self._sampler(
+                logits,
+                prev_tokens,
+            )[:2]
+        assert isinstance(a, Tensor)
+        assert isinstance(b, Tensor)
+        return (a, b)
 
     @traced
     def next_token(
@@ -466,7 +510,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         ]
 
         # Prepare the batch.
-        model_inputs, kv_cache_inputs, num_steps = self.prepare_batch(
+        model_inputs, kv_cache_inputs, num_steps, bitmask = self.prepare_batch(
             context_batch, num_steps
         )
 
@@ -496,10 +540,27 @@ class TextGenerationPipeline(TokenGenerator[T]):
             )
             assert model_outputs.next_token_logits is not None
             next_token_logits = model_outputs.next_token_logits
+
+            if bitmask is not None:
+                bits = 2 ** torch.arange(32, dtype=torch.int32)
+                bitmask = (bitmask.unsqueeze(-1) & bits) != 0
+                bitmask = bitmask.reshape(
+                    len(context_batch),
+                    self._pipeline_config.huggingface_config.vocab_size,
+                ).to(torch.bool)
+
+                bitmask = Tensor.from_dlpack(bitmask).to(
+                    self._pipeline_config.devices[0]
+                )
+
+            # Sample next token.
             tracer.next("sample_next_token")
-            new_tokens, new_generated_tokens = self._sampler(
-                next_token_logits, generated_tokens
-            )[:2]
+            new_tokens, new_generated_tokens = self.sample_logits(
+                next_token_logits,
+                generated_tokens,
+                bitmask,
+            )
+
             assert isinstance(new_tokens, Tensor)
             assert isinstance(new_generated_tokens, Tensor)
             generated_tokens = new_generated_tokens
