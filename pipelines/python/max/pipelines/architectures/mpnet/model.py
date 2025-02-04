@@ -22,7 +22,6 @@ import time
 from typing import Sequence, cast
 
 import numpy as np
-from dataprocessing import collate_batch
 from max.driver import Tensor
 from max.engine import InferenceSession, Model
 from max.pipelines import (
@@ -33,6 +32,7 @@ from max.pipelines import (
     TextContext,
     upper_bounded_default,
 )
+from max.pipelines.dataprocessing import collate_batch
 from max.pipelines.kv_cache import KVCacheParams
 
 from .graph import build_graph

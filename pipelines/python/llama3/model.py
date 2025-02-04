@@ -19,7 +19,6 @@ import warnings
 from typing import List, Sequence, Union, cast
 
 import numpy as np
-from dataprocessing import batch_padded_tokens_and_mask
 from max.driver import CPU, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
@@ -35,6 +34,7 @@ from max.pipelines import (
     TextContext,
     upper_bounded_default,
 )
+from max.pipelines.dataprocessing import batch_padded_tokens_and_mask
 from max.pipelines.kv_cache import (
     KVCacheManager,
     KVCacheParams,
