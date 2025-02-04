@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import reduce
@@ -217,7 +218,6 @@ class PagedKVCacheManager(KVCacheManager):
         self.total_num_pages = int(
             cache_memory_per_device // single_page_size_bytes
         )
-
         # call our base class constructor
         super().__init__(
             params=params,
@@ -317,12 +317,20 @@ class PagedKVCacheManager(KVCacheManager):
         # If that's less than available_cache_memory, return that.
         # Otherwise, return available_cache_memory.
         # This is to prevent over-allocation on devices with a large amount of free memory (e.g. CPUs).
+        assert params.page_size is not None
         block_size_per_token = cls._block_size_per_token(
             params, num_layers
         ) * len(devices)
-        size_to_support_full_cache = (
-            block_size_per_token * max_batch_size * max_seq_len
+
+        # round up our max_seq_len to the nearest page_size
+        max_seq_len_round_up = (
+            math.ceil(max_seq_len / params.page_size) * params.page_size
         )
+        size_to_support_full_cache = (
+            block_size_per_token * max_batch_size * max_seq_len_round_up
+        )
+
+        # return the minimum of the two
         return min(available_cache_memory, size_to_support_full_cache)
 
     @classmethod
