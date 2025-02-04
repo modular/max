@@ -16,7 +16,7 @@ from max.pipelines import PIPELINE_REGISTRY
 
 def register_all_models():
     """Imports model architectures, thus registering the architecture in the shared PIPELINE_REGISTRY."""
-    import llama3 as llama3
+    import max.pipelines.llama3 as llama3
     import max.pipelines.llama_vision as llama_vision
     import max.pipelines.pixtral as pixtral
     from mistral import mistral_arch

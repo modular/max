@@ -17,13 +17,13 @@ from pathlib import Path
 
 import streamlit as st
 import torch
-from llama3.config import get_llama_huggingface_file
 from max.driver import CPU, Accelerator
 from max.pipelines import (
     PIPELINE_REGISTRY,
     PipelineConfig,
     SupportedEncoding,
 )
+from max.pipelines.llama3.config import get_llama_huggingface_file
 from shared import (
     RAG_PROMPT,
     RAG_SYSTEM_PROMPT,
