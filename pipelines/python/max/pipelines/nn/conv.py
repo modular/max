@@ -79,7 +79,7 @@ class Conv1D(Layer):
     groups: int = 1
     bias: bool = False
 
-    def __call__(self, x: TensorValue) -> TensorValue:
+    def __call__(self, x: TensorValueLike) -> TensorValue:
         """
         Args:
             x: a tensor of shape [batch_size, length, in_channels]
