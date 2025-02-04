@@ -12,7 +12,16 @@
 # ===----------------------------------------------------------------------=== #
 """Pipeline cli utilities."""
 
-from .config import config_to_flag, pipeline_config_options
+from .config import (
+    config_to_flag,
+    get_default,
+    get_field_type,
+    is_flag,
+    is_multiple,
+    is_optional,
+    pipeline_config_options,
+    validate_field_type,
+)
 from .device_options import DevicesOptionType
 from .encode import pipeline_encode
 from .generate import generate_text_for_pipeline, stream_text_to_console
@@ -30,4 +39,10 @@ __all__ = [
     "stream_text_to_console",
     "list_pipelines_to_console",
     "pipeline_encode",
+    "get_default",
+    "get_field_type",
+    "is_flag",
+    "is_multiple",
+    "is_optional",
+    "validate_field_type",
 ]
