@@ -366,13 +366,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
         # Load sampler.
         self._sampler = session.load(
-            token_sampler(
-                self._pipeline_config.top_k,
-                # Logits are at index 0 of model outputs.
-                in_dtype=self._pipeline_model.model.output_metadata[0].dtype,  # type: ignore
-                # Logits returned from the sampler are always float32 for now.
-                out_dtype=DType.float32,
-            )
+            token_sampler(self._pipeline_config.sampling_params),
         )
 
     def calculate_num_steps(

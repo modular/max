@@ -20,6 +20,7 @@ from .config import (
     PipelineConfig,
     PipelineEngine,
     RopeType,
+    SamplingParams,
     SupportedEncoding,
     WeightsFormat,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "PipelineEngine",
     "PipelineTask",
     "PIPELINE_REGISTRY",
+    "SamplingParams",
     "SupportedArchitecture",
     "SupportedEncoding",
     "TokenGenerator",

@@ -440,6 +440,14 @@ class HuggingFaceRepo:
             raise ValueError(msg)
 
 
+@dataclass
+class SamplingParams:
+    top_k: int
+    enable_constrained_decoding: bool
+    in_dtype: DType
+    out_dtype: DType
+
+
 @dataclass(frozen=False)
 class PipelineConfig:
     # When adding a new config parameter here, please remember to add a
@@ -506,9 +514,6 @@ class PipelineConfig:
     enable_prefix_caching: bool = False
     """Whether to enable prefix caching for the paged attention KVCache."""
 
-    enable_constrained_decoding: bool = False
-    """Whether to enable constrained decoding in the text generation pipeline."""
-
     device_memory_utilization: float = 0.9
     """The fraction of available device memory that the process should consume.
 
@@ -522,6 +527,10 @@ class PipelineConfig:
 
     top_k: int = 1
     """Limits the sampling to the K most probable tokens. This defaults to 1, which enables greedy sampling."""
+
+    enable_constrained_decoding: bool = False
+    """Enable structured generation/guided decoding for the server. This allows the user to pass a json
+    schema in the response_format field, which the LLM will adhere to."""
 
     trust_remote_code: bool = False
     """Whether or not to allow for custom modelling files on Huggingface."""
@@ -867,4 +876,13 @@ class PipelineConfig:
                 else self.huggingface_repo_id
             ),
             trust_remote_code=self.trust_remote_code,
+        )
+
+    @cached_property
+    def sampling_params(self) -> SamplingParams:
+        return SamplingParams(
+            top_k=self.top_k,
+            enable_constrained_decoding=self.enable_constrained_decoding,
+            in_dtype=DType.float32,
+            out_dtype=DType.float32,
         )

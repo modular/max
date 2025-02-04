@@ -15,30 +15,73 @@
 
 from max.dtype import DType
 from max.graph import Dim, Graph, Shape, TensorType, TensorValue, ops
+from max.pipelines import SamplingParams
 
 
-def token_sampler(top_k: int, in_dtype: DType, out_dtype: DType):
-    logits_in_type = TensorType(in_dtype, ["batch", "vocab_size"])
+def _bitmask_sampler(sampling_params: SamplingParams) -> Graph:
+    logits_in_type = TensorType(
+        sampling_params.in_dtype, ["batch", "vocab_size"]
+    )
+    prev_tokens_type = TensorType(DType.int64, ["batch", "num_prev_steps"])
+    bitmask_type = TensorType(DType.bool, ["batch", "vocab_size"])
+
+    with Graph(
+        "bitmask_sampler",
+        input_types=[logits_in_type, prev_tokens_type, bitmask_type],
+    ) as graph:
+        # Deconstruct inputs and cast.
+        logits, prev_tokens, bitmask = (val.tensor for val in graph.inputs)
+        logits = ops.cast(logits, sampling_params.out_dtype)
+
+        # Mask the logits out.
+        logits = ops.select(
+            bitmask, logits, ops.constant(-10000, dtype=DType.float32)
+        )
+
+        # Apply top_k or argmax sampling.
+        shape = Shape(logits.shape)
+        shape[-1] = Dim(1)
+        tokens = ops.custom(
+            "topk_fused_sampling",
+            [
+                ops.constant(sampling_params.top_k, dtype=DType.int64),
+                logits,
+            ],
+            [TensorType(DType.int64, shape)],
+        )[0]
+        assert isinstance(tokens, TensorValue)
+
+        all_tokens = ops.concat([prev_tokens, tokens], -1)
+        tokens = ops.squeeze(tokens, -1)
+        graph.output(tokens, all_tokens)
+
+        return graph
+
+
+def _vanilla_sampler(sampling_params: SamplingParams) -> Graph:
+    logits_in_type = TensorType(
+        sampling_params.in_dtype, ["batch", "vocab_size"]
+    )
     prev_tokens_type = TensorType(DType.int64, ["batch", "num_prev_steps"])
     with Graph(
         "token_sampler", input_types=[logits_in_type, prev_tokens_type]
     ) as graph:
         logits, prev_tokens = (val.tensor for val in graph.inputs)
-        logits = ops.cast(logits, out_dtype)
+        logits = ops.cast(logits, sampling_params.out_dtype)
 
-        if top_k > 1:
+        if sampling_params.top_k > 1:
             shape = Shape(logits.shape)
             shape[-1] = Dim(1)
             tokens = ops.custom(
                 "topk_fused_sampling",
-                [ops.constant(top_k, dtype=DType.int64), logits],
+                [
+                    ops.constant(sampling_params.top_k, dtype=DType.int64),
+                    logits,
+                ],
                 [TensorType(DType.int64, shape)],
             )[0]
             assert isinstance(tokens, TensorValue)
         else:
-            # When top_k == 1, argmax is equivalent to our topk_fused_sampling with k == 1
-            # However, switching to just using our topk_fused_sampling leads to a -37% perf
-            # drop in q4_k benchmarking for llama 3.
             tokens = ops.argmax(logits)
 
         all_tokens = ops.concat([prev_tokens, tokens], -1)
@@ -48,6 +91,8 @@ def token_sampler(top_k: int, in_dtype: DType, out_dtype: DType):
         return graph
 
 
-def argmax_sampler(dtype: DType):
-    logits_type = TensorType(dtype, ["batch", "vocab_size"])
-    return Graph("argmax", ops.argmax, input_types=[logits_type])
+def token_sampler(sampling_params: SamplingParams) -> Graph:
+    if sampling_params.enable_constrained_decoding:
+        return _bitmask_sampler(sampling_params)
+    else:
+        return _vanilla_sampler(sampling_params)
