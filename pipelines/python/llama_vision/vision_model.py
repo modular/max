@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from max.dtype import DType
 from max.graph import Dim, StaticDim, TensorValue, TensorValueLike, ops
 from max.graph.weights import Weights
-from nn import Conv2D, Embedding, Linear, LPLayerNorm
-from nn.layer import Layer
+from max.pipelines.nn import Conv2D, Embedding, Linear, LPLayerNorm
+from max.pipelines.nn.layer import Layer
 
 from .attention import Attention
 from .encoder import VisionEncoder, VisionEncoderLayer

@@ -23,15 +23,15 @@ from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheCollection,
     KVCacheParams,
 )
-from nn import MLP, RMSNorm
-from nn.kernels import (
+from max.pipelines.nn import MLP, RMSNorm
+from max.pipelines.nn.kernels import (
     MHAMaskVariant,
     cross_attention_ragged,
     matmul_kv_cache_ragged,
     rms_norm_key_cache,
 )
-from nn.layer import Layer
-from nn.linear import Linear
+from max.pipelines.nn.layer import Layer
+from max.pipelines.nn.linear import Linear
 
 
 @dataclass

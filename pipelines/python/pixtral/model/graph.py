@@ -16,7 +16,7 @@ from max.graph import Graph, TensorType
 from max.graph.weights import SafetensorWeights
 from max.pipelines import PipelineConfig
 from max.pipelines.kv_cache import KVCacheManager, KVCacheParams
-from nn import Linear
+from max.pipelines.nn import Linear
 
 from ..llava.llava import (
     LlavaConditionalGeneration,

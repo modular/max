@@ -21,8 +21,14 @@ from max.pipelines.kv_cache import (
     FetchPagedKVCacheCollection,
     KVCacheParams,
 )
-from nn import Embedding, Linear, LPLayerNorm, RMSNorm, TransformerBlock
-from nn.layer import Layer
+from max.pipelines.nn import (
+    Embedding,
+    Linear,
+    LPLayerNorm,
+    RMSNorm,
+    TransformerBlock,
+)
+from max.pipelines.nn.layer import Layer
 
 
 @dataclass

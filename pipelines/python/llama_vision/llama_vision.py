@@ -41,8 +41,8 @@ from max.pipelines.kv_cache import (
     load_kv_manager,
 )
 from max.pipelines.kv_cache._utils import build_max_lengths_tensor
-from nn import Linear
-from nn.layer import Layer
+from max.pipelines.nn import Linear
+from max.pipelines.nn.layer import Layer
 
 from .language_model import CausalLanguageModel, instantiate_language_model
 from .vision_model import instantiate_vision_model

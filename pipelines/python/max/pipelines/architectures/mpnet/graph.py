@@ -19,13 +19,8 @@ from max.graph import Graph, TensorType, TensorValue, ops
 from max.graph.quantization import QuantizationEncoding
 from max.graph.weights import Weights
 from max.pipelines import PipelineConfig
-from nn import (
-    Embedding,
-    Linear,
-    LPLayerNorm,
-    Sequential,
-)
-from nn.layer import Layer
+from max.pipelines.nn import Embedding, Linear, LPLayerNorm, Sequential
+from max.pipelines.nn.layer import Layer
 
 
 def _quantization_encoding(

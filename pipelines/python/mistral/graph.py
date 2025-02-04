@@ -21,7 +21,7 @@ from max.pipelines.kv_cache import (
     KVCacheManager,
     KVCacheParams,
 )
-from nn import (
+from max.pipelines.nn import (
     MLP,
     AttentionWithRope,
     Embedding,

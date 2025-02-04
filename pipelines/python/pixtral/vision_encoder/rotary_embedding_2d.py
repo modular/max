@@ -19,7 +19,7 @@ from typing import List, Optional
 import numpy as np
 from max.dtype import DType
 from max.graph import Dim, DimLike, TensorValue, TensorValueLike, ops
-from nn.layer import Layer
+from max.pipelines.nn.layer import Layer
 
 
 def meshgrid(height: DimLike, width: DimLike, indexing="ij") -> TensorValue:

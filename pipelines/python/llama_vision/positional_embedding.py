@@ -18,8 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from max.graph import TensorValue, Weight, ops
-from nn import Embedding
-from nn.layer import Layer
+from max.pipelines.nn import Embedding
+from max.pipelines.nn.layer import Layer
 
 
 @dataclass

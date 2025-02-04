@@ -37,7 +37,7 @@ from max.pipelines.kv_cache import (
     estimate_kv_cache_size,
     load_kv_manager,
 )
-from nn.compute_log_probabilities import compute_log_probabilities
+from max.pipelines.nn.compute_log_probabilities import compute_log_probabilities
 
 from .graph import _build_graph
 

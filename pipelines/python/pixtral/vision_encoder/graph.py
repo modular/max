@@ -16,7 +16,7 @@ from max.dtype import DType
 from max.graph import Graph, ops
 from max.graph.weights import SafetensorWeights
 from max.pipelines import PipelineConfig
-from nn import Conv2D, Linear, RMSNorm
+from max.pipelines.nn import Conv2D, Linear, RMSNorm
 
 from .attention import Attention
 from .rotary_embedding_2d import RotaryEmbedding2D

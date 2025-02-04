@@ -24,7 +24,7 @@ from max.pipelines.kv_cache import (
     FetchContinuousBatchingKVCacheCollection,
     KVCacheParams,
 )
-from nn import (
+from max.pipelines.nn import (
     MLP,
     AttentionWithRopeQKV,
     Embedding,
@@ -33,7 +33,7 @@ from nn import (
     RMSNorm,
     TransformerBlock,
 )
-from nn.layer import Layer
+from max.pipelines.nn.layer import Layer
 
 from .cross_attention_decoder import (
     CrossAttentionDecoderLayer,

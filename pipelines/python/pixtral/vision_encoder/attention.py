@@ -16,8 +16,8 @@ import math
 from dataclasses import dataclass
 
 from max.graph import TensorValue, TensorValueLike, ops
-from nn.layer import Layer
-from nn.linear import Linear
+from max.pipelines.nn.layer import Layer
+from max.pipelines.nn.linear import Linear
 
 from .attention_utils import rotate_half
 
