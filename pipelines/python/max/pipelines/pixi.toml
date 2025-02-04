@@ -12,6 +12,7 @@ replit = "python pipelines.py replit"
 mistral = "python pipelines.py mistral"
 generate = "python pipelines.py generate"
 serve = "python pipelines.py serve"
+list = "python pipelines.py list"
 
 [dependencies]
 python = ">=3.9,<3.13"
