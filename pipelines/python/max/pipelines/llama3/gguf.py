@@ -269,42 +269,31 @@ def _attention_opaque(
     weights: Weights,
     layer_idx: TensorValue,
 ) -> AttentionWithRope:
-    wq = ops.transpose(
-        weights.attn_q.weight.allocate(
-            pipeline_config.dtype,
-            [
-                pipeline_config.huggingface_config.hidden_size,
-                pipeline_config.huggingface_config.hidden_size,
-            ],
-            pipeline_config.quantization_encoding.quantization_encoding,
-        ),
-        0,
-        1,
-    )
     kv_weight_dim = (
         pipeline_config.huggingface_config.hidden_size
         // pipeline_config.huggingface_config.num_attention_heads
     ) * pipeline_config.huggingface_config.num_key_value_heads
-    wk = ops.transpose(
-        weights.attn_k.weight.allocate(
-            pipeline_config.dtype,
-            [kv_weight_dim, pipeline_config.huggingface_config.hidden_size],
-            pipeline_config.quantization_encoding.quantization_encoding,
-        ),
-        0,
-        1,
+
+    wq = weights.attn_q.weight.allocate(
+        pipeline_config.dtype,
+        [
+            pipeline_config.huggingface_config.hidden_size,
+            pipeline_config.huggingface_config.hidden_size,
+        ],
+        pipeline_config.quantization_encoding.quantization_encoding,
     )
-    wv = ops.transpose(
-        weights.attn_v.weight.allocate(
-            pipeline_config.dtype,
-            [kv_weight_dim, pipeline_config.huggingface_config.hidden_size],
-            pipeline_config.quantization_encoding.quantization_encoding,
-        ),
-        0,
-        1,
+    wk = weights.attn_k.weight.allocate(
+        pipeline_config.dtype,
+        [kv_weight_dim, pipeline_config.huggingface_config.hidden_size],
+        pipeline_config.quantization_encoding.quantization_encoding,
+    )
+    wv = weights.attn_v.weight.allocate(
+        pipeline_config.dtype,
+        [kv_weight_dim, pipeline_config.huggingface_config.hidden_size],
+        pipeline_config.quantization_encoding.quantization_encoding,
     )
 
-    wqkv = ops.concat((wq, wk, wv), axis=1).transpose(0, 1)
+    wqkv = ops.concat((wq, wk, wv))
 
     return AttentionWithRope(
         n_heads=pipeline_config.huggingface_config.num_attention_heads,
