@@ -30,6 +30,8 @@ from .interfaces import TokenGenerator
 from .kv_cache import ContinuousHFStaticCache
 from .response import TextResponse
 
+logger = logging.getLogger("max.pipelines")
+
 DEFAULT_MAX_SEQ_LEN = 512
 
 
@@ -67,7 +69,7 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
             if isinstance(eos_tokens, int):
                 if eos_tokens != eos_token_id:
                     msg = f"eos_token_id provided in huggingface config ({eos_tokens}), does not match provided eos_token_id ({eos_token_id}), using provided eos_token_id"
-                    logging.warning(msg)
+                    logger.warning(msg)
 
                 eos_token_id = set([eos_tokens])
             elif isinstance(eos_tokens, list):
@@ -77,7 +79,7 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
                     eos_token_id = set([eos_token_id])
             else:
                 msg = f"eos_token_id in huggingface_config, is neither int or list: {eos_tokens}"
-                logging.warning(msg)
+                logger.warning(msg)
                 self._eos_token_id = set([eos_token_id])
         else:
             eos_token_id = set([eos_token_id])

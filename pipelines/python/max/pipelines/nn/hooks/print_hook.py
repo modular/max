@@ -25,6 +25,8 @@ from max.pipelines.nn.layer import Layer, add_layer_hook, clear_hooks
 from .base_print_hook import BasePrintHook
 from .identity import IdentitySet
 
+logger = logging.getLogger("max.pipelines")
+
 
 class PrintHook(BasePrintHook):
     """Hook that prints/saves layer tensor inputs and outputs.
@@ -37,7 +39,7 @@ class PrintHook(BasePrintHook):
         super().__init__(export_path=export_path)
         add_layer_hook(self)
         if export_path is not None:
-            logging.warning(
+            logger.warning(
                 "Export path is currently not supported. Values will be printed"
                 " to stdout with COMPACT format."
             )

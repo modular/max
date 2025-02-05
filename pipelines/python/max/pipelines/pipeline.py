@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import (
@@ -47,6 +46,8 @@ try:
     import xgrammar as xgr
 except ImportError:
     pass
+
+logger = logging.getLogger("max.pipelines")
 
 ARCH_SAFE_VRAM_USAGE_LIMIT = {
     "DeepseekCoder": 0.96,
@@ -346,7 +347,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
             if isinstance(eos_tokens, int):
                 if eos_tokens != eos_token_id:
                     msg = f"eos_token_id provided in huggingface config ({eos_tokens}), does not match provided eos_token_id ({eos_token_id}), using provided eos_token_id"
-                    logging.warning(msg)
+                    logger.warning(msg)
 
                 self._eos_token_id = set([eos_tokens])
             elif isinstance(eos_tokens, list):
@@ -356,7 +357,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
                     self._eos_token_id = set([eos_token_id])
             else:
                 msg = f"eos_token_id in huggingface_config, is neither int or list: {eos_tokens}"
-                logging.warning(msg)
+                logger.warning(msg)
                 self._eos_token_id = set([eos_token_id])
 
         else:
@@ -578,7 +579,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
                         )
                     )
                 except NotImplementedError:
-                    warnings.warn(
+                    logger.warning(
                         "Unable to compute log probabilities for"
                         f" {self._pipeline_config.short_name}"
                     )

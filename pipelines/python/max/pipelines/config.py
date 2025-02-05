@@ -50,7 +50,7 @@ from max.graph.weights import (
 from max.pipelines.kv_cache import KVCacheStrategy
 from transformers import AutoConfig
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("max.pipelines")
 
 
 class PipelineEngine(str, Enum):
@@ -291,7 +291,7 @@ class HuggingFaceRepo:
                                 )
                             else:
                                 msg = f"unknown dtype found in safetensors file: {weight_dtype}"
-                                logging.warning(msg)
+                                logger.warning(msg)
 
             elif self.repo_type == RepoType.online:
                 if safetensors_info := self.info.safetensors:
@@ -323,7 +323,7 @@ class HuggingFaceRepo:
                     supported_encodings.add(SupportedEncoding.bfloat16)
             else:
                 msg = "torch_dtype not available, cant infer encoding from config.json"
-                logging.warning(msg)
+                logger.warning(msg)
 
         return list(supported_encodings)
 
@@ -382,7 +382,7 @@ class HuggingFaceRepo:
             msg = (
                 "cannot infer encoding from .bin files, returning all bin files"
             )
-            logging.warning(msg)
+            logger.warning(msg)
             return self._get_pytorch_files_for_encoding(encoding)
 
         if weights_format is WeightsFormat.gguf:
@@ -399,7 +399,7 @@ class HuggingFaceRepo:
         gguf_files.update(pytorch_files)
 
         if not gguf_files and alternate_encoding:
-            logging.warning(
+            logger.warning(
                 "Could not find checkpoint with %s encoding, searching for %s files instead.",
                 encoding,
                 alternate_encoding,
@@ -595,7 +595,7 @@ class PipelineConfig:
 
         if self.max_cache_batch_size is not None:
             msg = "--max-cache-batch-size is deprecated, use `--max-batch-size` instead. This setting will stop working in a future release."
-            logging.warning(msg)
+            logger.warning(msg)
             self.max_batch_size = self.max_cache_batch_size
 
         weight_paths = []
@@ -675,13 +675,13 @@ class PipelineConfig:
                     "more than one architecture listed in HuggingFace config,"
                     " using the first one."
                 )
-                logging.warning(msg)
+                logger.warning(msg)
 
             if architectures:
                 self.architecture = architectures[0]
             else:
                 msg = "architectures not listed in HuggingFace config, trying with general `huggingface` engine"
-                logging.warning(msg)
+                logger.warning(msg)
 
                 self.engine = PipelineEngine.HUGGINGFACE
 

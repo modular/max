@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 import time
-import warnings
 from typing import List, Sequence, Union, cast
 
 import numpy as np
@@ -44,6 +43,8 @@ from max.pipelines.kv_cache import (
 from max.pipelines.nn.compute_log_probabilities import compute_log_probabilities
 
 from .gguf import distributed_transformer_opaque, transformer
+
+logger = logging.getLogger("max.pipelines")
 
 
 class Llama3Inputs(ModelInputs):
@@ -296,27 +297,28 @@ class Llama3Model(PipelineModel):
             for name, weight in self._weights.items():
                 weights_registry[name] = weight.raw_tensor()
 
-            logging.info("Loading serialized model from %s", serialized_path)
+            logger.info("Loading serialized model from %s", serialized_path)
 
             return session.load(
                 serialized_path, weights_registry=weights_registry
             )
 
         else:
-            logging.info("Building model...")
-            graph = self._build_graph(self._weights)
-            logging.info("Compiling...")
+            logger.info("Building and compiling model...")
             before = time.perf_counter()
+            graph = self._build_graph(self._weights)
             model = session.load(
                 graph, weights_registry=self._weights.allocated_weights
             )
             after = time.perf_counter()
-            logging.info(f"Compiling model took {after - before:.6f} seconds")
+            logger.info(
+                f"Building and compiling model took {after - before:.6f} seconds"
+            )
             if (
                 export_path
                 := self.pipeline_config.save_to_serialized_model_path
             ):
-                logging.info("Exporting serialized model to %s", export_path)
+                logger.info("Exporting serialized model to %s", export_path)
                 model._export_mef(export_path)
             return model
 
@@ -486,7 +488,7 @@ class Llama3Model(PipelineModel):
     ) -> list[LogProbabilities | None] | None:
         if any(echo for echo in batch_echo):
             if model_outputs.logits is None:
-                warnings.warn(
+                logger.warning(
                     "Could not get logprobs with echo because the full logits"
                     f" were not returned by {self.pipeline_config.short_name}"
                     " model. Please ensure that this model is started with "

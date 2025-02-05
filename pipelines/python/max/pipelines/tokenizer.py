@@ -46,6 +46,8 @@ from .interfaces import (
     TokenGeneratorRequestTool,
 )
 
+logger = logging.getLogger("max.pipelines")
+
 
 class IdentityPipelineTokenizer(
     PipelineTokenizer[TokenGeneratorContext, str],
@@ -97,7 +99,7 @@ class PreTrainedPipelineTokenizer(
                 "apply_chat_template failed for"
                 " PreTrainedTokenGeneratorTokenizer"
             )
-            logging.warning(msg)
+            logger.warning(msg)
             return "\n".join([str(message["content"]) for message in messages])
 
     @property
@@ -200,7 +202,7 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
                 "apply_chat_template failed for"
                 f" TextTokenizer({self.config.huggingface_repo_id})"
             )
-            logging.warning(msg)
+            logger.warning(msg)
             return "\n".join([str(message["content"]) for message in messages])
 
     @property
@@ -357,8 +359,8 @@ class TextAndVisionTokenizer(
             return cast(str, templated_message)
         except Exception as e:
             msg = "apply_chat_template failed for TextAndVisionTokenizer"
-            logging.warning(msg)
-            logging.warning(str(e))
+            logger.warning(msg)
+            logger.warning(str(e))
             prompt = []
             for message in messages:
                 if isinstance(message["content"], str):

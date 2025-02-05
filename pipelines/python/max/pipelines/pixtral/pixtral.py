@@ -39,6 +39,8 @@ from max.pipelines.kv_cache import (
 from .model.graph import _build_text_graph, _build_vision_graph
 from .vision_encoder.attention_utils import causal_attention_mask_2d_from_imgs
 
+logger = logging.getLogger("max.pipelines")
+
 
 class PixtralInputs(ModelInputs):
     """Holds inputs for the Pixtral model."""
@@ -280,14 +282,16 @@ class PixtralModel(PipelineModel):
             np.arange(self.pipeline_config.max_batch_size + 1, dtype=np.uint32)
         ).to(self.pipeline_config.devices[0])
 
-        self._weights = self.pipeline_config.load_weights()
+        weights = self.pipeline_config.load_weights()
 
-        if not isinstance(self._weights, SafetensorWeights):
+        if not isinstance(weights, SafetensorWeights):
             msg = (
                 "only safetensors weights are currently supported in Pixtral"
                 " models."
             )
             raise ValueError(msg)
+
+        self._weights = weights
 
         if serialized_path := self.pipeline_config.serialized_model_path:
             # Hydrate all weights to be referenced by the serialized path.
@@ -296,16 +300,9 @@ class PixtralModel(PipelineModel):
                 weights_registry[name] = weight.raw_tensor()
 
             def serialized_load(serialized_path):
-                logging.info(
-                    "Loading serialized model from %s", serialized_path
-                )
-                before = time.perf_counter()
+                logger.info("Loading serialized model from %s", serialized_path)
                 model = session.load(
                     f"{serialized_path}", weights_registry=weights_registry
-                )
-                after = time.perf_counter()
-                logging.info(
-                    f"Loading serialized model took {after - before:.6f} seconds"
                 )
                 return model
 
@@ -314,41 +311,40 @@ class PixtralModel(PipelineModel):
 
         else:
 
-            def compile_model(graph, label, export_path=None):
-                logging.info(f"Compiling {label} model...")
+            def build_and_compile_model(build, label, export_path=None):
+                logger.info(f"Building and compiling {label} model...")
+                graph = build()
                 before = time.perf_counter()
                 model = session.load(
                     graph,
                     weights_registry=self._weights.allocated_weights,
                 )
                 after = time.perf_counter()
-                logging.info(
-                    f"Compiling {label} model took {after - before:.6f} seconds"
+                logger.info(
+                    f"Building and compiling {label} model took {after - before:.6f} seconds"
                 )
                 if export_path:
                     mef_path = f"{export_path}.{label}"
-                    logging.info(
+                    logger.info(
                         f"Exporting serialized {label} model to {mef_path}"
                     )
                     model._export_mef(mef_path)
                 return model
 
             export_path = self.pipeline_config.save_to_serialized_model_path
-            logging.info("Building vision model...")
-            vision_graph = _build_vision_graph(
+            build = lambda: _build_vision_graph(
                 pipeline_config=self.pipeline_config,
                 weights=self._weights,
             )
-            vision_model = compile_model(vision_graph, "vision", export_path)
+            vision_model = build_and_compile_model(build, "vision", export_path)
 
-            logging.info("Building text model...")
-            text_graph = _build_text_graph(
+            build = lambda: _build_text_graph(
                 pipeline_config=self.pipeline_config,
                 weights=self._weights,
                 max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
                 kv_params=self.get_kv_params(self.pipeline_config),
                 kv_manager=self.kv_manager,
             )
-            text_model = compile_model(text_graph, "text", export_path)
+            text_model = build_and_compile_model(build, "text", export_path)
 
         return vision_model, text_model

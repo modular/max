@@ -43,6 +43,8 @@ from .kv_cache import KVCacheStrategy
 from .pipeline import KVCacheMixin, PipelineModel, TextGenerationPipeline
 from .tokenizer import TextAndVisionTokenizer, TextTokenizer
 
+logger = logging.getLogger("max.pipelines")
+
 # Store a map of checkpoint encodings that can be cast to another dtype while
 # keeping similar results. Maps the requested encoding to an acceptable
 # alternate checkpoint encoding.
@@ -130,11 +132,6 @@ class PipelineRegistry:
             or pipeline_config.engine == PipelineEngine.MAX
         ):
             if pipeline_config.architecture in self.architectures:
-                msg = (
-                    "optimized architecture found for"
-                    f" '{pipeline_config.architecture}' validating architecture for MAX engine."
-                )
-                logging.info(msg)
                 return self.architectures[pipeline_config.architecture]
             else:
                 return None
@@ -168,7 +165,7 @@ class PipelineRegistry:
                 f" '{pipeline_config.architecture}' falling back to"
                 " HuggingFace."
             )
-            logging.info(msg)
+            logger.warning(msg)
             pipeline_config.engine = PipelineEngine.HUGGINGFACE
             return pipeline_config
 
@@ -214,7 +211,7 @@ class PipelineRegistry:
                     str(pipeline_config.weight_path[0])
                 ):
                     msg = f"encoding inferred from weights file: {encoding}"
-                    logging.info(msg)
+                    logger.debug(msg)
                     pipeline_config.quantization_encoding = encoding
 
             else:
@@ -222,7 +219,7 @@ class PipelineRegistry:
                     pipeline_config.weight_path[0]
                 ):
                     msg = f"encoding inferred from weights file: {encoding}"
-                    logging.info(msg)
+                    logger.debug(msg)
                     pipeline_config.quantization_encoding = encoding
                 else:
                     msg = f"encoding cannot be inferred from weights file: {pipeline_config.weight_path[0]}, please pass a quantization_encoding explictly."
@@ -232,11 +229,11 @@ class PipelineRegistry:
             supported_encodings = huggingface_weights_repo.supported_encodings
             if len(supported_encodings) == 1:
                 msg = f"huggingface repo only has '{supported_encodings[0]}' weights, using '{supported_encodings[0]}'"
-                logging.info(msg)
+                logger.debug(msg)
                 pipeline_config.quantization_encoding = supported_encodings[0]
             else:
                 msg = f"encoding not provided, using default encoding of {arch.default_encoding}"
-                logging.info(msg)
+                logger.debug(msg)
                 pipeline_config.quantization_encoding = arch.default_encoding
         # by this point, the quantization_encoding must be provided. verify it is supported.
         if (
@@ -249,7 +246,7 @@ class PipelineRegistry:
 
             else:
                 msg = f"quantization_encoding of '{pipeline_config.quantization_encoding}' not supported by MAX engine, falling back to HuggingFace."
-                logging.info(msg)
+                logger.warning(msg)
                 pipeline_config.engine = PipelineEngine.HUGGINGFACE
                 return pipeline_config
 
@@ -300,7 +297,7 @@ class PipelineRegistry:
         ):
             default_strategy = supported_cache_strategies[0]
             msg = f"default cache_strategy of '{default_strategy}' enabled"
-            logging.info(msg)
+            logger.debug(msg)
 
             pipeline_config.cache_strategy = default_strategy
         elif (
@@ -310,7 +307,7 @@ class PipelineRegistry:
             supported_strategy = supported_cache_strategies[0]
 
             msg = f"cache_strategy = '{pipeline_config.cache_strategy}' not supported for '{pipeline_config.quantization_encoding}', using '{supported_strategy}' cache strategy."
-            logging.info(msg)
+            logger.warning(msg)
 
             pipeline_config.cache_strategy = supported_strategy
 
@@ -350,7 +347,7 @@ class PipelineRegistry:
                 sum(d.stats["free_memory"] for d in pipeline_config.devices)
             )
         except Exception as e:
-            logging.warning(
+            logger.warning(
                 "Unable to estimate memory footprint of model, can't query device stats: "
                 + str(e)
             )
@@ -424,7 +421,7 @@ class PipelineRegistry:
             f"\n\t{max_length_str}"
             f"\n\t{max_batch_size_str}\n"
         )
-        logging.info(logging_str)
+        logger.info(logging_str)
 
         if isinstance(free_memory, (int, float)):
             if total_size > free_memory:
@@ -440,7 +437,7 @@ class PipelineRegistry:
                 )
 
             elif total_size > vram_usage_limit_scale * free_memory:
-                logging.warning(
+                logger.warning(
                     "Estimated model and kv cache memory use nears available memory. You may experience errors."
                 )
 
@@ -861,7 +858,7 @@ class PipelineRegistry:
 
             # MAX pipeline
             arch = self.architectures[pipeline_config.architecture]
-            logging.info(
+            logger.info(
                 self._load_logging_message(
                     pipeline_config=pipeline_config,
                     tokenizer_type=arch.tokenizer,
@@ -910,7 +907,7 @@ class PipelineRegistry:
             tokenizer = TextTokenizer(
                 config=pipeline_config, enable_llama_whitespace_fix=True
             )
-            logging.info(
+            logger.info(
                 self._load_logging_message(
                     pipeline_config=pipeline_config,
                     tokenizer_type=TextTokenizer,

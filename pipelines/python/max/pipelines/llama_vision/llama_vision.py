@@ -48,6 +48,8 @@ from max.pipelines.nn.layer import Layer
 from .language_model import CausalLanguageModel, instantiate_language_model
 from .vision_model import instantiate_vision_model
 
+logger = logging.getLogger("max.pipelines")
+
 
 class MultimodalKVCacheManager(KVCacheManager):
     """A lightweight wrapper around text and vision KV managers.
@@ -1080,31 +1082,27 @@ class LlamaVision(PipelineModel):
         """
         self.weights = self.pipeline_config.load_weights()
 
-        logging.info("Building vision model...")
+        logger.info("Building and compiling vision model...")
+        before = time.perf_counter()
         vision_model_graph = self._llama3_vision_vision_graph()
 
-        logging.info("Building language model...")
-        language_model_graph = self._llama3_vision_language_graph()
-
-        logging.info("Compiling vision model...")
-        before = time.perf_counter()
         vision_model = session.load(
             vision_model_graph,
             weights_registry=self.weights.allocated_weights,
         )
         after = time.perf_counter()
-        logging.info(
-            f"Compiling vision model took {after - before:.6f} seconds"
-        )
+        logger.info(f"Compiling vision model took {after - before:.6f} seconds")
 
-        logging.info("Compiling language model...")
+        logger.info("Building and compiling language model...")
         before = time.perf_counter()
+        language_model_graph = self._llama3_vision_language_graph()
+
         language_model = session.load(
             language_model_graph,
             weights_registry=self.weights.allocated_weights,
         )
         after = time.perf_counter()
-        logging.info(
-            f"Compiling language model took {after - before:.6f} seconds"
+        logger.info(
+            f"Building and compiling language model took {after - before:.6f} seconds"
         )
         return (vision_model, language_model)

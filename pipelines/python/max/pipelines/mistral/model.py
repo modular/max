@@ -38,6 +38,8 @@ from max.pipelines.kv_cache import (
 
 from .graph import _build_graph
 
+logger = logging.getLogger("max.pipelines")
+
 
 class MistralInputs(ModelInputs):
     """A class representing inputs for the Mistral model.
@@ -216,7 +218,7 @@ class MistralModel(PipelineModel):
             weights_registry = {}
             for name, weight in self._weights.items():
                 weights_registry[name] = weight.raw_tensor()
-            logging.info(
+            logger.info(
                 "Loading serialized model from ", serialized_path, "..."
             )
             return session.load(
@@ -224,7 +226,8 @@ class MistralModel(PipelineModel):
                 weights_registry=weights_registry,
             )
         else:
-            logging.info("Building model...")
+            logger.info("Building and compiling model...")
+            before = time.perf_counter()
             graph = _build_graph(
                 pipeline_config=self.pipeline_config,
                 weights=self._weights,
@@ -232,17 +235,17 @@ class MistralModel(PipelineModel):
                 kv_params=self.get_kv_params(self.pipeline_config),
                 kv_manager=self.kv_manager,
             )
-            logging.info("Compiling...")
-            before = time.perf_counter()
             model = session.load(
                 graph, weights_registry=self._weights.allocated_weights
             )
             after = time.perf_counter()
-            logging.info(f"Compiling model took {after - before:.6f} seconds")
+            logger.info(
+                f"Building and compiling model took {after - before:.6f} seconds"
+            )
             if (
                 export_path
                 := self.pipeline_config.save_to_serialized_model_path
             ):
-                logging.info("Exporting serialized model to %s", export_path)
+                logger.info("Exporting serialized model to %s", export_path)
                 model._export_mef(export_path)
             return model
