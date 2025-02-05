@@ -664,13 +664,13 @@ def calculate_metrics(
         max_output=max_output,
         max_total=max_total,
         peak_gpu_memory_mib=float(
-            gpu_metrics.get("benchmark/gpu:0/memory_used (MiB)/max")  # type: ignore
+            gpu_metrics.get("benchmark/gpu:0/memory_used (MiB)/max") or 0
         ),
         available_gpu_memory_mib=float(
-            gpu_metrics.get("benchmark/gpu:0/memory_free (MiB)/min")  # type: ignore
+            gpu_metrics.get("benchmark/gpu:0/memory_free (MiB)/min") or 0
         ),
         gpu_utilization=float(
-            gpu_metrics.get("benchmark/gpu:0/gpu_utilization (%)/mean")  # type: ignore
+            gpu_metrics.get("benchmark/gpu:0/gpu_utilization (%)/mean") or 0
         ),
     )
 
