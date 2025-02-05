@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 import os
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import DefaultDict
@@ -101,38 +102,65 @@ class NextWordFrequency:
 
 
 # Example usage
-if __name__ == "__main__":
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Top-K sampling with custom ops"
+    )
+    parser.add_argument(
+        "--stress-test",
+        type=int,
+        default=0,
+        help=(
+            "Number of times to repeat input for stress testing"
+            "On NVIDIA A100, 250_000_000 takes less than 0.5ms and uses over 75% of it's memory"
+        ),
+    )
+    args = parser.parse_args()
+
     # This is necessary only for Modular internal CI.
     if directory := os.getenv("BUILD_WORKSPACE_DIRECTORY"):
         os.chdir(directory)
 
+    # Get the path to our compiled custom ops
     path = Path(__file__).parent / "kernels.mojopkg"
 
     # Initialize the next word frequency for each unique word
     frequencies = NextWordFrequency(INPUT_TEXT)
     word_predictions = ["the", "quick", "brown"]
 
-    # Get probabilities of each next word after `first_word`
-    logit_values = frequencies.next_word_probabilities(word_predictions)
-    batch_size = len(logit_values)
+    # Get probabilities of next word for each word in the `word_predictions` list
+    probabilities = frequencies.next_word_probabilities(word_predictions)
+
+    # If stress testing, repeat the input the specified number of times
+    if args.stress_test > 0:
+        probabilities = np.repeat(probabilities, args.stress_test, axis=0)
+
+    batch_size = len(probabilities)
     K = frequencies.max_next_words
 
     # Configure our simple one-operation graph.
     with Graph(
         "top_k_sampler",
+        # The dtype and shape of the probabilities being passed in
         input_types=[TensorType(DType.float32, shape=[batch_size, K])],
     ) as graph:
-        # Take in the single input to the graph.
-        x, *_ = graph.inputs
+        # Take the probabilities as a single input to the graph.
+        probs, *_ = graph.inputs
 
-        # The top_k_custom op is referenced by its string name.
         results = ops.custom(
+            # This is the custom op name defined in `kernels/top_k.mojo`.
             name="top_k_custom",
+            # Passes `K` as a compile-time Mojo `Int`.
             parameters={"K": K},
-            values=[x],
+            # Passes the probabilities as a single input to the graph.
+            values=[probs],
             out_types=[
-                TensorType(x.tensor.dtype, x.tensor.shape),
-                TensorType(DType.int32, x.tensor.shape),
+                # The output values dtype and shape
+                TensorType(probs.tensor.dtype, probs.tensor.shape),
+                # The output indices dtype and shape
+                TensorType(DType.int32, probs.tensor.shape),
             ],
         )
         graph.output(*results)
@@ -147,11 +175,18 @@ if __name__ == "__main__":
     model = session.load(graph)
 
     # Create a driver tensor from the next word probabilities
-    logits = Tensor.from_numpy(logit_values).to(device)
+    input_tensor = Tensor.from_numpy(probabilities).to(device)
 
     print(f"Sampling top k: {K} for batch size: {batch_size}")
-    # Run the model on the target device.
-    values, indices = model.execute(logits)
+    if args.stress_test > 0:
+        # Run the model on the target device and benchmark execution
+        start_time = time.perf_counter()
+        values, indices = model.execute(input_tensor)
+        execution_time = (time.perf_counter() - start_time) * 1000
+        print(f"Stress test model execution time: {execution_time:.3f} ms")
+        return
+    else:
+        values, indices = model.execute(input_tensor)
 
     # Copy values and indices back to the CPU to be read.
     assert isinstance(values, Tensor)
@@ -170,7 +205,12 @@ if __name__ == "__main__":
         keys = list(frequencies.word_frequencies[word_predictions[i]].keys())
 
         for j in range(len(np_indices[i])):
+            # If it's a padded index/value, break out of the loop
             if j > len(keys) - 1:
                 break
             print(f"| {keys[np_indices[i][j]]:<13}| {np_values[i][j]:<13.8}|")
         print("-------------------------------")
+
+
+if __name__ == "__main__":
+    main()
