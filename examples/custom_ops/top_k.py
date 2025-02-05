@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
-
+import argparse
 import os
 import time
 from collections import defaultdict
@@ -103,8 +103,6 @@ class NextWordFrequency:
 
 # Example usage
 def main():
-    import argparse
-
     parser = argparse.ArgumentParser(
         description="Top-K sampling with custom ops"
     )
@@ -113,8 +111,8 @@ def main():
         type=int,
         default=0,
         help=(
-            "Number of times to repeat input for stress testing"
-            "On NVIDIA A100, 250_000_000 takes less than 0.5ms and uses over 75% of it's memory"
+            "Number of times to repeat input for stress testing. "
+            "On NVIDIA A100, 250_000_000 takes less than 0.5ms and uses over 75%% of its memory."
         ),
     )
     args = parser.parse_args()
