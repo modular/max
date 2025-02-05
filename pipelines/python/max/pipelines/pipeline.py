@@ -34,6 +34,7 @@ from max.dtype import DType
 from max.engine import InferenceSession
 from max.pipelines.kv_cache import infer_optimal_batch_size
 from max.profiler import Tracer, traced
+from transformers import AutoTokenizer
 
 from .config import PipelineConfig
 from .context import InputContext
@@ -363,6 +364,18 @@ class TextGenerationPipeline(TokenGenerator[T]):
         else:
             self._eos_token_id = set([eos_token_id])
 
+        # Create a grammar compiler if constrained decoding is enabled
+        if pipeline_config.enable_constrained_decoding:
+            tokenizer = AutoTokenizer.from_pretrained(
+                pipeline_config.huggingface_repo_id
+            )
+            tokenizer_info = xgr.TokenizerInfo.from_huggingface(
+                tokenizer,
+                vocab_size=pipeline_config.huggingface_config.vocab_size,
+            )
+
+            self._grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
+
         # Initialize Session.
         session = InferenceSession(devices=self._pipeline_config.devices)
 
@@ -422,6 +435,18 @@ class TextGenerationPipeline(TokenGenerator[T]):
         seq_ids_and_untrimmed_lengths = {}
         tracer.next("claim_cache_rows")
         for i, context in enumerate(batch):
+            # Initialize a matcher if needed
+            if context.json_schema and context.matcher is None:
+                if not self._pipeline_config.enable_constrained_decoding:
+                    msg = "json_schema provided but constrained decoding is not enabled."
+                    raise ValueError(msg)
+
+                compiled_grammar = self._grammar_compiler.compile_json_schema(
+                    context.json_schema
+                )
+                matcher = xgr.GrammarMatcher(compiled_grammar)
+                context.set_matcher(matcher)
+
             # Claim cache rows for context.
             if not self._pipeline_model.kv_manager.contains(
                 context.cache_seq_id

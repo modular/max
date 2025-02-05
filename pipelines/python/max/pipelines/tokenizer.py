@@ -25,7 +25,6 @@ import numpy as np
 import torch
 from PIL import Image
 from transformers import (
-    AutoConfig,
     AutoProcessor,
     AutoTokenizer,
     CodeLlamaTokenizer,
@@ -172,18 +171,6 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             self._llama_whitespace_fix_dummy_token_len,
         ) = self._llama_whitespace_fix_dummy_token
 
-        # Load xgrammar GrammarCompiler.
-        if self.config.enable_constrained_decoding:
-            import xgrammar as xgr
-
-            hf_config = AutoConfig.from_pretrained(config.huggingface_repo_id)
-            tokenizer_info = xgr.TokenizerInfo.from_huggingface(
-                self.delegate, vocab_size=hf_config.vocab_size
-            )
-
-            # This defaults to compiling with 8 threads.
-            self._grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
-
     def apply_chat_template(
         self,
         messages: list[TokenGeneratorRequestMessage],
@@ -262,17 +249,6 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         else:
             raise ValueError(f"{request} does not provide messages or prompt.")
 
-        # Create a xgr.GrammarMatcher, if a json_schema is provided.
-        if self.config.enable_constrained_decoding and request.response_format:
-            import xgrammar as xgr
-
-            compiled_grammar = self._grammar_compiler.compile_json_schema(
-                json.dumps(request.response_format["json_schema"])
-            )
-            matcher = xgr.GrammarMatcher(compiled_grammar)
-        else:
-            matcher = None
-
         encoded_prompt = await self.encode(prompt)
 
         # TODO(zheng): We should probably just make max_new_tokens an optional
@@ -289,6 +265,11 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             max_new_tokens,
         )
 
+        json_schema = (
+            json.dumps(request.response_format.get("json_schema", None))
+            if request.response_format
+            else None
+        )
         context = TextContext(
             prompt=prompt,
             cache_seq_id=request.index,
@@ -298,7 +279,7 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             tokens=np.array(encoded_prompt),
             log_probabilities=request.logprobs,
             log_probabilities_echo=request.echo,
-            matcher=matcher,
+            json_schema=json_schema,
         )
         return context
 
@@ -472,6 +453,12 @@ class TextAndVisionTokenizer(
         else:
             pixel_values = []
 
+        json_schema = (
+            json.dumps(request.response_format.get("json_schema", None))
+            if request.response_format
+            else None
+        )
+
         context = TextAndVisionContext(
             prompt=prompt,
             pixel_values=pixel_values,
@@ -481,5 +468,6 @@ class TextAndVisionTokenizer(
             max_length=encoded_prompt.shape[0] + max_gen_tokens
             if max_gen_tokens is not None
             else None,
+            json_schema=json_schema,
         )
         return context

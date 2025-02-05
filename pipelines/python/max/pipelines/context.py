@@ -83,6 +83,15 @@ class InputContext(Protocol):
         """An optional xgr Grammar Matcher provided when using constrained_decoding."""
         ...
 
+    @property
+    def json_schema(self) -> str | None:
+        """A json schema to use during constrained decoding."""
+        ...
+
+    def set_matcher(self, matcher: "xgr.GrammarMatcher") -> None:  # type: ignore
+        """Set a grammar matcher for use during constrained decoding."""
+        ...
+
     def reset(self) -> None:
         """Resets the context's state by combining all tokens into a new prompt.
         This method is used when a request is evicted, meaning that the context
@@ -101,7 +110,7 @@ class TextContext:
         tokens: np.ndarray,
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
-        matcher: Optional["xgr.GrammarMatcher"] = None,  # type: ignore
+        json_schema: str | None = None,
     ) -> None:
         self.cache_seq_id = cache_seq_id
         self.prompt = prompt
@@ -128,6 +137,10 @@ class TextContext:
         self.log_probabilities = log_probabilities
         self.log_probabilities_echo = log_probabilities_echo
 
+        self.matcher = None
+        self.json_schema = json_schema
+
+    def set_matcher(self, matcher: "xgr.GrammarMatcher") -> None:  # type: ignore
         self.matcher = matcher
 
     @property
@@ -197,7 +210,7 @@ class TextAndVisionContext:
         extra_model_args: dict[str, Any],
         log_probabilities: int = 0,
         log_probabilities_echo: bool = False,
-        matcher: Optional["xgr.GrammarMatcher"] = None,  # type: ignore
+        json_schema: str | None = None,
     ) -> None:
         self.cache_seq_id = cache_seq_id
         self.prompt = prompt
@@ -227,6 +240,10 @@ class TextAndVisionContext:
         self.log_probabilities = log_probabilities
         self.log_probabilities_echo = log_probabilities_echo
 
+        self.matcher = None
+        self.json_schema = json_schema
+
+    def set_matcher(self, matcher: "xgr.GrammarMatcher") -> None:  # type: ignore
         self.matcher = matcher
 
     @property
