@@ -138,7 +138,7 @@ fn top_k_gpu[
 
     for i in range(K):
         var reduced = top_k_sram[tid]
-        alias limit = log2_floor(K)
+        alias limit = log2_floor(WARP_SIZE)
 
         # TODO(KERN-1544): allow gpu.shuffle.warp_max to be used with index and value
         @parameter

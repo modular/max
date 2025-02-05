@@ -50,50 +50,51 @@ class NextWordFrequency:
             defaultdict(lambda: defaultdict(int))
         )
 
+        # Track the largest amount of next words to pad the tensor
+        self.max_next_words = 0
+
         # Build word frequencies
         words = text.lower().split()
         for i in range(len(words) - 1):
             current_word = words[i]
             next_word = words[i + 1]
             self.word_frequencies[current_word][next_word] += 1
+            self.max_next_words = max(
+                self.max_next_words, len(self.word_frequencies[current_word])
+            )
 
     def next_word_probabilities(self, words) -> NDArray[np.float32]:
+        if not words:
+            return np.empty(0, dtype=np.float32)
+
         # List to store the probability distributions for each word
         prob_distributions = []
 
-        # Find the maximum length of the frequency lists
-        max_len = 0
-
         for word in words:
             if word not in self.word_frequencies:
-                # If any word is not found, return an empty array
-                return np.empty(0, dtype=np.float32)
+                raise ValueError(
+                    f"Error: cannot predict word after '{word}', not found in input text"
+                )
 
+        for word in words:
             frequencies = self.word_frequencies[word]
-            freq_list = np.array(
-                [value for value in frequencies.values()], dtype=np.float32
-            )
-            freq_list /= freq_list.sum()  # Normalize to get probabilities
+            freq_list = np.array(list(frequencies.values()), dtype=np.float32)
 
-            # Update max_len if this word's frequency list is longer
-            if len(freq_list) > max_len:
-                max_len = len(freq_list)
+            # Avoid division by zero
+            total = freq_list.sum()
+            if total > 0:
+                freq_list /= total
 
-            prob_distributions.append(freq_list)
-
-        # Pad each probability distribution to the maximum length
-        padded_distributions = []
-        for dist in prob_distributions:
-            pad_width = max_len - len(dist)
+            # Pad to largest length of next words
             padded_dist = np.pad(
-                dist, (0, pad_width), mode="constant", constant_values=0
+                freq_list,
+                (0, self.max_next_words - len(freq_list)),
+                mode="constant",
+                constant_values=0,
             )
-            padded_distributions.append(padded_dist)
+            prob_distributions.append(padded_dist)
 
-        # Stack the padded distributions into a single array
-        result_array = np.stack(padded_distributions, axis=0)
-
-        return result_array
+        return np.stack(prob_distributions, axis=0)
 
     def __getitem__(self, idx):
         return self.word_frequencies[idx]
@@ -109,14 +110,12 @@ if __name__ == "__main__":
 
     # Initialize the next word frequency for each unique word
     frequencies = NextWordFrequency(INPUT_TEXT)
-
     word_predictions = ["the", "quick", "brown"]
 
     # Get probabilities of each next word after `first_word`
     logit_values = frequencies.next_word_probabilities(word_predictions)
-
     batch_size = len(logit_values)
-    K = len(logit_values[0])
+    K = frequencies.max_next_words
 
     # Configure our simple one-operation graph.
     with Graph(
@@ -147,12 +146,11 @@ if __name__ == "__main__":
     # Compile the graph.
     model = session.load(graph)
 
-    # Create a driver tensor from the next word probabilities, adding a rank
-    # for the batch size of 1, and move it to the accelerator.
+    # Create a driver tensor from the next word probabilities
     logits = Tensor.from_numpy(logit_values).to(device)
 
     print(f"Sampling top k: {K} for batch size: {batch_size}")
-    # Perform the calculation on the target device.
+    # Run the model on the target device.
     values, indices = model.execute(logits)
 
     # Copy values and indices back to the CPU to be read.
@@ -166,13 +164,13 @@ if __name__ == "__main__":
 
     for i in range(batch_size):
         print(f"\nPredicted word after `{word_predictions[i]}`")
-        print("------------------------------")
-        print("| word         | confidence  |")
-        print("------------------------------")
+        print("-------------------------------")
+        print("| word         | confidence   |")
+        print("-------------------------------")
         keys = list(frequencies.word_frequencies[word_predictions[i]].keys())
 
         for j in range(len(np_indices[i])):
             if j > len(keys) - 1:
                 break
-            print(f"| {keys[np_indices[i][j]]:<13}| {np_values[i][j]:<11.8} |")
-        print("------------------------------")
+            print(f"| {keys[np_indices[i][j]]:<13}| {np_values[i][j]:<13.8}|")
+        print("-------------------------------")
