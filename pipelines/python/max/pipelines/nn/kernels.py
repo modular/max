@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 from max.dtype import DType
@@ -37,6 +37,7 @@ def fused_qkv_ragged_matmul(
     kv_collection: ContinuousBatchingKVCacheCollection | PagedKVCacheCollection,
     layer_idx: TensorValue,
     n_heads: int,
+    bias: Optional[TensorValue] = None,
 ) -> TensorValue:
     """Computes fused query, key, and value projections with ragged input.
 
@@ -86,6 +87,29 @@ def fused_qkv_ragged_matmul(
         parameters["page_size"] = int(kv_params.page_size)
 
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
+
+    if bias:
+        op_name = f"mo.fused_qkv_matmul.ragged.{cache_strategy_str}.bias"
+
+        return ops.inplace_custom(
+            op_name,
+            values=[
+                input,
+                input_row_offsets,
+                wqkv,
+                kv_collection,
+                layer_idx,
+                bias,
+            ],
+            out_types=[
+                TensorType(
+                    dtype=input.dtype,
+                    shape=input.shape[:-1] + [n_heads * kv_params.head_dim],
+                    device=input.device,
+                )
+            ],
+            parameters=parameters,
+        )[0].tensor
 
     op_name = f"mo.fused_qkv_matmul.ragged.{cache_strategy_str}"
 

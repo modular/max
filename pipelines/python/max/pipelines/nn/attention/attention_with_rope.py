@@ -13,7 +13,7 @@
 """An opaque KV Cache optimized attention mechanism with Rope."""
 
 from dataclasses import dataclass
-from typing import List, Union
+from typing import List, Optional, Union
 
 from max.dtype import DType
 from max.graph import DeviceRef, TensorValue, ops
@@ -41,7 +41,9 @@ class AttentionWithRope(AttentionImpl):
     # This class will not use the RotaryEmbedding to
     # calculate rope, but it already includes a freqs_cis
     # calculation, which we will borrow
+
     rope: OptimizedRotaryEmbedding
+    bias: Optional[TensorValue] = None
 
     def __call__(
         self,
@@ -63,6 +65,7 @@ class AttentionWithRope(AttentionImpl):
             kv_collection=kv_collection,
             layer_idx=self.layer_idx,
             n_heads=self.n_heads,
+            bias=self.bias,
         )
 
         # Apply rope.

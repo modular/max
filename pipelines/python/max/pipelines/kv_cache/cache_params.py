@@ -60,6 +60,7 @@ class KVCacheParams:
         self.page_size = page_size
         self.enable_prefix_caching = enable_prefix_caching
 
+        # Validate inputs.
         if enable_prefix_caching and cache_strategy != KVCacheStrategy.PAGED:
             raise ValueError(
                 "Prefix caching is only supported for paged cache strategy"

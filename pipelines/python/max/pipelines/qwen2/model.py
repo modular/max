@@ -15,21 +15,21 @@ from __future__ import annotations
 
 import logging
 import time
+import warnings
 from typing import List, Sequence, Union, cast
 
 import numpy as np
-from max.driver import CPU, Tensor
+from max.driver import CPU, Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
-from max.graph import DeviceRef, Graph, TensorType
-from max.graph.weights import GGUFWeights
+from max.graph import DeviceRef, Graph, TensorType, TensorValue
+from max.graph.weights import Weights
 from max.pipelines import (
     LogProbabilities,
     ModelInputs,
     ModelOutputs,
     PipelineConfig,
     PipelineModel,
-    SupportedEncoding,
     TextContext,
     upper_bounded_default,
 )
@@ -42,15 +42,13 @@ from max.pipelines.kv_cache import (
 )
 from max.pipelines.nn.compute_log_probabilities import compute_log_probabilities
 
-from .gguf import distributed_transformer_opaque, transformer
-
-logger = logging.getLogger("max.pipelines")
+from .gguf import transformer
 
 
-class Llama3Inputs(ModelInputs):
-    """A class representing inputs for the Llama3 model.
+class Qwen2Inputs(ModelInputs):
+    """A class representing inputs for the Qwen2 model.
 
-    This class encapsulates the input tensors required for the Llama3 model execution:
+    This class encapsulates the input tensors required for the Qwen2 model execution:
     - tokens: A tensor containing the input token IDs
     - input_row_offsets_or_attn_mask: A tensor containing the offsets for each row in the ragged input sequence,
     or the attention mask for the padded input sequence
@@ -68,39 +66,21 @@ class Llama3Inputs(ModelInputs):
         self.input_row_offsets_or_attn_mask = input_row_offsets_or_attn_mask
 
 
-class Llama3Model(PipelineModel):
+class Qwen2Model(PipelineModel):
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession
     ) -> None:
         super().__init__(pipeline_config, session)
         self.model = self.load_model(session)
 
-    @classmethod
-    def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
-        cache_dtype = pipeline_config.dtype
-        return KVCacheParams(
-            dtype=cache_dtype,
-            n_kv_heads=pipeline_config.huggingface_config.num_key_value_heads,
-            head_dim=(
-                pipeline_config.huggingface_config.hidden_size
-                // pipeline_config.huggingface_config.num_attention_heads
-            ),
-            page_size=pipeline_config.kv_cache_page_size,
-            cache_strategy=pipeline_config.cache_strategy,
-            enable_prefix_caching=pipeline_config.enable_prefix_caching,
-            n_devices=len(pipeline_config.devices),
-        )
-
-    @classmethod
-    def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
-        return pipeline_config.huggingface_config.num_hidden_layers
-
     def execute(
         self,
         model_inputs: ModelInputs,
         kv_cache_inputs: Sequence[Tensor] | None = None,
     ) -> ModelOutputs:
-        model_inputs = cast(Llama3Inputs, model_inputs)
+        assert kv_cache_inputs is not None
+
+        model_inputs = cast(Qwen2Inputs, model_inputs)
         model_outputs = self.model.execute(
             model_inputs.tokens,
             model_inputs.input_row_offsets_or_attn_mask,
@@ -110,17 +90,24 @@ class Llama3Model(PipelineModel):
             ),
         )
 
+        assert isinstance(model_outputs[0], Tensor)
+        if len(model_outputs) > 1:
+            assert isinstance(model_outputs[1], Tensor)
+            logits = model_outputs[1]
+        else:
+            logits = None
+
         if self.pipeline_config.enable_echo:
             return ModelOutputs(
                 next_token_logits=model_outputs[0],
-                logits=model_outputs[1],
+                logits=logits,
             )
         else:
             return ModelOutputs(next_token_logits=model_outputs[0])
 
     def _prepare_ragged_initial_token_inputs(
         self, context_batch: Sequence[TextContext]
-    ) -> Llama3Inputs:
+    ) -> Qwen2Inputs:
         # Get input_row_offsets: start and end position of each batch in the
         # combined total_seq_len dimension.
         input_row_offsets = np.cumsum(
@@ -131,7 +118,7 @@ class Llama3Model(PipelineModel):
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
         tokens = np.concatenate([ctx.next_tokens for ctx in context_batch])
 
-        return Llama3Inputs(
+        return Qwen2Inputs(
             tokens=Tensor.from_numpy(tokens).to(
                 self.pipeline_config.devices[0]
             ),
@@ -142,7 +129,7 @@ class Llama3Model(PipelineModel):
 
     def _prepare_padded_initial_token_inputs(
         self, context_batch: Sequence[TextContext]
-    ) -> Llama3Inputs:
+    ) -> Qwen2Inputs:
         # Get tokens and seq_ids
         tokens = [ctx.next_tokens for ctx in context_batch]
 
@@ -155,14 +142,20 @@ class Llama3Model(PipelineModel):
             pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
         )
 
-        return Llama3Inputs(
-            tokens=next_tokens_batch,
-            input_row_offsets_or_attn_mask=attn_mask,
+        return Qwen2Inputs(
+            tokens=Tensor.from_numpy(next_tokens_batch).to(
+                self.pipeline_config.devices[0]
+            ),
+            input_row_offsets_or_attn_mask=Tensor.from_numpy(attn_mask).to(
+                self.pipeline_config.devices[0]
+            ),
         )
 
+    # Ignored type due to challenge with Interface implementation and mypy rules.
     def prepare_initial_token_inputs(
-        self, context_batch: Sequence[TextContext]
-    ) -> Llama3Inputs:
+        self,
+        context_batch: Sequence[TextContext],  # type: ignore
+    ) -> Qwen2Inputs:
         """Prepare the inputs for the first pass in multistep execution."""
         if self.pipeline_config.cache_strategy.uses_opaque():
             return self._prepare_ragged_initial_token_inputs(context_batch)
@@ -172,14 +165,14 @@ class Llama3Model(PipelineModel):
     def _prepare_ragged_next_token_inputs(
         self,
         next_tokens: Tensor,
-        prev_model_inputs: Llama3Inputs,
-    ) -> Llama3Inputs:
+        prev_model_inputs: Qwen2Inputs,
+    ) -> Qwen2Inputs:
         row_offsets_size = (
             prev_model_inputs.input_row_offsets_or_attn_mask.shape[0]
         )
         next_row_offsets = self._input_row_offsets_prealloc[:row_offsets_size]
 
-        return Llama3Inputs(
+        return Qwen2Inputs(
             tokens=next_tokens,
             input_row_offsets_or_attn_mask=next_row_offsets,
         )
@@ -187,31 +180,36 @@ class Llama3Model(PipelineModel):
     def _prepare_padded_next_token_inputs(
         self,
         next_tokens: Tensor,
-        prev_model_inputs: Llama3Inputs,
-    ) -> Llama3Inputs:
+        prev_model_inputs: Qwen2Inputs,
+    ) -> Qwen2Inputs:
         batch_size = prev_model_inputs.tokens.shape[0]
         start_pos = [
             prev_model_inputs.input_row_offsets_or_attn_mask.shape[-1]
         ] * batch_size
+
         next_tokens_batch, _, attn_mask = batch_padded_tokens_and_mask(
             start_pos=start_pos,
-            tokens=next_tokens,
+            tokens=[next_tokens.to_numpy()],
             pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
         )
-        return Llama3Inputs(
-            tokens=next_tokens_batch,
-            input_row_offsets_or_attn_mask=attn_mask,
+        return Qwen2Inputs(
+            tokens=Tensor.from_numpy(next_tokens_batch).to(
+                self.pipeline_config.devices[0]
+            ),
+            input_row_offsets_or_attn_mask=Tensor.from_numpy(attn_mask).to(
+                self.pipeline_config.devices[0]
+            ),
         )
 
     def prepare_next_token_inputs(
         self,
         next_tokens: Tensor,
         prev_model_inputs: ModelInputs,
-    ) -> Llama3Inputs:
+    ) -> Qwen2Inputs:
         """Prepare the inputs for the next token in multistep execution.
         This should avoid any device synchronization or copy operations.
         """
-        prev_model_inputs = cast(Llama3Inputs, prev_model_inputs)
+        prev_model_inputs = cast(Qwen2Inputs, prev_model_inputs)
         if self.pipeline_config.cache_strategy.uses_opaque():
             return self._prepare_ragged_next_token_inputs(
                 next_tokens, prev_model_inputs
@@ -222,6 +220,24 @@ class Llama3Model(PipelineModel):
             )
 
     @classmethod
+    def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
+        cache_dtype = pipeline_config.dtype
+        return KVCacheParams(
+            dtype=cache_dtype,
+            n_kv_heads=pipeline_config.huggingface_config.num_key_value_heads,
+            head_dim=pipeline_config.huggingface_config.hidden_size
+            // pipeline_config.huggingface_config.num_attention_heads,
+            page_size=pipeline_config.kv_cache_page_size,
+            cache_strategy=pipeline_config.cache_strategy,
+            n_devices=len(pipeline_config.devices),
+            enable_prefix_caching=pipeline_config.enable_prefix_caching,
+        )
+
+    @classmethod
+    def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
+        return pipeline_config.huggingface_config.num_hidden_layers
+
+    @classmethod
     def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
         try:
             return upper_bounded_default(
@@ -230,7 +246,7 @@ class Llama3Model(PipelineModel):
             )
         except ValueError as e:
             msg = (
-                "Unable to infer max_length for Llama3, the provided "
+                "Unable to infer max_length for Qwen2, the provided "
                 f"max_length ({pipeline_config.max_length}) exceeds the "
                 f"model's max_position_embeddings "
                 f"({pipeline_config.huggingface_config.max_position_embeddings})."
@@ -245,7 +261,7 @@ class Llama3Model(PipelineModel):
         return load_kv_manager(
             params=self.get_kv_params(self.pipeline_config),
             max_batch_size=self.pipeline_config.max_batch_size,
-            max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
+            max_seq_len=self.pipeline_config.huggingface_config.max_position_embeddings,
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
             devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
@@ -276,11 +292,14 @@ class Llama3Model(PipelineModel):
     ) -> Model:
         # Pre-allocate a buffer for input_row_offsets in multistep execution.
         # We do this to avoid materializing and copying a buffer with each multistep step
-        assert self.pipeline_config.max_batch_size, (
-            "Expected max_batch_size to be set"
-        )
+
+        if self.pipeline_config.max_batch_size is None:
+            batch_size = 1
+        else:
+            batch_size = self.pipeline_config.max_batch_size + 1
+
         self._input_row_offsets_prealloc = Tensor.from_numpy(
-            np.arange(self.pipeline_config.max_batch_size + 1, dtype=np.uint32)
+            np.arange(batch_size, dtype=np.uint32)
         ).to(self.pipeline_config.devices[0])
 
         # Read in weights.
@@ -292,28 +311,27 @@ class Llama3Model(PipelineModel):
             for name, weight in self._weights.items():
                 weights_registry[name] = weight.raw_tensor()
 
-            logger.info("Loading serialized model from %s", serialized_path)
+            logging.info("Loading serialized model from %s", serialized_path)
 
             return session.load(
                 serialized_path, weights_registry=weights_registry
             )
 
         else:
-            logger.info("Building and compiling model...")
-            before = time.perf_counter()
+            logging.info("Building model...")
             graph = self._build_graph(self._weights)
+            logging.info("Compiling...")
+            before = time.perf_counter()
             model = session.load(
                 graph, weights_registry=self._weights.allocated_weights
             )
             after = time.perf_counter()
-            logger.info(
-                f"Building and compiling model took {after - before:.6f} seconds"
-            )
+            logging.info(f"Compiling model took {after - before:.6f} seconds")
             if (
                 export_path
                 := self.pipeline_config.save_to_serialized_model_path
             ):
-                logger.info("Exporting serialized model to %s", export_path)
+                logging.info("Exporting serialized model to %s", export_path)
                 model._export_mef(export_path)
             return model
 
@@ -340,7 +358,7 @@ class Llama3Model(PipelineModel):
     ) -> Sequence[Union[Tensor, TensorType]]:
         return [item for sublist in kv_caches_per_dev for item in sublist]
 
-    def _build_opaque_graph(self, weights: GGUFWeights) -> Graph:
+    def _build_opaque_graph(self, weights: Weights) -> Graph:
         device0 = self.pipeline_config.devices[0]
         device_ref = DeviceRef(device0.label, device0.id)
         tokens_type = TensorType(
@@ -351,127 +369,42 @@ class Llama3Model(PipelineModel):
             DType.uint32, shape=["input_row_offsets_len"], device=device_ref
         )
 
-        if len(self.pipeline_config.devices) > 1:
-            kv_cache_args = self.kv_manager.input_symbols()
-            flattened_kv_types = self._flatten_kv_inputs(kv_cache_args)
-
-            with Graph(
-                "llama3",
-                input_types=[
-                    tokens_type,
-                    input_row_offsets_type,
-                    *flattened_kv_types,
-                ],
-            ) as graph:
-                model = distributed_transformer_opaque(
-                    graph=graph,
-                    pipeline_config=self.pipeline_config,
-                    weights=weights,
-                    max_seq_len=self.calculate_max_seq_len(
-                        self.pipeline_config
-                    ),
-                    kv_params=self.get_kv_params(self.pipeline_config),
-                )
-                tokens, input_row_offsets, *kv_cache = graph.inputs
-                kv_caches_per_dev = self._unflatten_kv_inputs(kv_cache)
-
-                outputs = model(
-                    tokens,
-                    kv_caches_per_dev,
-                    input_row_offsets=input_row_offsets,
-                )
-                graph.output(*outputs)
-                return graph
-        else:
-            kv_cache_args = self.kv_manager.input_symbols()[0]
-
-            with Graph(
-                "llama3",
-                input_types=[
-                    tokens_type,
-                    input_row_offsets_type,
-                    *kv_cache_args,
-                ],
-            ) as graph:
-                model = transformer(
-                    graph=graph,
-                    pipeline_config=self.pipeline_config,
-                    weights=weights,
-                    max_seq_len=self.calculate_max_seq_len(
-                        self.pipeline_config
-                    ),
-                    kv_params=self.get_kv_params(self.pipeline_config),
-                )
-                tokens, input_row_offsets, *kv_cache = graph.inputs
-                outputs = model(
-                    tokens,
-                    kv_cache,
-                    input_row_offsets=input_row_offsets,
-                )
-                graph.output(*outputs)
-                return graph
-
-    def _build_graph(self, weights: GGUFWeights) -> Graph:
-        if self.pipeline_config.cache_strategy.uses_opaque():
-            return self._build_opaque_graph(weights)
-
-        tokens_type = TensorType(DType.int64, shape=["batch_size", "seq_len"])
-        attn_mask_type = TensorType(
-            DType.float32, shape=["batch_size", "seq_len", "post_seq_len"]
-        )
-
-        if len(self.pipeline_config.devices) > 1:
-            raise ValueError(
-                "Naive mode does not support distributed execution"
-            )
-
-        kv_inputs = self.kv_manager.input_symbols()[0]
+        kv_cache_args = self.kv_manager.input_symbols()[0]
 
         with Graph(
-            "llama3",
+            "Qwen2",
             input_types=[
                 tokens_type,
-                attn_mask_type,
-                *kv_inputs,
+                input_row_offsets_type,
+                *kv_cache_args,
             ],
         ) as graph:
             model = transformer(
-                graph=graph,
-                pipeline_config=self.pipeline_config,
-                weights=weights,
-                max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
-                kv_params=self.get_kv_params(self.pipeline_config),
+                graph,
+                self.pipeline_config,
+                weights,
+                self.get_kv_params(self.pipeline_config),
             )
-            tokens, attention_mask, k_cache, v_cache, start_pos, _ = (
-                graph.inputs
-            )
-            mask_dtype = (
-                self.pipeline_config.dtype
-                if self.pipeline_config.quantization_encoding
-                in [
-                    SupportedEncoding.float32,
-                    SupportedEncoding.bfloat16,
-                ]
-                else (
-                    DType.float32
-                    if self.pipeline_config.devices[0].label == "cpu"
-                    else DType.bfloat16
-                )
-            )
-            logits = model(
+            tokens, input_row_offsets, *kv_cache = graph.inputs
+
+            assert isinstance(tokens, TensorValue)
+            assert len(kv_cache) == 4
+            assert isinstance(kv_cache[0], TensorValue)
+            assert isinstance(kv_cache[1], TensorValue)
+            assert isinstance(kv_cache[2], TensorValue)
+            assert isinstance(kv_cache[3], TensorValue)
+
+            outputs = model(
                 tokens,
-                attention_mask.cast(mask_dtype),
-                k_cache,
-                v_cache,
-                start_pos,
-            )[0]
-
-            if self.pipeline_config.enable_echo:
-                graph.output(logits[:, -1], logits)
-            else:
-                graph.output(logits[:, -1])
-
+                (kv_cache[0], kv_cache[1], kv_cache[2], kv_cache[3]),
+                input_row_offsets=input_row_offsets,
+            )
+            graph.output(*outputs)
             return graph
+
+    def _build_graph(self, weights: Weights) -> Graph:
+        g = self._build_opaque_graph(weights)
+        return g
 
     def compute_log_probabilities(
         self,
@@ -483,7 +416,7 @@ class Llama3Model(PipelineModel):
     ) -> list[LogProbabilities | None] | None:
         if any(echo for echo in batch_echo):
             if model_outputs.logits is None:
-                logger.warning(
+                warnings.warn(
                     "Could not get logprobs with echo because the full logits"
                     f" were not returned by {self.pipeline_config.short_name}"
                     " model. Please ensure that this model is started with "
@@ -493,15 +426,18 @@ class Llama3Model(PipelineModel):
                     "Echo was enabled but logits were not returned."
                 )
                 return None
-            logits = model_outputs.logits.to_numpy()
-        next_token_logits = model_outputs.next_token_logits.to_numpy()
+            logits = model_outputs.logits.to(CPU()).to_numpy()
 
-        sampled_tokens = next_tokens.to_numpy()
+        assert model_outputs.next_token_logits is not None
+        next_token_logits = model_outputs.next_token_logits.to(CPU()).to_numpy()
+
+        sampled_tokens = next_tokens.to(CPU()).to_numpy()
+        assert isinstance(model_inputs, Qwen2Inputs)
+        tokens = model_inputs.tokens.to(CPU()).to_numpy()
+
         if self.pipeline_config.cache_strategy.uses_opaque():
             # Handle the ragged inputs
-            model_inputs = cast(Llama3Inputs, model_inputs)
-            tokens = model_inputs.tokens.to_numpy()
-            input_row_offsets = model_inputs.input_row_offsets.to(
+            input_row_offsets = model_inputs.input_row_offsets_or_attn_mask.to(
                 CPU()
             ).to_numpy()
 
@@ -526,9 +462,8 @@ class Llama3Model(PipelineModel):
                 return batch_logits, samples
 
         else:
-            # Handle batched inputs. Llama pads them to the right so the seq
+            # Handle batched inputs. The model pads them to the right so the seq
             # lengths can be computed by finding the first 0 token.
-            tokens = model_inputs.tokens
             seq_lens = np.sum(tokens > 0, axis=1)
 
             def _get_logits_and_samples(
