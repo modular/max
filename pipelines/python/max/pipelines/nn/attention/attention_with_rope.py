@@ -151,7 +151,7 @@ class AttentionWithRopeQKV(AttentionImplQKV):
         # Get attributes from input.
         total_seq_len = x.shape[0]
 
-        wqkv = ops.concat((self.wq, self.wk, self.wv), axis=0)
+        wqkv = ops.concat((self.wq, self.wk, self.wv))
 
         # Call into fused qkv ragged matmul.
         xq = fused_qkv_ragged_matmul(

@@ -114,7 +114,7 @@ class AttentionQKV(AttentionImplQKV):
             )
             raise ValueError(msg)
 
-        wqkv = ops.concat((self.wq, self.wk, self.wv), axis=0).transpose(0, 1)
+        wqkv = ops.concat((self.wq, self.wk, self.wv)).transpose(0, 1)
         wqkv = ops.cast(wqkv, x.dtype)
 
         # Get attributes from inputs

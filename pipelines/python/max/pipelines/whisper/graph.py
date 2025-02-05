@@ -140,40 +140,28 @@ def attention(
     kv_params: KVCacheParams,
     layer_index: int,
 ):
-    wq = ops.transpose(
-        weights.self_attn.q_proj.weight.allocate(
-            pipeline_config.dtype,
-            [
-                pipeline_config.huggingface_config.d_model,
-                pipeline_config.huggingface_config.d_model,
-            ],
-        ),
-        0,
-        1,
+    wq = weights.self_attn.q_proj.weight.allocate(
+        pipeline_config.dtype,
+        [
+            pipeline_config.huggingface_config.d_model,
+            pipeline_config.huggingface_config.d_model,
+        ],
     )
-    wk = ops.transpose(
-        weights.self_attn.k_proj.weight.allocate(
-            pipeline_config.dtype,
-            [
-                pipeline_config.huggingface_config.d_model,
-                pipeline_config.huggingface_config.d_model,
-            ],
-        ),
-        0,
-        1,
+    wk = weights.self_attn.k_proj.weight.allocate(
+        pipeline_config.dtype,
+        [
+            pipeline_config.huggingface_config.d_model,
+            pipeline_config.huggingface_config.d_model,
+        ],
     )
-    wv = ops.transpose(
-        weights.self_attn.v_proj.weight.allocate(
-            pipeline_config.dtype,
-            [
-                pipeline_config.huggingface_config.d_model,
-                pipeline_config.huggingface_config.d_model,
-            ],
-        ),
-        0,
-        1,
+    wv = weights.self_attn.v_proj.weight.allocate(
+        pipeline_config.dtype,
+        [
+            pipeline_config.huggingface_config.d_model,
+            pipeline_config.huggingface_config.d_model,
+        ],
     )
-    wqkv = ops.concat((wq, wk, wv), axis=1).transpose(0, 1)
+    wqkv = ops.concat((wq, wk, wv))
 
     # TODO: v_proj, q_proj, and out_proj attention projections have biases.
     b_v = weights.self_attn.v_proj.bias.allocate(

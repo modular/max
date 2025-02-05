@@ -106,35 +106,23 @@ def _attention_opaque(
         * params.huggingface_config.text_config.num_key_value_heads
     )
 
-    wq = ops.transpose(
-        weights.self_attn.q_proj.weight.allocate(
-            params.dtype,
-            [
-                params.huggingface_config.text_config.num_attention_heads
-                * params.huggingface_config.text_config.head_dim,
-                params.huggingface_config.text_config.hidden_size,
-            ],
-        ),
-        0,
-        1,
+    wq = weights.self_attn.q_proj.weight.allocate(
+        params.dtype,
+        [
+            params.huggingface_config.text_config.num_attention_heads
+            * params.huggingface_config.text_config.head_dim,
+            params.huggingface_config.text_config.hidden_size,
+        ],
     )
-    wk = ops.transpose(
-        weights.self_attn.k_proj.weight.allocate(
-            params.dtype,
-            [kv_weight_dim, params.huggingface_config.text_config.hidden_size],
-        ),
-        0,
-        1,
+    wk = weights.self_attn.k_proj.weight.allocate(
+        params.dtype,
+        [kv_weight_dim, params.huggingface_config.text_config.hidden_size],
     )
-    wv = ops.transpose(
-        weights.self_attn.v_proj.weight.allocate(
-            params.dtype,
-            [kv_weight_dim, params.huggingface_config.text_config.hidden_size],
-        ),
-        0,
-        1,
+    wv = weights.self_attn.v_proj.weight.allocate(
+        params.dtype,
+        [kv_weight_dim, params.huggingface_config.text_config.hidden_size],
     )
-    wqkv = ops.concat((wq, wk, wv), axis=1).transpose(0, 1)
+    wqkv = ops.concat((wq, wk, wv))
 
     return AttentionWithRope(
         n_heads=params.huggingface_config.text_config.num_attention_heads,
