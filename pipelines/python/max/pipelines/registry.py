@@ -231,6 +231,14 @@ class PipelineRegistry:
                 msg = f"huggingface repo only has '{supported_encodings[0]}' weights, using '{supported_encodings[0]}'"
                 logger.debug(msg)
                 pipeline_config.quantization_encoding = supported_encodings[0]
+            elif (
+                not pipeline_config.devices[0].is_host
+            ) and SupportedEncoding.bfloat16 in arch.supported_encodings:
+                # TODO(AITLIB-137): replace this with more full featured logic.
+                # If we are running on an accelerator and the quantiziation encoding is not set, override to bfloat16.
+                pipeline_config.quantization_encoding = (
+                    SupportedEncoding.bfloat16
+                )
             else:
                 msg = f"encoding not provided, using default encoding of {arch.default_encoding}"
                 logger.debug(msg)

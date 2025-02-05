@@ -22,7 +22,7 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import click
 from max.driver import DeviceSpec, accelerator_count
-from max.pipelines import PipelineConfig, SupportedEncoding
+from max.pipelines import PipelineConfig
 
 from .device_options import DevicesOptionType
 
@@ -229,11 +229,6 @@ def pipeline_config_options(func):
                     kwargs["device_specs"].append(
                         DeviceSpec.accelerator(id=gpu_id)
                     )
-
-                # If the user is passing in a specific, quantization_encoding don't overwrite it.
-                # If it is empty, set it to default to bfloat16 on gpu.
-                if kwargs["quantization_encoding"] is None:
-                    kwargs["quantization_encoding"] = SupportedEncoding.bfloat16
 
         del kwargs["use_gpu"]
         del kwargs["devices"]

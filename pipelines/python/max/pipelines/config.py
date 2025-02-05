@@ -448,6 +448,14 @@ class SamplingParams:
     out_dtype: DType
 
 
+def _scan_available_devices() -> list[DeviceSpec]:
+    accel_count = accelerator_count()
+    if accel_count == 0:
+        return [DeviceSpec.cpu()]
+    else:
+        return [DeviceSpec.accelerator(i) for i in range(accel_count)]
+
+
 @dataclass(frozen=False)
 class PipelineConfig:
     # When adding a new config parameter here, please remember to add a
@@ -466,7 +474,7 @@ class PipelineConfig:
     """Optional path or url of the model weights to use."""
 
     device_specs: list[DeviceSpec] = field(
-        default_factory=lambda: [DeviceSpec.cpu()]
+        default_factory=_scan_available_devices
     )
     """Devices to run inference upon."""
 
