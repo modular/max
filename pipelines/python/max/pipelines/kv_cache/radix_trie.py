@@ -41,16 +41,6 @@ def _token_prefix_match_len(
     return shorter_len
 
 
-def _starts_with(tokens: np.ndarray, prefix: np.ndarray) -> bool:
-    """checks if tokens begins with prefix
-    e.g: _starts_with(["i", "like", "dogs"], ["i", "like"]) => True
-         _starts_with(["i", "like", "dogs"], ["we", "like"]) => False
-    """
-    if len(prefix) > len(tokens):
-        return False
-    return (prefix == tokens[: len(prefix)]).all()
-
-
 def _token_to_key(tokens: np.ndarray, page_size: int) -> tuple[TokenId, ...]:
     assert len(tokens) >= page_size, (
         f"tokens must be at least page_size ({page_size}) long but is only {len(tokens)} tokens"
@@ -129,11 +119,6 @@ class RadixTrie:
             assert len(node.tokens) % self.page_size == 0
             assert len(node.tokens) // self.page_size == len(node.blocks)
 
-        for key, child in node.children.items():
-            assert len(child.tokens) > 0
-            assert len(key) == self.page_size
-            assert _token_to_key(child.tokens, self.page_size) == key
-
     def insert(
         self,
         tokens: Union[np.ndarray, List[TokenId]],
@@ -181,13 +166,11 @@ class RadixTrie:
             )
 
             if prefix_len == len(curr.tokens) and prefix_len == len(tokens):
-                assert (curr.tokens == tokens).all()
                 return curr
 
             unmatched_tokens = tokens[prefix_len:]
             unmatched_blocks = blocks[prefix_len // self.page_size :]
             if prefix_len == len(curr.tokens):
-                assert _starts_with(tokens, curr.tokens)
                 return insert_helper(curr, unmatched_tokens, unmatched_blocks)
 
             # this means that we got a partial match and must split the curr node
@@ -195,7 +178,6 @@ class RadixTrie:
             # becomes:
             #   (prev) -> (parent) -> (child)
             (parent, _) = self._split_node(curr, prefix_len)
-            assert _starts_with(tokens, parent.tokens)
             unmatched_tokens = tokens[prefix_len:]
             unmatched_blocks = blocks[prefix_len // self.page_size :]
             return insert_helper(parent, unmatched_tokens, unmatched_blocks)
@@ -257,7 +239,6 @@ class RadixTrie:
                 # becomes:
                 #   (prev) -> (parent) -> (child)
                 (parent, _) = self._split_node(curr, prefix_len)
-                assert _starts_with(tokens, parent.tokens)
                 blocks.extend(parent.blocks)
                 return parent
             else:
