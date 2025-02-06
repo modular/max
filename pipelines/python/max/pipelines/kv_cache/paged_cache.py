@@ -218,32 +218,6 @@ class PagedKVCacheManager(KVCacheManager):
         self.total_num_pages = int(
             cache_memory_per_device // single_page_size_bytes
         )
-
-        if self.total_num_pages == 0:
-            raise RuntimeError(
-                f"Insufficient cache memory to allocate even a single page.\n"
-                f"One page requires {single_page_size_bytes} bytes but only {cache_memory_per_device} bytes are available."
-            )
-
-        blocks_needed_for_max_seq_len = ceildiv(max_seq_len, page_size)
-        if blocks_needed_for_max_seq_len > self.total_num_pages:
-            mem_needed = blocks_needed_for_max_seq_len * single_page_size_bytes
-            mem_available = self.total_num_pages * single_page_size_bytes
-            raise RuntimeError(
-                f"Not enough cache memory to support even one request up to the given max sequence length of {max_seq_len} tokens.\n"
-                f"Need to allocate at least {blocks_needed_for_max_seq_len} blocks, but only have enough memory for {self.total_num_pages} blocks.\n"
-                f"One page requires {single_page_size_bytes} bytes but only {cache_memory_per_device} bytes are available.\n"
-                f"You must restart your process and set a smaller max sequence length."
-            )
-
-        if max_batch_size > self.total_num_pages:
-            raise RuntimeError(
-                f"Not enough cache memory to support a batch containing {max_batch_size} sequences.\n"
-                f"Need to allocate at least {max_batch_size} blocks, but only have enough memory for {self.total_num_pages} blocks.\n"
-                f"One page requires {single_page_size_bytes} bytes but only {cache_memory_per_device} bytes are available.\n"
-                f"You must restart your process and set a smaller batch size."
-            )
-
         # call our base class constructor
         super().__init__(
             params=params,
@@ -303,8 +277,8 @@ class PagedKVCacheManager(KVCacheManager):
 
         if len(self.available_blocks) == 0:
             raise RuntimeError(
-                f"All {self.total_num_pages} KVCache pages have been exhausted! "
-                "You must restart your process and set a smaller batch size or max seq len."
+                "Available KVCache pages have been exhausted! You must restart your process"
+                " and set a smaller batch size or max seq len."
             )
 
         block = self.available_blocks.pop()
@@ -505,8 +479,6 @@ class PagedKVCacheManager(KVCacheManager):
         max_seq_length = 0
         max_cache_length = 0
 
-        all_cache_hit_blocks: set[int] = set()
-
         # Iterate over requests and query prefix cache, marking cached pages
         # as in use so they don't get evicted when we start allocating pages.
         for batch_idx, (seq_id, prompt) in enumerate(
@@ -537,7 +509,6 @@ class PagedKVCacheManager(KVCacheManager):
                         prompt[:-1], node=inflight_metadata.node
                     )
                 )
-                all_cache_hit_blocks.update(prefix_blocks)
 
                 # Add the prefix blocks to the request's cached blocks.
                 inflight_metadata.committed_blocks.extend(prefix_blocks)
@@ -555,10 +526,7 @@ class PagedKVCacheManager(KVCacheManager):
                 assert inflight_metadata.node is not None
                 self.radix_trie.mark_in_use_by(inflight_metadata.node, seq_id)
 
-        # Determine the number of pages required for each sequence.
-        total_sequence_length = 0
-        total_blocks_to_allocate = 0
-        blocks_to_allocate_by_seq = {}
+        # Allocate additional pages for each request in the batch
         for batch_idx, (seq_id, prompt) in enumerate(
             seq_ids_and_prompts.items()
         ):
@@ -568,14 +536,9 @@ class PagedKVCacheManager(KVCacheManager):
             cache_length = self.cache_lengths[seq_id]
             cache_lengths_np[batch_idx] = cache_length
 
-            # Update the maximum lengths seen so far.
-            max_seq_length = max(max_seq_length, len(prompt))
-            max_cache_length = max(max_cache_length, cache_length)
-
             # Compute the total sequence length and the number of pages required to store it.
-            sequence_length = cache_length + len(prompt) + num_steps - 1
-            total_sequence_length += sequence_length
-            num_pages_required = ceildiv(sequence_length, self.page_size)
+            total_sequence_length = cache_length + len(prompt) + num_steps - 1
+            num_pages_required = ceildiv(total_sequence_length, self.page_size)
 
             # Compute the number of *new* pages we need to allocate.
             assert len(inflight_metadata.inflight_blocks) <= 1
@@ -584,31 +547,6 @@ class PagedKVCacheManager(KVCacheManager):
                 - len(inflight_metadata.committed_blocks)
                 - len(inflight_metadata.inflight_blocks)
             )
-            blocks_to_allocate_by_seq[seq_id] = num_new_pages
-            total_blocks_to_allocate += num_new_pages
-
-        # Check if we have enough free blocks to service all requests.
-        num_evictable_blocks = 0
-        if self.radix_trie is not None:
-            # the blocks in the prefix cache that will be used by sequences in
-            # this batch are no longer eligible for eviction / allocation.
-            num_evictable_blocks = len(
-                self.radix_trie.get_evictable_blocks() - all_cache_hit_blocks
-            )
-        num_free_blocks = len(self.available_blocks) + num_evictable_blocks
-        if total_blocks_to_allocate > num_free_blocks:
-            raise RuntimeError(
-                f"Not enough free blocks to service all {len(seq_ids_and_prompts)} requests.\n"
-                f"Need an additional {total_blocks_to_allocate} blocks to store KV projections for all {total_sequence_length} tokens.\n"
-                f"But only {num_free_blocks} out of {self.total_num_pages} cache blocks are available to be allocated.\n"
-                f"You must restart your process and set a smaller batch size or max sequence length.\n"
-            )
-
-        # Allocate additional pages for each request in the batch
-        for batch_idx, (seq_id, num_new_pages) in enumerate(
-            blocks_to_allocate_by_seq.items()
-        ):
-            inflight_metadata = self.active_requests[seq_id]
 
             # Assign some new pages to this request.
             for _ in range(num_new_pages):
@@ -620,6 +558,10 @@ class PagedKVCacheManager(KVCacheManager):
                 inflight_metadata.all_assigned_blocks
             ):
                 lut_table_np[batch_idx, i] = block_idx
+
+            # Update the maximum lengths seen so far.
+            max_seq_length = max(max_seq_length, len(prompt))
+            max_cache_length = max(max_cache_length, cache_length)
 
         # Build a tensor of maximum lengths. Each step slices the first row to
         # advance to the values for the next row.
