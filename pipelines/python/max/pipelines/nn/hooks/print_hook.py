@@ -20,10 +20,10 @@ from collections import deque
 from typing import Any, Optional, Tuple
 
 from max.graph import TensorValue
+from max.pipelines.nn._identity import IdentitySet
 from max.pipelines.nn.layer import Layer, add_layer_hook, clear_hooks
 
 from .base_print_hook import BasePrintHook
-from .identity import IdentitySet
 
 logger = logging.getLogger("max.pipelines")
 
