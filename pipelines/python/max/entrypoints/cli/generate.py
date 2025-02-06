@@ -57,41 +57,45 @@ async def stream_text_to_console(
         metrics.prompt_size = prompt_size
         metrics.signpost("begin_generation")
 
-    first_token = True
-    generate_again = True
-    while generate_again:
-        responses = pipeline.next_token(
-            pipeline_request,
-            num_steps=num_steps,
-        )
+    try:
+        first_token = True
+        generate_again = True
+        while generate_again:
+            responses = pipeline.next_token(
+                pipeline_request,
+                num_steps=num_steps,
+            )
 
-        for response in responses:
-            if req_id not in response:
-                # next_token is expected to omit the return if
-                # it encounters eos.
-                generate_again = False
-                break
+            for response in responses:
+                if req_id not in response:
+                    # next_token is expected to omit the return if
+                    # it encounters eos.
+                    generate_again = False
+                    break
 
-            encoded_text = response[req_id].next_token
-            response_text = await tokenizer.decode(context, encoded_text)
-            if metrics:
-                if first_token:
-                    first_token = False
-                    metrics.signpost("first_token")
-                metrics.new_token()
-            if print_tokens:
-                print(response_text, end="", flush=True)
+                encoded_text = response[req_id].next_token
+                response_text = await tokenizer.decode(context, encoded_text)
+                if metrics:
+                    if first_token:
+                        first_token = False
+                        metrics.signpost("first_token")
+                    metrics.new_token()
+                if print_tokens:
+                    print(response_text, end="", flush=True)
 
-        # Yield to the event loop.  If at no other point (e.g. tokenizer.decode
-        # which we await earlier does not yield to the event loop), it will be
-        # at this point that we'll receive a CancelledError if our future was
-        # canceled (e.g., we received a SIGINT).
-        await asyncio.sleep(0)
+            # Yield to the event loop.  If at no other point (e.g.
+            # tokenizer.decode which we await earlier does not yield to the
+            # event loop), it will be at this point that we'll receive a
+            # CancelledError if our future was canceled (e.g., we received a
+            # SIGINT).
+            await asyncio.sleep(0)
 
-    if metrics:
-        metrics.signpost("end_generation")
+    finally:
+        if metrics:
+            metrics.signpost("end_generation")
 
-    pipeline.release(context)
+        pipeline.release(context)
+
     if print_tokens:
         print()
 
