@@ -14,7 +14,6 @@
 """Abstract base class for KVCacheManager for KV Cache."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, List, Sequence, final
 
@@ -227,7 +226,7 @@ class KVCacheManager(ABC):
     def increment_cache_lengths(
         self,
         kv_cache_inputs: Sequence[tuple[Tensor, ...]],
-        prev_model_inputs: Iterable[Any],
+        prev_model_inputs: Any,
     ) -> List[tuple[Tensor, ...]]:
         """
         Prepare the inputs for a multistep execution, generally by incrementing
@@ -258,7 +257,7 @@ class KVCacheManager(ABC):
     def _increment_cache_lengths_ragged(
         self,
         kv_cache_inputs: List[tuple[Tensor, ...]],
-        prev_model_inputs: Iterable[Any],
+        prev_model_inputs: Any,
     ) -> List[tuple[Tensor, ...]]:
         """Prepares cache inputs for the next token in multistep execution.
 
@@ -273,7 +272,6 @@ class KVCacheManager(ABC):
         Returns:
             Updated cache input tuples with incremented lengths.
         """
-        _, input_row_offsets = prev_model_inputs
         blocks = [kv_cache_inputs[i][0] for i in range(len(self.devices))]
         cache_lengths = [
             kv_cache_inputs[i][1] for i in range(len(self.devices))
@@ -285,7 +283,7 @@ class KVCacheManager(ABC):
 
         # Update the cache_lengths of our batch by the previous sequence length.
         updated_cache_lengths = self.increment_cache_lengths_model.execute(
-            input_row_offsets, *cache_lengths
+            prev_model_inputs.input_row_offsets, *cache_lengths
         )
 
         # Advance to the next step of the max_lengths tensor.
@@ -306,7 +304,7 @@ class KVCacheManager(ABC):
     def _increment_cache_lengths_padded(
         self,
         kv_cache_inputs: List[tuple[Tensor, ...]],
-        prev_model_inputs: Iterable[Any],
+        prev_model_inputs: Any,
     ) -> List[tuple[Tensor, ...]]:
         """
         Prepare the inputs for a multistep execution, generally by incrementing
@@ -318,9 +316,10 @@ class KVCacheManager(ABC):
         """
         assert len(kv_cache_inputs) == 1
         k_cache, v_cache, start_pos, _ = kv_cache_inputs[0]
-        tokens, _ = prev_model_inputs
 
-        new_start_pos = self.increment_cache_lengths_model(start_pos, tokens)
+        new_start_pos = self.increment_cache_lengths_model(
+            start_pos, prev_model_inputs.tokens
+        )
         assert isinstance(new_start_pos, Tensor)
         return [(k_cache, v_cache, new_start_pos, new_start_pos)]
 

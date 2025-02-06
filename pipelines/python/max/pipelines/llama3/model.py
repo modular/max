@@ -67,6 +67,12 @@ class Llama3Inputs(ModelInputs):
         self.tokens = tokens
         self.input_row_offsets_or_attn_mask = input_row_offsets_or_attn_mask
 
+    @property
+    def input_row_offsets(self) -> Tensor:
+        """Gets the row offsets of the ragged input sequence."""
+        # TODO(bduke): this should implement a ragged tensor interface.
+        return self.input_row_offsets_or_attn_mask
+
 
 class Llama3Model(PipelineModel):
     def __init__(

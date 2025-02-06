@@ -616,21 +616,14 @@ class TextGenerationPipeline(TokenGenerator[T]):
             # Prepare inputs for the next token in multistep execution
             tracer.next("increment_cache_lengths")  # pops sample_next_token
             # Unpack model inputs for execute() call by getting all fields
-            curr_step_inputs_tuple = tuple(
-                getattr(curr_step_inputs, field)
-                for field in vars(curr_step_inputs)
-            )
-            kv_cache_inputs = self._pipeline_model.kv_manager.increment_cache_lengths(
-                kv_cache_inputs,
-                # TODO(zheng): Due to a circular import in kv_cache/manager.py,
-                # we cannot import ModelInputs here. We just unroll all fields
-                # as an iterable one like this.
-                curr_step_inputs_tuple,
+            kv_cache_inputs = (
+                self._pipeline_model.kv_manager.increment_cache_lengths(
+                    kv_cache_inputs, curr_step_inputs
+                )
             )
             tracer.next("prepare_next_token_inputs")  # pops inc_cache_lengths
             curr_step_inputs = self._pipeline_model.prepare_next_token_inputs(
-                new_tokens,
-                curr_step_inputs,
+                new_tokens, curr_step_inputs
             )
             tracer.pop()  # pops step_{i}
 
