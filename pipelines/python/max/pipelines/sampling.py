@@ -69,20 +69,17 @@ def _vanilla_sampler(sampling_params: SamplingParams) -> Graph:
         logits, prev_tokens = (val.tensor for val in graph.inputs)
         logits = ops.cast(logits, sampling_params.out_dtype)
 
-        if sampling_params.top_k > 1:
-            shape = Shape(logits.shape)
-            shape[-1] = Dim(1)
-            tokens = ops.custom(
-                "topk_fused_sampling",
-                [
-                    ops.constant(sampling_params.top_k, dtype=DType.int64),
-                    logits,
-                ],
-                [TensorType(DType.int64, shape)],
-            )[0]
-            assert isinstance(tokens, TensorValue)
-        else:
-            tokens = ops.argmax(logits)
+        shape = Shape(logits.shape)
+        shape[-1] = Dim(1)
+        tokens = ops.custom(
+            "topk_fused_sampling",
+            [
+                ops.constant(sampling_params.top_k, dtype=DType.int64),
+                logits,
+            ],
+            [TensorType(DType.int64, shape)],
+        )[0]
+        assert isinstance(tokens, TensorValue)
 
         all_tokens = ops.concat([prev_tokens, tokens], -1)
         tokens = ops.squeeze(tokens, -1)
