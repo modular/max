@@ -35,7 +35,6 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 
-from .config import PipelineConfig
 from .context import TextAndVisionContext, TextContext
 from .interfaces import (
     PipelineTokenizer,
@@ -144,22 +143,23 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
     """Encapsulates creation of TextContext and specific token encode/decode logic."""
 
     def __init__(
-        self, config: PipelineConfig, enable_llama_whitespace_fix: bool = False
+        self,
+        huggingface_repo_id: str,
+        max_length: int | None = None,
+        max_new_tokens: int | None = None,
+        trust_remote_code: bool = False,
+        enable_llama_whitespace_fix: bool = False,
     ):
-        self.config = config
-
-        if config.huggingface_repo_id is None:
-            msg = (
-                "a huggingface_repo_id must be provided to load the tokenizer."
-            )
-            raise ValueError(msg)
+        self.huggingface_repo_id = huggingface_repo_id
+        self.max_length = max_length
+        self.max_new_tokens = max_new_tokens
 
         self.delegate = AutoTokenizer.from_pretrained(
-            config.huggingface_repo_id,
-            trust_remote_code=config.trust_remote_code,
-            # The PipelineConfig.max_length attribute should always be set
-            # (not None) at this point.
-            model_max_length=config.max_length,
+            huggingface_repo_id,
+            trust_remote_code=trust_remote_code,
+            # If `max_length` is None, the max length will be taken
+            # from the HuggingFace tokenizer_config.
+            model_max_length=max_length,
         )
 
         # configure Llama whitespace fix if needed
@@ -187,7 +187,7 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         except Exception:
             msg = (
                 "apply_chat_template failed for"
-                f" TextTokenizer({self.config.huggingface_repo_id})"
+                f" TextTokenizer({self.huggingface_repo_id})"
             )
             logger.warning(msg)
             return "\n".join([str(message["content"]) for message in messages])
@@ -210,6 +210,11 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
             encoded_prompt = await run_with_default_executor(
                 self.delegate.encode, prompt
             )
+            max_length = self.max_length or self.delegate.model_max_length
+            if max_length and len(encoded_prompt) > max_length:
+                raise ValueError(
+                    f"Input string is larger than tokenizer's max length ({len(encoded_prompt)} > {max_length})."
+                )
         else:
             encoded_prompt = np.array(list(prompt))
 
@@ -256,12 +261,12 @@ class TextTokenizer(PipelineTokenizer[TextContext, np.ndarray]):
         max_new_tokens = None
         if request.max_new_tokens is not None:
             max_new_tokens = request.max_new_tokens
-        elif self.config.max_new_tokens != -1:
-            max_new_tokens = self.config.max_new_tokens
+        elif self.max_new_tokens != -1:
+            max_new_tokens = self.max_new_tokens
 
         max_gen_tokens = max_tokens_to_generate(
             len(encoded_prompt),
-            self.config.max_length,
+            self.max_length,
             max_new_tokens,
         )
 
@@ -314,20 +319,27 @@ class TextAndVisionTokenizer(
 ):
     """Encapsulates creation of TextContext and specific token encode/decode logic."""
 
-    def __init__(self, config: PipelineConfig):
-        self.config = config
-
-        if config.huggingface_repo_id is None:
-            msg = "a huggingface_repo_id must be provided to load tokenizer"
-            raise ValueError(msg)
+    def __init__(
+        self,
+        huggingface_repo_id: str,
+        max_length: int | None = None,
+        max_new_tokens: int | None = None,
+        trust_remote_code: bool = False,
+    ):
+        self.huggingface_repo_id = huggingface_repo_id
+        self.max_length = max_length
+        self.max_new_tokens = max_new_tokens
 
         self.delegate = AutoTokenizer.from_pretrained(
-            config.huggingface_repo_id,
-            trust_remote_code=config.trust_remote_code,
+            huggingface_repo_id,
+            trust_remote_code=trust_remote_code,
+            # If `max_length` is None, the max length will be taken
+            # from the HuggingFace tokenizer_config.
+            model_max_length=max_length,
         )
         self.processor = AutoProcessor.from_pretrained(
-            config.huggingface_repo_id,
-            trust_remote_code=config.trust_remote_code,
+            huggingface_repo_id,
+            trust_remote_code=trust_remote_code,
         )
 
     def apply_chat_template(
@@ -373,6 +385,11 @@ class TextAndVisionTokenizer(
             encoded_prompt = await run_with_default_executor(
                 self.delegate.encode, prompt
             )
+            max_length = self.max_length or self.delegate.model_max_length
+            if max_length and len(encoded_prompt) > max_length:
+                raise ValueError(
+                    f"Input string is larger than tokenizer's max length ({len(encoded_prompt)} > {max_length})."
+                )
         else:
             encoded_prompt = np.array(list(prompt))
 
@@ -425,12 +442,12 @@ class TextAndVisionTokenizer(
         max_new_tokens = None
         if request.max_new_tokens is not None:
             max_new_tokens = request.max_new_tokens
-        elif self.config.max_new_tokens != -1:
-            max_new_tokens = self.config.max_new_tokens
+        elif self.max_new_tokens != -1:
+            max_new_tokens = self.max_new_tokens
 
         max_gen_tokens = max_tokens_to_generate(
             encoded_prompt.shape[0],
-            self.config.max_length,
+            self.max_length,
             max_new_tokens,
         )
 

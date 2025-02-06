@@ -897,6 +897,10 @@ class PipelineRegistry:
                 )
             )
 
+            max_length = arch.pipeline_model.calculate_max_seq_len(
+                pipeline_config
+            )
+
             # Old Mistral model like Mistral-7B-Instruct-v0.3 uses LlamaTokenizer
             # and suffers from the whitespace decoding bug. So, we enable the fix
             # for only MistralModel in order to avoid any issues with performance
@@ -911,10 +915,19 @@ class PipelineRegistry:
             ):
                 text_tokenizer = cast(Type[TextTokenizer], arch.tokenizer)
                 tokenizer = text_tokenizer(
-                    pipeline_config, enable_llama_whitespace_fix=True
+                    pipeline_config.huggingface_repo_id,
+                    max_length,
+                    pipeline_config.max_new_tokens,
+                    pipeline_config.trust_remote_code,
+                    enable_llama_whitespace_fix=True,
                 )
             else:
-                tokenizer = arch.tokenizer(pipeline_config)
+                tokenizer = arch.tokenizer(
+                    pipeline_config.huggingface_repo_id,
+                    max_length,
+                    pipeline_config.max_new_tokens,
+                    pipeline_config.trust_remote_code,
+                )
 
             pipeline_factory = functools.partial(
                 pipeline_class,
@@ -932,7 +945,11 @@ class PipelineRegistry:
 
             # Generalized pipeline
             tokenizer = TextTokenizer(
-                config=pipeline_config, enable_llama_whitespace_fix=True
+                pipeline_config.huggingface_repo_id,
+                pipeline_config.max_length,
+                pipeline_config.max_new_tokens,
+                pipeline_config.trust_remote_code,
+                enable_llama_whitespace_fix=True,
             )
             logger.info(
                 self._load_logging_message(
