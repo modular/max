@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
+    PipelineTask,
     SupportedArchitecture,
     SupportedEncoding,
     TextTokenizer,
@@ -23,6 +24,7 @@ from .model import ReplitModel
 
 replit_arch = SupportedArchitecture(
     name="MPTForCausalLM",
+    task=PipelineTask.TEXT_GENERATION,
     example_repo_ids=[
         "modularai/replit-code-1.5",
     ],

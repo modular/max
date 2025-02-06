@@ -71,6 +71,7 @@ class SupportedArchitecture:
         default_encoding: SupportedEncoding,
         supported_encodings: dict[SupportedEncoding, list[KVCacheStrategy]],
         pipeline_model: Type[PipelineModel],
+        task: PipelineTask,
         tokenizer: Type[Union[TextTokenizer, TextAndVisionTokenizer]],
         default_weights_format: WeightsFormat,
         rope_type: RopeType = RopeType.none,
@@ -89,6 +90,7 @@ class SupportedArchitecture:
             supported_encodings: Alternate encodings supported.
             pipeline_model: PipelineModel class that defines the model graph
                 and execution.
+            task: Which pipeline task should the model run with.
             tokenizer: Tokenizer used to preprocess model inputs.
             default_weights_format: The weights format used in `pipeline_model`.
             weight_converters: A dictionary of weight loaders to use if the
@@ -103,6 +105,7 @@ class SupportedArchitecture:
         self.default_weights_format = default_weights_format
         self.rope_type = rope_type
         self.weight_converters = weight_converters or {}
+        self.task = task
 
 
 class PipelineRegistry:

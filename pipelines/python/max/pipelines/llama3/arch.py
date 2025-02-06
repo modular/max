@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
+    PipelineTask,
     RopeType,
     SupportedArchitecture,
     SupportedEncoding,
@@ -59,11 +60,13 @@ llama_arch = SupportedArchitecture(
     rope_type=RopeType.normal,
     default_weights_format=WeightsFormat.gguf,
     weight_converters={WeightsFormat.safetensors: LlamaSafetensorAdapter},
+    task=PipelineTask.TEXT_GENERATION,
 )
 
 exaone_arch = SupportedArchitecture(
     name="ExaoneForCausalLM",
     default_encoding=SupportedEncoding.float32,
+    task=PipelineTask.TEXT_GENERATION,
     supported_encodings={
         SupportedEncoding.q4_k: [KVCacheStrategy.NAIVE],
         SupportedEncoding.q6_k: [KVCacheStrategy.NAIVE],

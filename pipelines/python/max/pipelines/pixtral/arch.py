@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
+    PipelineTask,
     SupportedArchitecture,
     SupportedEncoding,
     TextAndVisionTokenizer,
@@ -23,6 +24,7 @@ from .pixtral import PixtralModel
 
 pixtral_arch = SupportedArchitecture(
     name="LlavaForConditionalGeneration",
+    task=PipelineTask.TEXT_GENERATION,
     example_repo_ids=["mistral-community/pixtral-12b"],
     default_encoding=SupportedEncoding.bfloat16,
     supported_encodings={

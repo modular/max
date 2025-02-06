@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
+    PipelineTask,
     SupportedArchitecture,
     SupportedEncoding,
     TextAndVisionTokenizer,
@@ -23,6 +24,7 @@ from .llama_vision import LlamaVision
 
 llama_vision_arch = SupportedArchitecture(
     name="MllamaForConditionalGeneration",
+    task=PipelineTask.TEXT_GENERATION,
     example_repo_ids=["meta-llama/Llama-3.2-11B-Vision-Instruct"],
     default_encoding=SupportedEncoding.bfloat16,
     supported_encodings={

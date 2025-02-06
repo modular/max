@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
+    PipelineTask,
     SupportedArchitecture,
     SupportedEncoding,
     TextTokenizer,
@@ -23,6 +24,7 @@ from .model import Qwen2Model
 
 qwen2_arch = SupportedArchitecture(
     name="Qwen2ForCausalLM",
+    task=PipelineTask.TEXT_GENERATION,
     example_repo_ids=[
         "Qwen/Qwen2.5-7B-Instruct",
     ],

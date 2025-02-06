@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 
 from max.pipelines import (
+    PipelineTask,
     SupportedArchitecture,
     SupportedEncoding,
     TextTokenizer,
@@ -23,6 +24,7 @@ from .model import MistralModel
 
 mistral_arch = SupportedArchitecture(
     name="MistralForCausalLM",
+    task=PipelineTask.TEXT_GENERATION,
     example_repo_ids=["mistralai/Mistral-Nemo-Instruct-2407"],
     default_encoding=SupportedEncoding.bfloat16,
     supported_encodings={
