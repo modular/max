@@ -9,7 +9,7 @@ platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 [dependencies]
 python = ">=3.9,<3.13"
 max = "*"
-networkx = "3.1"
+networkx = "==3.1"
 transformers = ">=4.44.0"
 numpy = "<2.0"
 

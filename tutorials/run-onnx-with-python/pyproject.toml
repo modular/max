@@ -24,7 +24,7 @@ onnx = "==1.16.0"
 transformers = "==4.40.1"
 datasets = "==2.18"
 pillow = "==10.3.0"
-libjpeg-turbo = { version = "3.0.0", channel = "conda-forge" }
+libjpeg-turbo = { version = "==3.0.0", channel = "conda-forge" }
 
 [tool.pixi.feature.test.tasks]
 test = "python3 download-model.py && python3 run.py"

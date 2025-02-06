@@ -10,7 +10,7 @@ version = "0.0.0"
 add = "mojo add.mojo"
 matmul = "mojo matmul.mojo"
 mnist = "python mnist.py && mojo mnist.mojo"
-test = { depends_on = ["add", "matmul", "mnist"] }
+test = { depends-on = ["add", "matmul", "mnist"] }
 
 [dependencies]
 max = "~=24.6"
