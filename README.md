@@ -12,12 +12,12 @@ unlocks full programmability, unparalleled performance, and seamless hardware po
 
 [See here to get started with MAX](https://docs.modular.com/max/get-started)
 and when you want to report issues or request features,
-[please create a GitHub issue here](https://github.com/modularml/max/issues/new/choose).
+[please create a GitHub issue here](https://github.com/modular/max/issues/new/choose).
 
 The [Discord](https://discord.gg/modular) community is the best place to share
 your experiences and chat with the team and other community members.
 
-In the [examples directory](https://github.com/modularml/max/tree/main/examples),
+In the [examples directory](https://github.com/modular/max/tree/main/examples),
 you will find code examples and Jupyter notebooks that show how to run inference
 with MAX.
 
@@ -30,7 +30,7 @@ Magic](https://docs.modular.com/max/create-project).
 Then clone this repository:
 
 ```bash
-git clone https://github.com/modularml/max.git
+git clone https://github.com/modular/max.git
 ```
 
 If you installed the stable build (v24.6), be sure you switch to the `stable` branch,
@@ -88,7 +88,7 @@ Thanks for your interest in contributing to this repository!
 We are not accepting pull requests yet.
 
 However, we welcome your bug reports.  If you have a bug, please file an issue
-[here](https://github.com/modularml/max/issues/new/choose).
+[here](https://github.com/modular/max/issues/new/choose).
 
 If you need support, the [Discord](https://discord.gg/modular)
 community is the best place to share your experiences and chat with

@@ -11,7 +11,7 @@ The MAX platform unifies the leading AI development frameworks (TensorFlow, PyTo
 
 ## Source Code
 
-* <https://github.com/modularml/max>
+* <https://github.com/modular/max>
 
 ## Usage
 

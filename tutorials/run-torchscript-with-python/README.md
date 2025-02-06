@@ -10,7 +10,7 @@ If you just want to run this code, use these commands (first [install
 magic](https://docs.modular.com/magic/#install-magic)):
 
 ```sh
-git clone https://github.com/modularml/max.git
+git clone https://github.com/modular/max.git
 
 cd max/tutorials/run-torchscript-with-python
 

@@ -49,7 +49,7 @@ tool.
    If you don't already have a local clone of this repository, create one via:
 
    ```shell
-   git clone https://github.com/modularml/max.git
+   git clone https://github.com/modular/max.git
    ```
 
    The following instructions assume that you're present within this
