@@ -82,6 +82,12 @@ async def stream_text_to_console(
             if print_tokens:
                 print(response_text, end="", flush=True)
 
+        # Yield to the event loop.  If at no other point (e.g. tokenizer.decode
+        # which we await earlier does not yield to the event loop), it will be
+        # at this point that we'll receive a CancelledError if our future was
+        # canceled (e.g., we received a SIGINT).
+        await asyncio.sleep(0)
+
     if metrics:
         metrics.signpost("end_generation")
 
