@@ -214,7 +214,7 @@ Resources:
 
           # Start the container and capture logs
           CONTAINER_ID=$(sudo docker run -d \
-            --env "HUGGING_FACE_HUB_TOKEN=${HuggingFaceHubToken}" \
+            --env "HF_TOKEN=${HuggingFaceHubToken}" \
             --env "HF_HUB_ENABLE_HF_TRANSFER=1" \
             -v /home/ec2-user/.cache/huggingface:/root/.cache/huggingface \
             --gpus 1 \

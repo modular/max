@@ -89,7 +89,7 @@ resources:
           sudo usermod -aG docker $(whoami)
 
           docker run \
-            --env "HUGGING_FACE_HUB_TOKEN={{ properties['huggingFaceHubToken'] }}" \
+            --env "HF_TOKEN={{ properties['huggingFaceHubToken'] }}" \
             --env "HF_HUB_ENABLE_HF_TRANSFER=1" \
             -v $HOME/.cache/huggingface:/root/.cache/huggingface \
             --gpus 1 \

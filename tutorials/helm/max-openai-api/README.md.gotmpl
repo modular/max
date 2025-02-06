@@ -25,7 +25,7 @@ helm install max-openai-api oci://registry-1.docker.io/modular/max-openai-api-ch
   --set huggingfaceRepoId=<insert-huggingface-model-id>
   --set maxServe.maxLength=512 \
   --set maxServe.maxBatchSize=16 \
-  --set envSecret.HUGGING_FACE_HUB_TOKEN=<insert-huggingface-token> \
+  --set envSecret.HF_TOKEN=<insert-huggingface-token> \
   --set env.HF_HUB_ENABLE_HF_TRANSFER=1 \
   --wait
 ```
@@ -70,7 +70,7 @@ helm install max-openai-api oci://registry-1.docker.io/modular/max-openai-api-ch
   --set huggingfaceRepoId=modularai/llama-3.1
   --set maxServe.maxLength=512 \
   --set maxServe.maxBatchSize=16 \
-  --set envSecret.HUGGING_FACE_HUB_TOKEN=<insert-huggingface-token> \
+  --set envSecret.HF_TOKEN=<insert-huggingface-token> \
   --set env.HF_HUB_ENABLE_HF_TRANSFER=1 \
   --timeout 10m0s \
   --wait
