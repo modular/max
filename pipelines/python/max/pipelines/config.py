@@ -96,24 +96,46 @@ class SupportedEncoding(str, Enum):
     @property
     def quantization_encoding(self) -> Optional[QuantizationEncoding]:
         if self not in _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING:
-            raise ValueError(
-                "SupportedEncoding does not have corresponding"
-                " QuantizationEncoding."
-            )
+            msg = f"SupportedEncoding({self}) does not have corresponding QuantizationEncoding."
+            raise ValueError(msg)
         return _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING[self]
 
     @property
     def dtype(self) -> DType:
         """The underlying model dtype associated with a quantization_encoding."""
-        return _SUPPORTED_ENCODING_TO_DTYPE.get(self, DType.float32)
+        if self not in _SUPPORTED_ENCODING_TO_DTYPE:
+            msg = (
+                f"SupportedEncoding({self}) does not have corresponding dtype."
+            )
+            raise ValueError(msg)
+        return _SUPPORTED_ENCODING_TO_DTYPE[self]
+
+    @property
+    def cache_dtype(self) -> DType:
+        """The dtype that must be used in the kvcache for correctness."""
+        if self not in _SUPPORTED_ENCODING_TO_CACHE_DTYPE:
+            msg = f"SupportedEncoding({self}) does not have corresponding cache dtype."
+            raise ValueError(msg)
+        return _SUPPORTED_ENCODING_TO_CACHE_DTYPE[self]
 
 
 _SUPPORTED_ENCODING_TO_DTYPE = {
+    SupportedEncoding.float32: DType.float32,
     SupportedEncoding.bfloat16: DType.bfloat16,
     SupportedEncoding.q4_k: DType.uint8,
     SupportedEncoding.q4_0: DType.uint8,
     SupportedEncoding.q6_k: DType.uint8,
     SupportedEncoding.gptq: DType.uint8,
+}
+
+
+_SUPPORTED_ENCODING_TO_CACHE_DTYPE = {
+    SupportedEncoding.float32: DType.float32,
+    SupportedEncoding.bfloat16: DType.bfloat16,
+    SupportedEncoding.q4_k: DType.float32,
+    SupportedEncoding.q4_0: DType.float32,
+    SupportedEncoding.q6_k: DType.float32,
+    SupportedEncoding.gptq: DType.float32,
 }
 
 _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING = {
@@ -718,6 +740,14 @@ class PipelineConfig:
             raise ValueError(msg)
 
         return self.quantization_encoding.dtype
+
+    @property
+    def cache_dtype(self) -> DType:
+        if self.quantization_encoding is None:
+            msg = "quantization_encoding must be provided to infer cache dtype."
+            raise ValueError(msg)
+
+        return self.quantization_encoding.cache_dtype
 
     @property
     def devices(self) -> list[Device]:

@@ -83,14 +83,8 @@ class Llama3Model(PipelineModel):
 
     @classmethod
     def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
-        cache_dtype = (
-            DType.float32
-            if pipeline_config.quantization_encoding.quantization_encoding
-            is not None
-            else pipeline_config.dtype
-        )
         return KVCacheParams(
-            dtype=cache_dtype,
+            dtype=pipeline_config.cache_dtype,
             n_kv_heads=pipeline_config.huggingface_config.num_key_value_heads,
             head_dim=(
                 pipeline_config.huggingface_config.hidden_size

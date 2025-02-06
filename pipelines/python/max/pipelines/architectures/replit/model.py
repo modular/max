@@ -143,7 +143,7 @@ class ReplitModel(PipelineModel):
     @classmethod
     def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
         return KVCacheParams(
-            dtype=pipeline_config.dtype,
+            dtype=pipeline_config.cache_dtype,
             n_kv_heads=pipeline_config.huggingface_config.attn_config[
                 "kv_n_heads"
             ],

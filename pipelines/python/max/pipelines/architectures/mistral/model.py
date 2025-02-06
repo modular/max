@@ -129,7 +129,7 @@ class MistralModel(PipelineModel):
     def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
         return KVCacheParams(
             page_size=pipeline_config.kv_cache_page_size,
-            dtype=pipeline_config.dtype,
+            dtype=pipeline_config.cache_dtype,
             n_kv_heads=pipeline_config.huggingface_config.num_key_value_heads,
             head_dim=pipeline_config.huggingface_config.head_dim,
             cache_strategy=pipeline_config.cache_strategy,

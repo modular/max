@@ -227,9 +227,8 @@ class Qwen2Model(PipelineModel):
 
     @classmethod
     def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
-        cache_dtype = pipeline_config.dtype
         return KVCacheParams(
-            dtype=cache_dtype,
+            dtype=pipeline_config.cache_dtype,
             n_kv_heads=pipeline_config.huggingface_config.num_key_value_heads,
             head_dim=pipeline_config.huggingface_config.hidden_size
             // pipeline_config.huggingface_config.num_attention_heads,
