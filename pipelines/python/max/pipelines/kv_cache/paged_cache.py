@@ -269,6 +269,8 @@ class PagedKVCacheManager(KVCacheManager):
         self.radix_trie: Optional[RadixTrie] = None
         if params.enable_prefix_caching:
             self.radix_trie = RadixTrie(page_size=self.page_size)
+        self.ce_all_tokens = 0
+        self.ce_cache_hit_tokens = 0
 
     def evict_blocks(self, percentage_to_evict: float = 1.0):
         if self.radix_trie is None:
@@ -528,11 +530,14 @@ class PagedKVCacheManager(KVCacheManager):
                 )
                 all_cache_hit_blocks.update(prefix_blocks)
 
+                # Update the cache hit rate metrics.
+                num_cache_hit_tokens = len(prefix_blocks) * self.page_size
+                self.ce_cache_hit_tokens += num_cache_hit_tokens
+                self.ce_all_tokens += len(prompt) - 1
+
                 # Add the prefix blocks to the request's cached blocks.
                 inflight_metadata.committed_blocks.extend(prefix_blocks)
-                self.cache_lengths[seq_id] += (
-                    len(prefix_blocks) * self.page_size
-                )
+                self.cache_lengths[seq_id] += num_cache_hit_tokens
 
                 # Shorten the prompt to only include tokens that were not cached
                 # by mutating the input dict.
@@ -687,6 +692,18 @@ class PagedKVCacheManager(KVCacheManager):
         for seq_id in seq_ids:
             self.active_requests[seq_id] = _PagedCacheMetadata()
 
+    def _count_all_pages(self) -> int:
+        available_blocks = self.available_blocks
+        prefix_cache_blocks = set()
+        if self.radix_trie is not None:
+            prefix_cache_blocks = self.radix_trie.get_all_blocks()
+        uncommitted_blocks = set()
+        for seq_id in self.active_requests:
+            uncommitted_blocks.update(
+                self.active_requests[seq_id].inflight_blocks
+            )
+        return len(available_blocks | prefix_cache_blocks | uncommitted_blocks)
+
     def release(self, seq_id: int) -> None:
         """Release `seq_id` provided, marking this sequence as complete.
         This returns the seq_id back to the available pool of cache memory,
@@ -738,11 +755,17 @@ class PagedKVCacheManager(KVCacheManager):
             # Now that we wrote to the inflight blocks, we will try to commit
             # them to the radix trie.
             if self.radix_trie is not None:
-                # Match the prefix of the prompt that is already cached in the
-                # radix trie
+                uncommitted_tokens = np.concatenate(
+                    [
+                        request_metadata.previous_uncommitted_tokens,
+                        prompt,
+                        new_tokens[:-1],
+                    ]
+                )
+                # Try to match the uncommitted tokens in the trie
                 request_metadata.node, existing_blocks = (
                     self.radix_trie.match_prefix(
-                        prompt, node=request_metadata.node
+                        uncommitted_tokens, node=request_metadata.node
                     )
                 )
 
@@ -764,23 +787,14 @@ class PagedKVCacheManager(KVCacheManager):
                 uncommitted_blocks = request_metadata.inflight_blocks[
                     len(existing_blocks) :
                 ]
-                uncommitted_prompt = prompt[
+                uncommitted_tokens = uncommitted_tokens[
                     len(existing_blocks) * self.page_size :
                 ]
-                # All but the last newly generated token should have a kv block.
-                uncommitted_new_tokens = new_tokens[:-1]
-                all_uncommitted_tokens = np.concatenate(
-                    [
-                        request_metadata.previous_uncommitted_tokens,
-                        uncommitted_prompt,
-                        uncommitted_new_tokens,
-                    ]
-                )
 
                 # round the number of uncommitted new tokens to the nearest
                 # multiple of the page size if not aligned
                 blocks_to_commit = uncommitted_blocks
-                tokens_to_commit = all_uncommitted_tokens
+                tokens_to_commit = uncommitted_tokens
                 if num_tokens_in_partially_filled_block > 0:
                     prefix, suffix = (
                         tokens_to_commit[
