@@ -365,7 +365,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
             self._eos_token_id = set([eos_token_id])
 
         # Create a grammar compiler if constrained decoding is enabled
-        if pipeline_config.enable_constrained_decoding:
+        if pipeline_config.enable_structured_output:
             tokenizer = AutoTokenizer.from_pretrained(
                 pipeline_config.huggingface_repo_id
             )
@@ -420,7 +420,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
     ) -> tuple[ModelInputs, Any, int, Optional[torch.Tensor]]:
         tracer: Tracer = Tracer("prepare_batch")
 
-        if self._pipeline_config.enable_constrained_decoding:
+        if self._pipeline_config.enable_structured_output:
             bitmask = torch.ones(
                 xgr.get_bitmask_shape(
                     len(batch),
@@ -437,7 +437,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         for i, context in enumerate(batch):
             # Initialize a matcher if needed
             if context.json_schema and context.matcher is None:
-                if not self._pipeline_config.enable_constrained_decoding:
+                if not self._pipeline_config.enable_structured_output:
                     msg = "json_schema provided but constrained decoding is not enabled."
                     raise ValueError(msg)
 
@@ -467,7 +467,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
             # Update bitmask
             if (
-                self._pipeline_config.enable_constrained_decoding
+                self._pipeline_config.enable_structured_output
                 and context.matcher
             ):
                 context.matcher.fill_next_token_bitmask(bitmask, index=i)

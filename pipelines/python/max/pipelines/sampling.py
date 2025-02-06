@@ -89,7 +89,7 @@ def _vanilla_sampler(sampling_params: SamplingParams) -> Graph:
 
 
 def token_sampler(sampling_params: SamplingParams) -> Graph:
-    if sampling_params.enable_constrained_decoding:
+    if sampling_params.enable_structured_output:
         return _bitmask_sampler(sampling_params)
     else:
         return _vanilla_sampler(sampling_params)

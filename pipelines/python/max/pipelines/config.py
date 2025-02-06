@@ -443,7 +443,7 @@ class HuggingFaceRepo:
 @dataclass
 class SamplingParams:
     top_k: int
-    enable_constrained_decoding: bool
+    enable_structured_output: bool
     in_dtype: DType
     out_dtype: DType
 
@@ -536,7 +536,7 @@ class PipelineConfig:
     top_k: int = 1
     """Limits the sampling to the K most probable tokens. This defaults to 1, which enables greedy sampling."""
 
-    enable_constrained_decoding: bool = False
+    enable_structured_output: bool = False
     """Enable structured generation/guided decoding for the server. This allows the user to pass a json
     schema in the response_format field, which the LLM will adhere to."""
 
@@ -647,13 +647,13 @@ class PipelineConfig:
                 self.huggingface_config.quantization_config
             )
 
-        if self.max_num_steps > 1 and self.enable_constrained_decoding:
-            msg = "max_num_steps > 1 not supported, when enable_constrained_decoding = True"
+        if self.max_num_steps > 1 and self.enable_structured_output:
+            msg = "max_num_steps > 1 not supported, when enable_structured_output = True"
             raise ValueError(msg)
 
-        if self.enable_constrained_decoding:
+        if self.enable_structured_output:
             if self.device_specs[0] == DeviceSpec.cpu():
-                msg = "enable_constrained_decoding is not currently supported on CPU."
+                msg = "enable_structured_output is not currently supported on CPU."
                 raise ValueError(msg)
 
     def __getstate__(self) -> dict[str, Any]:
@@ -867,7 +867,7 @@ class PipelineConfig:
             "pad_to_multiple_of": "Pad input tensors to be a multiple of value provided. Default is set to 2.",
             "kv_cache_page_size": "The number of tokens in a single page in the paged KVCache. Default is set to 512.",
             "enable_prefix_caching": "Whether to enable prefix caching for the paged attention KVCache. This defaults to false.",
-            "enable_constrained_decoding": "Whether to enable constrained decoding in the text generation pipeline. This defaults to false.",
+            "enable_structured_output": "Whether to enable constrained decoding in the text generation pipeline. This defaults to false.",
             "device_memory_utilization": "The fraction of available device memory that the process should consume. This is used to inform the size of the KVCache workspace: kv_cache_workspace = (total_free_memory * device_memory_utilization) - model_weights_size. Default is set to 0.9.",
             "top_k": "Limit sampling to the top K most probable tokens during generation. This can help control randomness and improve output quality. This defaults to 1, which defaults to greedy sampling.",
             "trust_remote_code": "Indicate whether to allow custom modelling files from Huggingface repositories. Set this to true with caution, as it may introduce security risks.",
@@ -889,7 +889,7 @@ class PipelineConfig:
     def sampling_params(self) -> SamplingParams:
         return SamplingParams(
             top_k=self.top_k,
-            enable_constrained_decoding=self.enable_constrained_decoding,
+            enable_structured_output=self.enable_structured_output,
             in_dtype=DType.float32,
             out_dtype=DType.float32,
         )

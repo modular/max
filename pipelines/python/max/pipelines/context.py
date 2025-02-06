@@ -80,7 +80,7 @@ class InputContext(Protocol):
 
     @property
     def matcher(self) -> Optional["xgr.GrammarMatcher"]:  # type: ignore
-        """An optional xgr Grammar Matcher provided when using constrained_decoding."""
+        """An optional xgr Grammar Matcher provided when using structured output."""
         ...
 
     @property
