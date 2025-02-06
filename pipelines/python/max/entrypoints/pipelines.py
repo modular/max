@@ -10,15 +10,15 @@ import os
 import signal
 
 import click
-from max.pipelines import PIPELINE_REGISTRY, PipelineConfig
-from max.pipelines.architectures import register_all_models
-from max.pipelines.cli import (
+from max.entrypoints.cli import (
     generate_text_for_pipeline,
     list_pipelines_to_console,
     pipeline_config_options,
     pipeline_encode,
     serve_pipeline,
 )
+from max.pipelines import PIPELINE_REGISTRY, PipelineConfig
+from max.pipelines.architectures import register_all_models
 
 logger = logging.getLogger(__name__)
 try:
