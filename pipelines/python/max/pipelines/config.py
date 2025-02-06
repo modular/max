@@ -677,15 +677,14 @@ class PipelineConfig:
             # we cannot map the model to an internal architecture, and cannot
             # be run using the MAX engine.
 
-            architectures = getattr(hf_config, "architectures", [])
-            if len(architectures) > 1:
-                msg = (
-                    "more than one architecture listed in HuggingFace config,"
-                    " using the first one."
-                )
-                logger.warning(msg)
-
+            architectures = getattr(hf_config, "architectures", None)
             if architectures:
+                if len(architectures) > 1:
+                    msg = (
+                        "more than one architecture listed in HuggingFace config,"
+                        " using the first one."
+                    )
+                    logger.warning(msg)
                 self.architecture = architectures[0]
             else:
                 msg = "architectures not listed in HuggingFace config, trying with general `huggingface` engine"
