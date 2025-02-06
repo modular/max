@@ -292,8 +292,19 @@ class PipelineRegistry:
                         break
 
         if not pipeline_config.weight_path:
-            msg = f"compatible weights cannot be found for '{pipeline_config.quantization_encoding}' in '{arch.default_weights_format}' format, or any convertible format: '{', '.join([converter for converter in arch.weight_converters.keys()])}'."
-            raise ValueError(msg)
+            if pipeline_config.quantization_encoding not in [
+                SupportedEncoding.bfloat16,
+                SupportedEncoding.float32,
+            ]:
+                msg = f"compatible weights cannot be found for '{pipeline_config.quantization_encoding}' in 'gguf' format, in the provided repo: '{huggingface_weights_repo.repo_id}'"
+                raise ValueError(msg)
+            else:
+                formats = [str(arch.default_weights_format)] + [
+                    str(converter)
+                    for converter in arch.weight_converters.keys()
+                ]
+                msg = f"compabible weights cannot be found for '{pipeline_config.quantization_encoding}' in any supported format: [{', '.join(formats)}], in the provided repo: '{huggingface_weights_repo.repo_id}'"
+                raise ValueError(msg)
 
         # Check supported_cache_strategy
         supported_cache_strategies = arch.supported_encodings.get(
