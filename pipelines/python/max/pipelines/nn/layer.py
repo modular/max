@@ -50,16 +50,16 @@ def add_layer_hook(
 
     Example of printing debug inputs:
 
-    ```python
-    def print_info(layer, args, kwargs, outputs):
-        print("Layer:", type(layer).__name__)
-        print("Input args:", args)
-        print("Input kwargs:", kwargs)
-        print("Outputs:", outputs)
-        return outputs
+    .. code-block:: python
 
-    add_layer_hook(print_info)
-    ```
+        def print_info(layer, args, kwargs, outputs):
+            print("Layer:", type(layer).__name__)
+            print("Input args:", args)
+            print("Input kwargs:", kwargs)
+            print("Outputs:", outputs)
+            return outputs
+
+        add_layer_hook(print_info)
     """
     _LAYER_HOOKS.append(fn)
 

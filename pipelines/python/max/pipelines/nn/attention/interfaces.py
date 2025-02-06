@@ -32,43 +32,48 @@ class AttentionImpl(ABC, Layer):
     """
     A generalized attention interface, that will be used upstream by a general Transformer.
     We would expect a seperate subclass, articulating each variation of Attention:
-        - AttentionWithRope
-        - AttentionWithAlibi
-        - VanillaAttentionWithCausalMask
-        - ...
+
+    - AttentionWithRope
+    - AttentionWithAlibi
+    - VanillaAttentionWithCausalMask
+    - ...
 
     There are a series of shared attributes, however, more may be needed for each individual variant.
     For example, we may introduce an OptimizedRotaryEmbedding class for the AttentionWithRope class:
 
-    @dataclass
-    class AttentionWithRope(AttentionImpl):
-        rope: OptimizedRotaryEmbedding
-        ...
+    .. code-block:: python
 
-    We expect the `__call__` abstractmethod to remain relatively consistent, however the **kwargs
+        @dataclass
+        class AttentionWithRope(AttentionImpl):
+            rope: OptimizedRotaryEmbedding
+            ...
+
+    We expect the ``__call__`` abstractmethod to remain relatively consistent, however the ``**kwargs``
     argument is exposed, allowing you to leverage additional arguments for each particular variant.
     For example, we may introduce an VanillaAttentionWithCausalMask class, which includes an attention
     mask:
 
-    @dataclass
-    class VanillaAttentionWithCausalMask(AttentionImpl):
-        ...
+    .. code-block:: python
 
-        def __call__(
-            self,
-            x: TensorValueLike,
-            kv_collection: ContinuousBatchingKVCacheCollection,
-            valid_lengths: TensorValueLike,
-            **kwargs,
-        ) -> tuple[TensorValue, ContinuousBatchingKVCacheCollection]: ...
+        @dataclass
+        class VanillaAttentionWithCausalMask(AttentionImpl):
+            ...
 
-            if "attn_mask" not in kwargs:
-                raise ValueError("attn_mask not provided to VanillaAttentionWithCausalMask")
+            def __call__(
+                self,
+                x: TensorValueLike,
+                kv_collection: ContinuousBatchingKVCacheCollection,
+                valid_lengths: TensorValueLike,
+                **kwargs,
+            ) -> tuple[TensorValue, ContinuousBatchingKVCacheCollection]: ...
 
-            # Which we can then use the attention mask downstream like so:
-            op(
-                attn_mask = kwargs["attn_mask"]
-            )
+                if "attn_mask" not in kwargs:
+                    raise ValueError("attn_mask not provided to VanillaAttentionWithCausalMask")
+
+                # Which we can then use the attention mask downstream like so:
+                op(
+                    attn_mask = kwargs["attn_mask"]
+                )
     """
 
     n_heads: int
@@ -124,43 +129,48 @@ class AttentionImplQKV(ABC, Layer):
     """
     A generalized attention interface, that will be used upstream by a general Transformer.
     We would expect a seperate subclass, articulating each variation of Attention:
-        - AttentionWithRope
-        - AttentionWithAlibi
-        - VanillaAttentionWithCausalMask
-        - ...
+
+    - AttentionWithRope
+    - AttentionWithAlibi
+    - VanillaAttentionWithCausalMask
+    - ...
 
     There are a series of shared attributes, however, more may be needed for each individual variant.
     For example, we may introduce an OptimizedRotaryEmbedding class for the AttentionWithRope class:
 
-    @dataclass
-    class AttentionWithRope(AttentionImpl):
-        rope: OptimizedRotaryEmbedding
-        ...
+    .. code-block:: python
 
-    We expect the `__call__` abstractmethod to remain relatively consistent, however the **kwargs
+        @dataclass
+        class AttentionWithRope(AttentionImpl):
+            rope: OptimizedRotaryEmbedding
+            ...
+
+    We expect the ``__call__`` abstractmethod to remain relatively consistent, however the ``**kwargs``
     argument is exposed, allowing you to leverage additional arguments for each particular variant.
     For example, we may introduce an VanillaAttentionWithCausalMask class, which includes an attention
     mask:
 
-    @dataclass
-    class VanillaAttentionWithCausalMask(AttentionImpl):
-        ...
+    .. code-block:: python
 
-        def __call__(
-            self,
-            x: TensorValueLike,
-            kv_collection: ContinuousBatchingKVCacheCollection,
-            valid_lengths: TensorValueLike,
-            **kwargs,
-        ) -> tuple[TensorValue, ContinuousBatchingKVCacheCollection]: ...
+        @dataclass
+        class VanillaAttentionWithCausalMask(AttentionImpl):
+            ...
 
-            if "attn_mask" not in kwargs:
-                raise ValueError("attn_mask not provided to VanillaAttentionWithCausalMask")
+            def __call__(
+                self,
+                x: TensorValueLike,
+                kv_collection: ContinuousBatchingKVCacheCollection,
+                valid_lengths: TensorValueLike,
+                **kwargs,
+            ) -> tuple[TensorValue, ContinuousBatchingKVCacheCollection]: ...
 
-            # Which we can then use the attention mask downstream like so:
-            op(
-                attn_mask = kwargs["attn_mask"]
-            )
+                if "attn_mask" not in kwargs:
+                    raise ValueError("attn_mask not provided to VanillaAttentionWithCausalMask")
+
+                # Which we can then use the attention mask downstream like so:
+                op(
+                    attn_mask = kwargs["attn_mask"]
+                )
     """
 
     n_heads: int
