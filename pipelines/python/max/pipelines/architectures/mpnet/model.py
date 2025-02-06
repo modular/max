@@ -47,19 +47,19 @@ class MPNetInputs(ModelInputs):
 
     This class encapsulates the input tensors required for the MPNet model execution:
     - next_tokens_batch: A tensor containing the input token IDs
-    - extended_attention_mask: A tensor containing the extended attention mask
+    - attention_mask: A tensor containing the extended attention mask
     """
 
     next_tokens_batch: Tensor
-    extended_attention_mask: Tensor
+    attention_mask: Tensor
 
     def __init__(
         self,
         next_tokens_batch: Tensor,
-        extended_attention_mask: Tensor,
+        attention_mask: Tensor,
     ) -> None:
         self.next_tokens_batch = next_tokens_batch
-        self.extended_attention_mask = extended_attention_mask
+        self.attention_mask = attention_mask
 
 
 class MPNetPipelineModel(PipelineModel):
@@ -111,7 +111,7 @@ class MPNetPipelineModel(PipelineModel):
         assert kv_cache_inputs is None, "MPNet does not have KV cache inputs"
         model_outputs = self.model.execute(
             model_inputs.next_tokens_batch,
-            model_inputs.extended_attention_mask,
+            model_inputs.attention_mask,
             copy_inputs_to_device=False,
         )
         assert isinstance(model_outputs[0], Tensor)
@@ -125,24 +125,26 @@ class MPNetPipelineModel(PipelineModel):
         tokens = [ctx.next_tokens for ctx in context_batch]
 
         # Pad tokens for the batch.
+        pad_value = getattr(
+            self.pipeline_config.huggingface_config, "pad_token_id", 1
+        )
         next_tokens_batch, _ = collate_batch(
             tokens,
-            pad_value=PAD_VALUE,
+            pad_value=pad_value,
             batch_size=len(tokens),
             pad_to_multiple_of=self.pipeline_config.pad_to_multiple_of,
         )
 
-        # Compute and extend attention mask.
-        attention_mask = (next_tokens_batch != PAD_VALUE).astype(np.int64)
-        extended_attention_mask = _get_extended_attention_mask(attention_mask)
+        # Compute attention mask.
+        attention_mask = (next_tokens_batch != pad_value).astype(np.float32)
 
         return MPNetInputs(
             next_tokens_batch=Tensor.from_numpy(next_tokens_batch).to(
                 self.pipeline_config.devices[0]
             ),
-            extended_attention_mask=Tensor.from_numpy(
-                extended_attention_mask
-            ).to(self.pipeline_config.devices[0]),
+            attention_mask=Tensor.from_numpy(attention_mask).to(
+                self.pipeline_config.devices[0]
+            ),
         )
 
     def prepare_next_token_inputs(
@@ -199,17 +201,3 @@ class MPNetPipelineModel(PipelineModel):
                 logger.info("Exporting serialized model to %s", export_path)
                 model._export_mef(export_path)
             return model
-
-
-def _get_extended_attention_mask(attention_mask: np.ndarray):
-    extended_attention_mask = attention_mask[:, None, None, :]
-    # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-    # masked positions, this operation will create a tensor which is 0.0 for
-    # positions we want to attend and the dtype's smallest value for masked positions.
-    # Since we are adding it to the raw scores before the softmax, this is
-    # effectively the same as removing these entirely.
-    extended_attention_mask = extended_attention_mask.astype(dtype=np.float32)
-    extended_attention_mask = (1.0 - extended_attention_mask) * np.finfo(
-        np.float32
-    ).min
-    return extended_attention_mask

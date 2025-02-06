@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 from max.dtype import DType
 from max.graph import Graph, TensorType, TensorValue, ops
 from max.graph.quantization import QuantizationEncoding
@@ -422,11 +423,14 @@ class MPNetModel(Layer):
 
     Based on the MPNetModel transformers implementation."""
 
-    def __init__(self, pipeline_config: PipelineConfig, weights: Weights):
+    def __init__(
+        self,
+        pipeline_config: PipelineConfig,
+        weights: Weights,
+    ):
         self.embeddings = MPNetEmbeddings(pipeline_config, weights.embeddings)
         self.encoder = MPNetEncoder(pipeline_config, weights.encoder)
-        # This model doesn't contain a pooler, since the pooled outputs
-        # are not used.
+        self.pool_outputs = pipeline_config.pool_embeddings
 
     def __call__(
         self,
@@ -436,10 +440,34 @@ class MPNetModel(Layer):
         embedding_output = self.embeddings(
             input_ids=input_ids,
         )
-        return self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
+        extended_attention_mask = ops.reshape(
+            attention_mask, ("batch_size", 1, 1, "seq_len")
         )
+        extended_attention_mask = (1 - extended_attention_mask) * ops.constant(
+            np.finfo(np.float32).min, DType.float32
+        )
+        encoded_results = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+        )
+        if self.pool_outputs:
+            # Pool the embeddings.
+            # TODO(KERN-1550): Since GPU can only apply reductions along the
+            # inner-most dimension, transpose the mask so the seq_len is last.
+            encoded_results = encoded_results.transpose(1, 2)
+            input_mask_expanded = ops.broadcast_to(
+                ops.unsqueeze(attention_mask, 1),
+                ("batch_size", encoded_results.shape[1], "seq_len"),
+            )
+            input_lengths = ops.max(
+                ops.sum(input_mask_expanded), ops.constant(1e-9, DType.float32)
+            )
+            pooled_output = (
+                ops.sum(encoded_results * input_mask_expanded) / input_lengths
+            )
+            return ops.squeeze(pooled_output, 2)
+        else:
+            return encoded_results
 
 
 def build_graph(
@@ -449,7 +477,7 @@ def build_graph(
     # Graph input types.
     input_ids_type = TensorType(DType.int64, shape=["batch_size", "seq_len"])
     attention_mask_type = TensorType(
-        DType.float32, shape=["batch_size", 1, 1, "seq_len"]
+        DType.float32, shape=["batch_size", "seq_len"]
     )
 
     mpnet = MPNetModel(pipeline_config, weights)

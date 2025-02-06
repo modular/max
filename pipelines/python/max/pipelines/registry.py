@@ -32,7 +32,7 @@ from .config import (
     WeightsFormat,
 )
 from .embeddings_pipeline import EmbeddingsPipeline
-from .hf_pipeline import HFTextGenerationPipeline
+from .hf_pipeline import HFEmbeddingsPipeline, HFTextGenerationPipeline
 from .interfaces import (
     EmbeddingsGenerator,
     PipelineTask,
@@ -53,9 +53,17 @@ _ALTERNATE_ENCODINGS = {
     SupportedEncoding.bfloat16: SupportedEncoding.float32,
 }
 
-_PIPELINE_COMMANDS = {
+_PIPELINE_TASK_MAP = {
     PipelineTask.TEXT_GENERATION: TextGenerationPipeline,
     PipelineTask.EMBEDDINGS_GENERATION: EmbeddingsPipeline,
+}
+
+
+_HF_PIPELINE_TASK_MAP: dict[
+    PipelineTask, type[HFTextGenerationPipeline] | type[HFEmbeddingsPipeline]
+] = {
+    PipelineTask.TEXT_GENERATION: HFTextGenerationPipeline,
+    PipelineTask.EMBEDDINGS_GENERATION: HFEmbeddingsPipeline,
 }
 
 
@@ -867,16 +875,15 @@ class PipelineRegistry:
         Callable[[], TokenGenerator | EmbeddingsGenerator],
     ]:
         tokenizer: PipelineTokenizer
-        pipeline_factory: Callable[[], TokenGenerator]
+        pipeline_factory: Callable[[], TokenGenerator | EmbeddingsGenerator]
 
         # Validate pipeline_config, and update missing values.
         pipeline_config = self.validate_pipeline_config(pipeline_config)
-
         if pipeline_config.engine == PipelineEngine.MAX:
             # Keep MyPy happy.
             assert pipeline_config.architecture is not None
 
-            pipeline_class = _PIPELINE_COMMANDS[task]
+            pipeline_class = _PIPELINE_TASK_MAP[task]
 
             # MAX pipeline
             arch = self.architectures[pipeline_config.architecture]
@@ -916,10 +923,8 @@ class PipelineRegistry:
                 eos_token_id=tokenizer.eos,
             )
         else:
-            if task != PipelineTask.TEXT_GENERATION:
-                raise ValueError(
-                    "Only `generate` is supported when using the Huggingface model engine."
-                )
+            hf_pipeline_class = _HF_PIPELINE_TASK_MAP[task]
+
             torch_device_type = str(pipeline_config.device_specs[0].device_type)
             if pipeline_config.device_specs[0].device_type == "gpu":
                 torch_device_type = "cuda"
@@ -934,12 +939,12 @@ class PipelineRegistry:
                     pipeline_config=pipeline_config,
                     tokenizer_type=TextTokenizer,
                     pipeline_model="",
-                    pipeline_name="HFTextGenerationPipeline",
+                    pipeline_name=hf_pipeline_class.__name__,
                     factory=True,
                 )
             )
             pipeline_factory = functools.partial(
-                HFTextGenerationPipeline,
+                hf_pipeline_class,
                 pipeline_config=pipeline_config,
                 torch_device_type=torch_device_type,
             )

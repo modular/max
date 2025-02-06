@@ -552,6 +552,9 @@ class PipelineConfig:
     rope_type: Optional[RopeType] = None
     """Force using a specific rope type, 'none', 'normal', or 'neox'. Only matters for GGUF weights."""
 
+    pool_embeddings: bool = True
+    """Whether to pool embedding outputs."""
+
     _huggingface_config: Optional[AutoConfig] = None
     """The HuggingFace config associated with the huggingface repo id."""
 

@@ -77,9 +77,10 @@ class EmbeddingsPipeline(EmbeddingsGenerator[T]):
         tracer.push("prepare_response")
         for batch_index, request_id in enumerate(batch.keys()):
             request_embeddings = batch_embeddings[batch_index]
-            # Remove padded tokens from embeddings
-            request_embeddings = request_embeddings[
-                : context_batch[batch_index].seq_len, :
-            ]
+            if not self._pipeline_config.pool_embeddings:
+                # Remove padded tokens from embeddings
+                request_embeddings = request_embeddings[
+                    : context_batch[batch_index].seq_len, :
+                ]
             res[request_id] = EmbeddingsResponse(request_embeddings)
         return res

@@ -17,18 +17,23 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 import torch
 from max.driver import Tensor
-from transformers import AutoModelForCausalLM, AutoTokenizer, BatchEncoding
+from transformers import (
+    AutoModel,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BatchEncoding,
+)
 
 from .config import PipelineConfig
 from .context import TextContext
-from .interfaces import TokenGenerator
+from .interfaces import EmbeddingsGenerator, TokenGenerator
 from .kv_cache import ContinuousHFStaticCache
-from .response import TextResponse
+from .response import EmbeddingsResponse, TextResponse
 
 logger = logging.getLogger("max.pipelines")
 
@@ -308,3 +313,85 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
     def release(self, context: TextContext) -> None:
         if context.cache_seq_id not in self._cache.available_slots:
             self._cache.release(context.cache_seq_id)
+
+
+class HFEmbeddingsPipeline(EmbeddingsGenerator[TextContext]):
+    """Generalized token generator pipeline."""
+
+    def __init__(
+        self,
+        pipeline_config: PipelineConfig,
+        torch_device_type: str,
+    ) -> None:
+        self._pipeline_config = pipeline_config
+        self._torch_device = torch.device(torch_device_type)
+        self._model = AutoModel.from_pretrained(
+            pipeline_config.huggingface_repo_id,
+            trust_remote_code=pipeline_config.trust_remote_code,
+        ).to(self._torch_device)
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            pipeline_config.huggingface_repo_id
+        )
+
+    def prepare_initial_token_inputs(
+        self,
+        context_batch: list[TextContext],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Get tokens and seq_ids.
+        tokens = [ctx.next_tokens for ctx in context_batch]
+
+        # Pad tokens for the batch.
+        padded = self._tokenizer.pad(
+            BatchEncoding({"input_ids": tokens}),
+            padding=True,
+            return_tensors="pt",
+            pad_to_multiple_of=2,
+        )
+        input_ids = cast(torch.Tensor, padded["input_ids"]).to(
+            self._torch_device
+        )
+        attention_mask = cast(torch.Tensor, padded["attention_mask"]).to(
+            self._torch_device
+        )
+        return input_ids, attention_mask
+
+    def encode(
+        self, batch: dict[str, TextContext]
+    ) -> dict[str, EmbeddingsResponse]:
+        """Encodes a batch of text inputs."""
+
+        # Flatten our batch for consistent indexing.
+        context_batch = list(batch.values())
+        input_ids, attention_mask = self.prepare_initial_token_inputs(
+            context_batch
+        )
+
+        outputs = self._model(
+            input_ids=input_ids, attention_mask=attention_mask
+        )
+        # Pool the embeddings of together, and copy to cpu.
+        batch_embeddings = (
+            _mean_pooling(outputs, attention_mask).cpu().detach().numpy()
+        )
+
+        # Prepare the response.
+        res: dict[str, Any] = {}
+        for batch_index, request_id in enumerate(batch.keys()):
+            request_embeddings = batch_embeddings[batch_index]
+            res[request_id] = EmbeddingsResponse(request_embeddings)
+        return res
+
+
+# Taken from the sentence piece transformer:
+# https://huggingface.co/sentence-transformers/all-mpnet-base-v2
+# Mean Pooling - Take attention mask into account for correct averaging
+def _mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[
+        0
+    ]  # First element of model_output contains all token embeddings
+    input_mask_expanded = (
+        attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    )
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(
+        input_mask_expanded.sum(1), min=1e-9
+    )

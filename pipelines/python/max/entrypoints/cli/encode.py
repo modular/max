@@ -13,7 +13,7 @@ from typing import Optional
 
 from max.pipelines import (
     PIPELINE_REGISTRY,
-    EmbeddingsPipeline,
+    EmbeddingsGenerator,
     EmbeddingsResponse,
     PipelineConfig,
 )
@@ -31,7 +31,7 @@ MODEL_NAME = "model"
 
 
 async def _run_pipeline_encode(
-    pipeline: EmbeddingsPipeline,
+    pipeline: EmbeddingsGenerator,
     tokenizer: PipelineTokenizer,
     prompt: str,
     metrics: Optional[EmbeddingsMetrics] = None,
@@ -68,7 +68,7 @@ def pipeline_encode(
         tokenizer, pipeline = PIPELINE_REGISTRY.retrieve(
             pipeline_config, task=PipelineTask.EMBEDDINGS_GENERATION
         )
-        assert isinstance(pipeline, EmbeddingsPipeline)
+        assert isinstance(pipeline, EmbeddingsGenerator)
 
         if num_warmups > 0:
             logger.info("Running warmup")
