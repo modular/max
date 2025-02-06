@@ -11,11 +11,6 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-from max.pipelines import PIPELINE_REGISTRY
-
 from .arch import qwen2_arch
-from .model import Qwen2Model
-
-PIPELINE_REGISTRY.register(qwen2_arch)
 
 __all__ = ["qwen2_arch"]
