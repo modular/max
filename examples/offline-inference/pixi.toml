@@ -11,8 +11,4 @@ basic = "python basic.py"
 
 [dependencies]
 python = ">=3.9,<3.13"
-max = ">=24.6.0.dev2024090821"
-
-[pypi-dependencies]
-tqdm = ">=4.66.5"
-
+max-pipelines = "*"
