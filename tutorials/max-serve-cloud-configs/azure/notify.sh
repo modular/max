@@ -59,7 +59,7 @@ check_server_status() {
     fi
 
     # Check for various success patterns in Docker logs
-    if echo "$logs" | grep -q "Uvicorn running on http://0.0.0.0:8000\|Application startup complete.\|Started model worker!"; then
+    if echo "$logs" | grep -q "Server ready on http://0.0.0.0:8000\|Application startup complete.\|Started model worker!"; then
         echo "✅ Server is running successfully!"
         return 0
     fi

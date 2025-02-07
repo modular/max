@@ -44,9 +44,9 @@ check_server_status() {
     echo "📋 Log sample for pattern matching:"
     echo "$logs" | tail -n 5
 
-    if echo "$logs" | grep -q "startup-script:.*Uvicorn running on http://0.0.0.0:8000" ||
+    if echo "$logs" | grep -q "startup-script:.*Server ready on http://0.0.0.0:8000" ||
         echo "$logs" | grep -q "startup-script:.*Application startup complete." ||
-        echo "$logs" | grep -q "Uvicorn running on http://0.0.0.0:8000" ||
+        echo "$logs" | grep -q "Server ready on http://0.0.0.0:8000" ||
         echo "$logs" | grep -q "Application startup complete."; then
         echo "✅ Found server running message"
         return 0
@@ -54,9 +54,9 @@ check_server_status() {
 
     echo "❌ Server running message not found"
     echo "🔍 Looking for patterns:"
-    echo "  - 'startup-script:.*Uvicorn running on http://0.0.0.0:8000'"
+    echo "  - 'startup-script:.*Server ready on http://0.0.0.0:8000'"
     echo "  - 'startup-script:.*Application startup complete.'"
-    echo "  - 'Uvicorn running on http://0.0.0.0:8000'"
+    echo "  - 'Server ready on http://0.0.0.0:8000'"
     echo "  - 'Application startup complete.'"
     return 1
 }

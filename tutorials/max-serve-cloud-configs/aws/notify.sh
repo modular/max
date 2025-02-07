@@ -49,7 +49,7 @@ check_server_status() {
     echo "🔍 Checking logs for server status..."
 
     # Check for Uvicorn startup message in container logs
-    if echo "$logs" | grep -q "Uvicorn running on http://0.0.0.0:8000" ||
+    if echo "$logs" | grep -q "Server ready on http://0.0.0.0:8000" ||
         echo "$logs" | grep -q "Application startup complete"; then
         echo "✅ Found server running message"
         return 0
