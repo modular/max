@@ -131,6 +131,9 @@ T = TypeVar("T", bound=InputContext)
 class PipelineModel(ABC):
     """A pipeline model with setup, input preparation and execution methods."""
 
+    _MAX_DEFAULT_BATCH_SIZE = 4096
+    _MIN_DEFAULT_BATCH_SIZE = 1
+
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession
     ) -> None:
@@ -214,7 +217,10 @@ class PipelineModel(ABC):
         )
 
         # clamp the floor of the inferred batch size to 1 and the ceiling to 4096
-        inferred_batch_size = max(1, min(inferred_batch_size, 4096))
+        inferred_batch_size = max(
+            cls._MIN_DEFAULT_BATCH_SIZE,
+            min(inferred_batch_size, cls._MAX_DEFAULT_BATCH_SIZE),
+        )
         return inferred_batch_size
 
     @classmethod
