@@ -41,7 +41,7 @@ Clone the repository and navigate to the `benchmarks` directory.
 
 ```bash
 git clone https://github.com/modular/max.git
-cd pipelines/benchmarking
+cd max/pipelines/python/max/entrypoints/benchmarking
 ```
 
 install the dependencies via
