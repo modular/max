@@ -163,7 +163,7 @@ def pipeline_config_options(func):
         flag_value="0",
         help=(
             "Whether to run the model on CPU (--devices=cpu), GPU (--devices=gpu)"
-            " or a list of GPUs (--devices=gpu-0,gpu-1) etc. An ID value can be"
+            " or a list of GPUs (--devices=gpu:0,1) etc. An ID value can be"
             " provided optionally to indicate the device ID to target. If not"
             " provided, the model will run on the first available GPU (--devices=gpu),"
             " or CPU if no GPUs are available (--devices=cpu)."

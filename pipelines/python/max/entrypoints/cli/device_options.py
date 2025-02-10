@@ -26,18 +26,18 @@ class DevicesOptionType(click.ParamType):
             return []
         elif value == "cpu" or value == "gpu":
             return value
+        # At this point, we only expect a comma-separated list of gpu:<ids>.
+        # We also support backwards compatibility where ids are not prefixed with gpu:.
         try:
+            value = value.replace("gpu:", "")
             # Also account for non gpu prefixed ids (backwards compatibility)
-            results = [
-                int(i.replace("gpu-", "")) if i.startswith("gpu-") else int(i)
-                for i in value.split(",")
-            ]
+            results = [int(i) for i in value.split(",")]
             return results
         except ValueError:
             self.fail(
                 (
                     f"{value!r} is not a valid device list - must be a"
-                    " comma-separated list of gpu-<N> ids."
+                    " comma-separated list of gpu:[<N>] ids."
                 ),
                 param,
                 ctx,
