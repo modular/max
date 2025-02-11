@@ -513,7 +513,7 @@ class PipelineConfig:
     device_specs: list[DeviceSpec] = field(
         default_factory=_scan_available_devices
     )
-    """Devices to run inference upon."""
+    """Devices to run inference upon. This option is not documented in help() as it shouldn't be used directly via the CLI entrypoint."""
 
     quantization_encoding: Optional[SupportedEncoding] = None
     """Weight encoding type."""
@@ -900,7 +900,6 @@ class PipelineConfig:
             "engine": "Specify the engine backend to use for serving the model. Options include 'max' for the MAX engine, or 'huggingface' as a fallback option that provides improved model coverage.",
             "architecture": "Deprecated - Please set `huggingface-repo-id` instead. Define the model architecture to run. This should match one of the supported architectures for your selected engine.",
             "weight_path": "Provide an optional local path or path relative to the root of a Huggingface repo to the model weights you want to use. This allows you to specify custom weights instead of using defaults. You may pass multiple, ie. `--weight-path=model-00001-of-00002.safetensors --weight-path=model-00002-of-00002.safetensors`",
-            "device_specs": "Devices to run inference upon. Default is set to CPU.",
             "quantization_encoding": "Define the weight encoding type for quantization. This can help optimize performance and memory usage during inference. ie. q4_k, bfloat16 etc.",
             "serialized_model_path": "If specified, this flag attempts to load a serialized MEF model from the given path. This is useful for reusing previously saved models.",
             "save_to_serialized_model_path": "If specified, this flag attempts to save the current model state to a serialized format at the given path for later use.",

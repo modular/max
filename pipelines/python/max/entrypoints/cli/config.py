@@ -135,8 +135,9 @@ def config_to_flag(cls):
         help_text = {}
     field_types = get_type_hints(cls)
     for _field in fields(cls):
-        if _field.name.startswith("_"):
-            # Skip private config fields.
+        # Skip private config fields.
+        # We also skip device_specs as it should not be used directly via the CLI entrypoint.
+        if _field.name.startswith("_") or _field.name == "device_specs":
             continue
 
         new_option = create_click_option(
