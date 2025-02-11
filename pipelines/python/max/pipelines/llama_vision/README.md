@@ -62,7 +62,7 @@ The easiest way to try out this pipeline is with our Magic command-line tool.
    directory, and you can change to it after cloning:
 
    ```shell
-   cd max/pipelines/python/
+   cd max/pipelines/python/max/pipelines
    ```
 
 3. Host a multimodal chat completion endpoint via MAX Serve.
@@ -114,9 +114,8 @@ pipeline:
   context encoding batch. The effective limit will be the lesser of this value
   and `max-cache-batch-size`.
   Default is 32.
-- `--max-length`: Controls the maximum length of the text sequence
-  (includes the input tokens).
-  (Default value: 512)
+- `--max-length`: Controls the maximum length of the text sequence (includes the
+  input tokens). Defaults to huggingface model config's max sequence length.
 - `--max-new-tokens`: The maximum number of new tokens to generate. If a -1
   value is provided, the model will continue to generate tokens for the entire
   context length. (Default value: -1)
