@@ -71,7 +71,7 @@ class LLM:
     def generate(
         self,
         prompts: str | Sequence[str],
-        max_new_tokens: int | None = None,
+        max_new_tokens: int | None = 100,
         use_tqdm: bool = True,
     ) -> list[str]:
         if isinstance(prompts, str):

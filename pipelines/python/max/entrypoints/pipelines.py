@@ -159,6 +159,10 @@ def cli_pipeline(prompt, image_url, num_warmups, **config_kwargs):
     if "replit" in config_kwargs["huggingface_repo_id"]:
         config_kwargs["trust_remote_code"] = True
 
+    if config_kwargs["max_new_tokens"] == -1:
+        # Limit generate default max_new_tokens to 100.
+        config_kwargs["max_new_tokens"] = 100
+
     # Load tokenizer & pipeline.
     pipeline_config = PipelineConfig(**config_kwargs)
     generate_text_for_pipeline(
