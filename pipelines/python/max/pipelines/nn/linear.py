@@ -129,6 +129,13 @@ class LinearV2(Layer):
         return res
 
 
+def _allocate_if_needed(value: Weights | Weight, dtype, shape) -> Weight:
+    if isinstance(value, Weight):
+        return value
+    else:
+        return value.weight.allocate(dtype, shape)
+
+
 @dataclass
 class Linear(Layer):
     """A unified linear layer that delegates to either regular or quantized implementation."""
@@ -150,14 +157,18 @@ class Linear(Layer):
         quantization_encoding: Optional[QuantizationEncoding],
         in_features: int,
         out_features: int,
-        weights: Weights,
-        bias: Optional[Weights] = None,
+        weights: Weights | Weight,
+        bias: Optional[Weights | Weight] = None,
     ) -> "Linear":
         """Factory method to create a Linear layer with appropriate implementation."""
         if not quantization_encoding:
-            weight = weights.weight.allocate(dtype, [in_features, out_features])
+            weight = _allocate_if_needed(
+                weights, dtype, [in_features, out_features]
+            )
             bias_weight = (
-                bias.weight.allocate(dtype, [out_features]) if bias else None
+                _allocate_if_needed(bias, dtype, [out_features])
+                if bias
+                else None
             )
             return Linear(weight=weight, bias=bias_weight)
         else:
@@ -185,13 +196,17 @@ class QLinear(Linear):
         quantization_encoding: QuantizationEncoding,
         in_features: int,
         out_features: int,
-        weights: Weights,
-        bias: Optional[Weights],
+        weights: Weights | Weight,
+        bias: Optional[Weights | Weight],
     ) -> "Linear":
         if quantization_encoding != QuantizationEncoding.GPTQ:
-            weight = weights.weight.allocate(dtype, [in_features, out_features])
+            weight = _allocate_if_needed(
+                weights, dtype, [in_features, out_features]
+            )
             bias_weight = (
-                bias.weight.allocate(dtype, [out_features]) if bias else None
+                _allocate_if_needed(bias, dtype, [out_features])
+                if bias
+                else None
             )
             return QLinear(
                 weight=weight,
@@ -238,8 +253,8 @@ class GPTQLinear(QLinear):
         quantization_encoding: QuantizationEncoding,
         in_features: int,
         out_features: int,
-        weights: Weights,
-        bias: Optional[Weights],
+        weights: Weights | Weight,
+        bias: Optional[Weights | Weight],
     ) -> "Linear":
         """Internal method to create a Linear layer from GPTQ weights."""
         assert hasattr(quantization_encoding, "config"), (
@@ -258,7 +273,8 @@ class GPTQLinear(QLinear):
         )
 
         perm_idx = None
-        if weights.qweight.exists():
+
+        if isinstance(weights, Weights) and weights.qweight.exists():
             orig_quantized_weights = [weights.qweight, weights.scales]
             quantized_weights = []
             for idx, qw in enumerate(orig_quantized_weights):
@@ -298,10 +314,15 @@ class GPTQLinear(QLinear):
             )
 
         else:
-            weight = weights.weight.allocate(
-                DType.bfloat16, [in_features, out_features]
+            weight = _allocate_if_needed(
+                weights, DType.bfloat16, [in_features, out_features]
             )
-            return Linear(weight)
+            bias_weight = (
+                _allocate_if_needed(bias, dtype, [out_features])
+                if bias
+                else None
+            )
+            return Linear(weight, bias_weight)
 
     def __call__(self, x: TensorValue) -> TensorValue:
         assert self.quantization_encoding is not None

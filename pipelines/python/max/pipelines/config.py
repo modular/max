@@ -118,6 +118,10 @@ class SupportedEncoding(str, Enum):
             raise ValueError(msg)
         return _SUPPORTED_ENCODING_TO_CACHE_DTYPE[self]
 
+    def supported_on(self, device_spec: DeviceSpec) -> bool:
+        """Returns whether this quantization encoding is supported on a device."""
+        return device_spec.device_type in _SUPPORTED_DEVICES[self]
+
 
 _SUPPORTED_ENCODING_TO_DTYPE = {
     SupportedEncoding.float32: DType.float32,
@@ -145,6 +149,17 @@ _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING = {
     SupportedEncoding.q4_0: QuantizationEncoding.Q4_0,
     SupportedEncoding.q6_k: QuantizationEncoding.Q6_K,
     SupportedEncoding.gptq: QuantizationEncoding.GPTQ,
+}
+
+
+# Basic validation for supported devices for each type of encoding.
+_SUPPORTED_DEVICES: dict[SupportedEncoding, tuple[str, ...]] = {
+    SupportedEncoding.float32: ("cpu", "gpu"),
+    SupportedEncoding.bfloat16: ("gpu",),
+    SupportedEncoding.q4_k: ("cpu",),
+    SupportedEncoding.q4_0: ("cpu",),
+    SupportedEncoding.q6_k: ("cpu",),
+    SupportedEncoding.gptq: ("gpu",),
 }
 
 

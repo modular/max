@@ -269,6 +269,17 @@ class PipelineRegistry:
                 pipeline_config.engine = PipelineEngine.HUGGINGFACE
                 return pipeline_config
 
+        # Check that the quantization encoding is supported on the specified
+        # devices.
+        for device_spec in pipeline_config.device_specs:
+            if not pipeline_config.quantization_encoding.supported_on(
+                device_spec
+            ):
+                raise ValueError(
+                    f"{pipeline_config.quantization_encoding} is not supported on {device_spec.device_type}. "
+                    "Please use the flag --devices=cpu or --devices=gpu to configure the device."
+                )
+
         # We should now have a valid quantization_encoding, and possibly a weight_path.
         # If no weight_path is provided, we should grab the default.
         if not pipeline_config.weight_path:

@@ -12,10 +12,19 @@
 # ===----------------------------------------------------------------------=== #
 """Build a Llama3 model via Graph API from GGUF weights."""
 
+from __future__ import annotations
+
 from typing import List, Optional, Union, cast
 
 from max.dtype import DType
-from max.graph import DeviceRef, Graph, TensorValue, TensorValueLike, ops
+from max.graph import (
+    DeviceRef,
+    Graph,
+    TensorValue,
+    TensorValueLike,
+    Weight,
+    ops,
+)
 from max.graph.quantization import QuantizationEncoding
 from max.graph.weights import Weights
 from max.pipelines import PipelineConfig, RopeType, WeightsFormat
@@ -526,7 +535,13 @@ def _transformer_opaque(
                 weights.output,
             )
         else:
-            output = Linear(embedding_layer.weights)
+            output = Linear.create(
+                pipeline_config.dtype,
+                pipeline_config.quantization_encoding.quantization_encoding,
+                pipeline_config.huggingface_config.vocab_size,
+                pipeline_config.huggingface_config.hidden_size,
+                cast(Weight, embedding_layer.weights),
+            )
 
         if kv_params.cache_strategy == KVCacheStrategy.CONTINUOUS:
             kv_collection_cls = FetchContinuousBatchingKVCacheCollection
@@ -683,7 +698,13 @@ def transformer(
                 weights.output,
             )
         else:
-            output = Linear(embedding_layer.weights)
+            output = Linear.create(
+                pipeline_config.dtype,
+                pipeline_config.quantization_encoding.quantization_encoding,
+                pipeline_config.huggingface_config.vocab_size,
+                pipeline_config.huggingface_config.hidden_size,
+                cast(Weight, embedding_layer.weights),
+            )
 
         return NaiveTransformer(
             dim=pipeline_config.huggingface_config.hidden_size,
