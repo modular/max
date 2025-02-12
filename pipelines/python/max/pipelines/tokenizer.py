@@ -342,9 +342,34 @@ class TextAndVisionTokenizer(
             trust_remote_code=trust_remote_code,
         )
 
+    def _wrap_str_message_content(
+        self, messages: list[TokenGeneratorRequestMessage]
+    ) -> list[TokenGeneratorRequestMessage]:
+        # Wrap string type values of "content" key with "type": "text" and its
+        # value. For example, if the message is {"content": "Hello, world!"},
+        # it will be wrapped with {"type": "text", "text": "Hello, world!"}.
+        # This is a workaround for LlamaVision's chat template:
+        # https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct/blob/main/chat_template.json
+        for message in messages:
+            if isinstance(message["content"], str):
+                message["content"] = [
+                    {"type": "text", "text": message["content"]}
+                ]
+            elif isinstance(message["content"], list):
+                for content in message["content"]:
+                    if "content" in content and content["type"] == "text":
+                        content["text"] = content.pop("content")
+        return messages
+
     def apply_chat_template(
         self, messages: list[TokenGeneratorRequestMessage]
     ) -> str:
+        # TODO: Refactor this.
+        if (
+            self.huggingface_repo_id
+            == "meta-llama/Llama-3.2-11B-Vision-Instruct"
+        ):
+            messages = self._wrap_str_message_content(messages)
         try:
             templated_message = self.processor.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
@@ -406,7 +431,6 @@ class TextAndVisionTokenizer(
     ) -> TextAndVisionContext:
         """Create a new TextAndVisionContext object, leveraging necessary information like
         cache_seq_id and prompt from TokenGeneratorRequest."""
-
         prompt: Union[str, Sequence[int]]
         if request.prompt is not None:
             prompt = request.prompt
