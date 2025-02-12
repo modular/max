@@ -23,7 +23,7 @@ from max.pipelines.architectures import register_all_models
 def main():
     register_all_models()
 
-    huggingface_repo_id = "modularai/llama-3.1"
+    huggingface_repo_id = "modularai/Llama-3.1-8B-Instruct-GGUF"
     print(f"Loading model: {huggingface_repo_id}")
     pipeline_config = PipelineConfig(huggingface_repo_id)
     llm = LLM(pipeline_config)

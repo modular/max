@@ -15,6 +15,7 @@
 PROJECT_ID=$1
 INSTANCE_NAME=$2
 ZONE=$3
+PUBLIC_IP=$4
 MAX_WAIT_MINUTES=30
 START_TIME=$(date +%s)
 
@@ -38,26 +39,24 @@ fetch_logs() {
 
 check_server_status() {
     local logs=$1
-    echo "🔍 Checking logs for server status..."
+    echo "🔍 Checking server health..."
 
-    # Print a sample of logs for debugging
-    echo "📋 Log sample for pattern matching:"
-    echo "$logs" | tail -n 5
+    if echo "$logs" | grep -q "Pulling from docker.modular.com/modular/max-openai-api"; then
+        echo "⏳ Docker image is still being pulled..."
+        return 1
+    fi
 
-    if echo "$logs" | grep -q "startup-script:.*Server ready on http://0.0.0.0:8000" ||
-        echo "$logs" | grep -q "startup-script:.*Application startup complete." ||
-        echo "$logs" | grep -q "Server ready on http://0.0.0.0:8000" ||
-        echo "$logs" | grep -q "Application startup complete."; then
-        echo "✅ Found server running message"
+    if curl -s -f "http://${PUBLIC_IP}/v1/health" >/dev/null; then
+        echo "✅ Server health check passed!"
         return 0
     fi
 
-    echo "❌ Server running message not found"
-    echo "🔍 Looking for patterns:"
-    echo "  - 'startup-script:.*Server ready on http://0.0.0.0:8000'"
-    echo "  - 'startup-script:.*Application startup complete.'"
-    echo "  - 'Server ready on http://0.0.0.0:8000'"
-    echo "  - 'Application startup complete.'"
+    if echo "$logs" | grep -q "Building\|Compiling\|Starting download of model"; then
+        echo "⏳ Server is initializing (compiling model)..."
+        return 1
+    fi
+
+    echo "⏳ Server still starting up..."
     return 1
 }
 

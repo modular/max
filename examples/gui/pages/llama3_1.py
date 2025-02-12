@@ -64,7 +64,7 @@ def start_llama3(
         quantization_encoding=quantization,
         max_length=max_length,
         max_new_tokens=max_new_tokens,
-        huggingface_repo_id="modularai/llama-3.1",
+        huggingface_repo_id="modularai/Llama-3.1-8B-Instruct-GGUF",
     )
     _, pipeline = PIPELINE_REGISTRY.retrieve_factory(config)
     return pipeline

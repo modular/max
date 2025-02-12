@@ -80,7 +80,7 @@ image:
 
 # -- MAX Serve arguments
 maxServe:
-  huggingfaceRepoId: modularai/llama-3.1
+  huggingfaceRepoId: modularai/Llama-3.1-8B-Instruct-GGUF
   maxLength: "2048"
   maxBatchSize: "250"
   cacheStrategy: "continuous"
@@ -150,7 +150,7 @@ inferenceServer:
   # -- Arguments to pass to the node entrypoint. If defined it overwrites the default args value set by .Values.max-serve
   # @default -- See `values.yaml`
   args: []
-  # - "--huggingface-repo-id=modularai/llama-3.1",
+  # - "--huggingface-repo-id=modularai/Llama-3.1-8B-Instruct-GGUF",
   # - "--max-length=2048",
   # - "--max-batch-size=250",
   # - "--cache-strategy=continuous",

@@ -14,6 +14,7 @@
 
 REGION=$1
 STACK_NAME=$2
+PUBLIC_IP=$3
 MAX_WAIT_MINUTES=30
 START_TIME=$(date +%s)
 LOG_GROUP="/aws/ec2/$STACK_NAME-logs"
@@ -45,17 +46,24 @@ fetch_logs() {
 }
 
 check_server_status() {
-    local logs=$1
-    echo "🔍 Checking logs for server status..."
+    echo "🔍 Checking server health..."
 
-    # Check for Uvicorn startup message in container logs
-    if echo "$logs" | grep -q "Server ready on http://0.0.0.0:8000" ||
-        echo "$logs" | grep -q "Application startup complete"; then
-        echo "✅ Found server running message"
+    if echo "$EC2_LOGS" | grep -q "Pulling from docker.modular.com/modular/max-openai-api"; then
+        echo "⏳ Docker image is still being pulled..."
+        return 1
+    fi
+
+    if curl -s -f "http://$PUBLIC_IP/v1/health" >/dev/null; then
+        echo "✅ Server health check passed!"
         return 0
     fi
 
-    echo "❌ Server running message not found"
+    if echo "$EC2_LOGS" | grep -q "Building\|Compiling\|Starting download of model"; then
+        echo "⏳ Server is initializing (compiling model)..."
+        return 1
+    fi
+
+    echo "⏳ Server still starting up..."
     return 1
 }
 

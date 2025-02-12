@@ -43,4 +43,4 @@ ENV OTEL_SERVICE_NAME="max-serve"
 ENV OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION="base2_exponential_bucket_histogram"
 
 ENTRYPOINT ["magic", "run", "serve"]
-CMD ["--huggingface-repo-id=modularai/llama-3.1"]
+CMD ["--huggingface-repo-id=modularai/Llama-3.1-8B-Instruct-GGUF"]

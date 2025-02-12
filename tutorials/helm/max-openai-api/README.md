@@ -67,7 +67,7 @@ kubectl create namespace max-openai-api-demo
 helm install max-openai-api oci://registry-1.docker.io/modular/max-openai-api-chart \
   --version <insert-version> \
   --namespace max-openai-api-demo \
-  --set huggingfaceRepoId=modularai/llama-3.1
+  --set huggingfaceRepoId=modularai/Llama-3.1-8B-Instruct-GGUF
   --set maxServe.maxLength=512 \
   --set maxServe.maxBatchSize=16 \
   --set envSecret.HF_TOKEN=<insert-huggingface-token> \
@@ -86,7 +86,7 @@ kubectl port-forward $POD_NAME 8000:$CONTAINER_PORT --namespace max-openai-api-d
 curl -N http://localhost:8000/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
-        "model": "modularai/llama-3.1",
+        "model": "modularai/Llama-3.1-8B-Instruct-GGUF",
         "stream": true,
         "messages": [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -172,7 +172,7 @@ eksctl delete cluster \
 | ingress.path | string | `"/"` |  |
 | ingress.pathType | string | `"ImplementationSpecific"` |  |
 | ingress.tls | list | `[]` |  |
-| maxServe | object | `{"cacheStrategy":"continuous","huggingfaceRepoId":"modularai/llama-3.1","maxBatchSize":"250","maxLength":"2048","maxNumSteps":"10"}` | MAX Serve arguments |
+| maxServe | object | `{"cacheStrategy":"continuous","huggingfaceRepoId":"modularai/Llama-3.1-8B-Instruct-GGUF","maxBatchSize":"250","maxLength":"2048","maxNumSteps":"10"}` | MAX Serve arguments |
 | nameOverride | string | `nil` | Provide a name to override the name of the chart |
 | nodeSelector | object | `{}` | NodeSelector to be added to all deployments |
 | resources | object | `{}` |  |
