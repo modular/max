@@ -1,6 +1,6 @@
 [project]
 authors = ["Modular <hello@modular.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+channels = ["conda-forge", "https://conda.modular.com/max/"]
 description = "An example of extending a graph with a custom Mojo operation"
 name = "Custom Operations"
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]

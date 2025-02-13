@@ -1,6 +1,6 @@
 [project]
 authors = ["Modular <hello@modular.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/", "pytorch"]
+channels = ["conda-forge", "https://conda.modular.com/max/", "pytorch"]
 description = "Add a short description here"
 name = "max-graph-api"
 platforms = ["osx-arm64", "linux-64"]

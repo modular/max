@@ -3,7 +3,7 @@ name = "Resnet50 Python Torchscript"
 version = "1.0.0"
 description = "MAX Examples"
 authors = ["Modular <hello@modular.com>"]
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/", "pytorch"]
+channels = ["conda-forge", "https://conda.modular.com/max/", "pytorch"]
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 
 [dependencies]

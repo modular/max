@@ -2,7 +2,7 @@
 platforms = ["osx-arm64", "linux-64"]
 version = "0.0.0"
 authors = ["Modular <hello@modular.com>"]
-channels = ["pytorch", "conda-forge", "https://conda.modular.com/max-nightly/"]
+channels = ["pytorch", "conda-forge", "https://conda.modular.com/max/"]
 description = "Add a short description here"
 name = "local"
 

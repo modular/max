@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [tool.pixi.project]
-channels = ["pytorch", "conda-forge", "https://conda.modular.com/max-nightly/"]
+channels = ["pytorch", "conda-forge", "https://conda.modular.com/max/"]
 platforms = ["linux-64", "osx-arm64"]
 
 [tool.pixi.pypi-dependencies]

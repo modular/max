@@ -1,7 +1,7 @@
 [project]
 name = "gui"
 version = "1.0.0"
-channels = ["conda-forge", "https://conda.modular.com/max-nightly/"]
+channels = ["conda-forge", "https://conda.modular.com/max/"]
 platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 
 [dependencies]
