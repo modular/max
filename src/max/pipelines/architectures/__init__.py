@@ -16,10 +16,13 @@ from max.pipelines import PIPELINE_REGISTRY
 
 def register_all_models():
     """Imports model architectures, thus registering the architecture in the shared PIPELINE_REGISTRY."""
-    from .llama3 import exaone_arch, llama_arch, olmoe_arch, phi3_arch
+    from .exaone import exaone_arch
+    from .llama3 import llama_arch
     from .llama_vision import llama_vision_arch
     from .mistral import mistral_arch
     from .mpnet import mpnet_arch
+    from .olmo import olmo_arch
+    from .phi3 import phi3_arch
     from .pixtral import pixtral_arch
     from .qwen2 import qwen2_arch
     from .replit import replit_arch
@@ -30,7 +33,7 @@ def register_all_models():
         llama_vision_arch,
         mistral_arch,
         mpnet_arch,
-        olmoe_arch,
+        olmo_arch,
         phi3_arch,
         pixtral_arch,
         qwen2_arch,

@@ -11,6 +11,23 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-from .arch import llama_arch
+from __future__ import annotations
 
-__all__ = ["llama_arch"]
+from typing import Literal
+
+from max.engine import InferenceSession
+from max.pipelines import PipelineConfig
+
+from ..llama3.model import LlamaModelBase
+
+
+class Phi3Model(LlamaModelBase):
+    """Phi 3 pipeline model implementation."""
+
+    norm_method: Literal["rms_norm"] | Literal["layer_norm"] = "rms_norm"
+    """Normalization layer."""
+
+    def __init__(
+        self, pipeline_config: PipelineConfig, session: InferenceSession
+    ) -> None:
+        super().__init__(pipeline_config, session)

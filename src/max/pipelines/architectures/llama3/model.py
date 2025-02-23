@@ -18,7 +18,7 @@ import time
 from typing import Any, List, Literal, Sequence, cast
 
 import numpy as np
-from max.driver import CPU, Device, Tensor
+from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
 from max.graph import DeviceRef, Graph, TensorType, TensorValue, ops
@@ -702,11 +702,9 @@ class LlamaModelBase(PipelineModel[TextContext]):
         if self.pipeline_config.cache_strategy.uses_opaque():
             # Handle the ragged inputs
             tokens = cast(Tensor, llama3_inputs.tokens).to_numpy()
-            input_row_offsets = (
-                cast(Tensor, llama3_inputs.input_row_offsets)
-                .to(CPU())
-                .to_numpy()
-            )
+            input_row_offsets = cast(
+                Tensor, llama3_inputs.input_row_offsets
+            ).to_numpy()
 
             def _get_logits_and_samples(
                 batch_index: int, echo: bool
@@ -765,29 +763,6 @@ class Llama3Model(LlamaModelBase):
 
     norm_method: Literal["rms_norm"] | Literal["layer_norm"] = "rms_norm"
     """Normalization layer."""
-
-    def __init__(
-        self, pipeline_config: PipelineConfig, session: InferenceSession
-    ) -> None:
-        super().__init__(pipeline_config, session)
-
-
-class Phi3Model(LlamaModelBase):
-    """Phi 3 pipeline model implementation."""
-
-    norm_method: Literal["rms_norm"] | Literal["layer_norm"] = "rms_norm"
-    """Normalization layer."""
-
-    def __init__(
-        self, pipeline_config: PipelineConfig, session: InferenceSession
-    ) -> None:
-        super().__init__(pipeline_config, session)
-
-
-class OlmoModel(LlamaModelBase):
-    """Olmo pipeline model implementation."""
-
-    norm_method: Literal["rms_norm"] | Literal["layer_norm"] = "layer_norm"
 
     def __init__(
         self, pipeline_config: PipelineConfig, session: InferenceSession

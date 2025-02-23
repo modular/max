@@ -21,28 +21,16 @@ from max.pipelines import (
 )
 from max.pipelines.kv_cache import KVCacheStrategy
 
-from . import weight_adapters
-from .model import Llama3Model
+from ..llama3 import weight_adapters
+from .model import OlmoModel
 
-llama_arch = SupportedArchitecture(
-    name="LlamaForCausalLM",
-    example_repo_ids=[
-        "meta-llama/Llama-3.1-8B-Instruct",
-        "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-        "meta-llama/Llama-Guard-3-8B",
-        "meta-llama/Llama-3.2-1B-Instruct",
-        "meta-llama/Llama-3.2-3B-Instruct",
-        "deepseek-ai/deepseek-coder-6.7b-instruct",
-        "modularai/llama-3.1",
-    ],
-    default_encoding=SupportedEncoding.q4_k,
+olmo_arch = SupportedArchitecture(
+    name="OlmoForCausalLM",
+    task=PipelineTask.TEXT_GENERATION,
+    example_repo_ids=["allenai/OLMo-1B-hf", "allenai/OLMo-1B-0724-hf"],
+    default_weights_format=WeightsFormat.gguf,
+    default_encoding=SupportedEncoding.float32,
     supported_encodings={
-        SupportedEncoding.gptq: [
-            KVCacheStrategy.PAGED,
-        ],
-        SupportedEncoding.q4_k: [KVCacheStrategy.NAIVE],
-        SupportedEncoding.q4_0: [KVCacheStrategy.NAIVE],
-        SupportedEncoding.q6_k: [KVCacheStrategy.NAIVE],
         SupportedEncoding.float32: [
             KVCacheStrategy.PAGED,
             KVCacheStrategy.CONTINUOUS,
@@ -54,13 +42,11 @@ llama_arch = SupportedArchitecture(
             KVCacheStrategy.NAIVE,
         ],
     },
-    pipeline_model=Llama3Model,
+    pipeline_model=OlmoModel,
     tokenizer=TextTokenizer,
     rope_type=RopeType.normal,
-    default_weights_format=WeightsFormat.safetensors,
     weight_adapters={
         WeightsFormat.safetensors: weight_adapters.convert_safetensor_state_dict,
         WeightsFormat.gguf: weight_adapters.convert_gguf_state_dict,
     },
-    task=PipelineTask.TEXT_GENERATION,
 )
