@@ -156,6 +156,7 @@ class AttentionWithRopeV2(AttentionImplV2):
         device: DeviceRef = DeviceRef.CPU(),
         linear_cls: Callable[..., LinearV2] = LinearV2,
         stacked_qkv: bool = False,
+        has_bias: bool = False,
     ):
         """Initializes the attention layer.
 
@@ -177,6 +178,7 @@ class AttentionWithRopeV2(AttentionImplV2):
         self.n_heads = num_attention_heads
         self.layer_idx = layer_idx
         self.kv_params = kv_params
+        self.has_bias = has_bias
 
         if not self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
@@ -214,6 +216,20 @@ class AttentionWithRopeV2(AttentionImplV2):
                 dtype=dtype,
                 shape=[kv_weight_dim, hidden_size],
             )
+
+        if has_bias:
+            assert not stacked_qkv, "Bias is not supported with stacked qkv."
+
+            self.bias_q = Weight(
+                name="q_proj.bias", dtype=dtype, shape=[hidden_size]
+            )
+            self.bias_k = Weight(
+                name="k_proj.bias", dtype=dtype, shape=[kv_weight_dim]
+            )
+            self.bias_v = Weight(
+                name="v_proj.bias", dtype=dtype, shape=[kv_weight_dim]
+            )
+
         self.o_proj = linear_cls(
             in_dim=hidden_size, out_dim=hidden_size, dtype=dtype, device=device
         )
@@ -225,6 +241,14 @@ class AttentionWithRopeV2(AttentionImplV2):
             return self.qkv_proj
         else:
             return ops.concat((self.q_proj, self.k_proj, self.v_proj))
+
+    @property
+    def wqkv_bias(self) -> TensorValue | None:
+        """The concatenation of q, k, and v bias weight vectors."""
+        if not self.has_bias:
+            return None
+
+        return ops.concat((self.bias_q, self.bias_k, self.bias_v))
 
     def __call__(
         self,
@@ -244,6 +268,7 @@ class AttentionWithRopeV2(AttentionImplV2):
             self.kv_params,
             input=x,
             wqkv=self.wqkv,
+            bias=self.wqkv_bias,
             input_row_offsets=kwargs["input_row_offsets"],
             kv_collection=kv_collection,
             layer_idx=layer_idx,
