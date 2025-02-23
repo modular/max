@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, List, Literal, Sequence, cast
+from typing import Any, Callable, List, Literal, Sequence, cast
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -104,6 +104,9 @@ class LlamaModelBase(PipelineModel[TextContext]):
 
     norm_method: Literal["rms_norm"] | Literal["layer_norm"]
     """Normalization layer."""
+
+    logits_postprocessor: Callable[[TensorValue], TensorValue] | None = None
+    """Postprocessor for the logits."""
 
     state_dict: dict[str, Any]
     """Weights to load into the model."""
@@ -516,6 +519,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
                 tie_word_embeddings=tie_word_embeddings,
                 stacked_mlp="layers.0.mlp.gate_up_proj.weight" in state_dict,
                 stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,
+                logits_postprocessor=self.logits_postprocessor,
                 devices=device_refs,
             )
             nn_model.load_state_dict(state_dict)
@@ -614,6 +618,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
             tie_word_embeddings=tie_word_embeddings,
             stacked_mlp="layers.0.mlp.gate_up_proj.weight" in state_dict,
             stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,
+            logits_postprocessor=self.logits_postprocessor,
             devices=device_refs,
         )
 

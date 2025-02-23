@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from typing import Callable
+
 from max.dtype import DType
 from max.graph import TensorValue, TensorValueLike, ops
 
@@ -75,6 +77,8 @@ class NaiveTransformer(LayerV2):
         theta: float,
         embedding: Embedding | EmbeddingV2,
         output_type: DType | None = None,
+        logits_postprocessor: Callable[[TensorValue], TensorValue]
+        | None = None,
     ):
         super().__init__()
         self.dim = dim
@@ -85,6 +89,14 @@ class NaiveTransformer(LayerV2):
         self.theta = theta
         self.embed_tokens = embedding
         self.output_type = output_type
+        self.logits_postprocessor = logits_postprocessor
+
+    def _apply_logits_postprocessor(
+        self, output: tuple[TensorValue]
+    ) -> tuple[TensorValue]:
+        if self.logits_postprocessor is None:
+            return output
+        return tuple(self.logits_postprocessor(elem) for elem in output)  # type:ignore
 
     def __call__(
         self,
@@ -109,6 +121,6 @@ class NaiveTransformer(LayerV2):
         output = self.lm_head(self.norm(h))
         if self.output_type is not None:
             casted_output = ops.cast(output, self.output_type)
-            return (casted_output,)
-        else:
-            return (output,)
+            return self._apply_logits_postprocessor((casted_output,))
+
+        return self._apply_logits_postprocessor((output,))

@@ -87,6 +87,7 @@ class NaiveLlama3(NaiveTransformer):
         tie_word_embeddings: bool,
         stacked_mlp: bool,
         stacked_qkv: bool,
+        logits_postprocessor: Callable[[TensorValue], TensorValue] | None,
         devices: list[DeviceRef],
     ):
         if stacked_qkv:
@@ -176,6 +177,7 @@ class NaiveLlama3(NaiveTransformer):
             output=output,
             theta=rope_theta,
             embedding=embedding_layer,
+            logits_postprocessor=logits_postprocessor,
         )
 
 

@@ -19,7 +19,7 @@ from typing import Callable, Literal, Optional
 
 import numpy as np
 from max.dtype import DType
-from max.graph import DeviceRef
+from max.graph import DeviceRef, TensorValue
 from max.graph.quantization import QuantizationConfig, QuantizationEncoding
 from max.pipelines.kv_cache import (
     FetchContinuousBatchingKVCacheCollection,
@@ -67,6 +67,7 @@ class Llama3(Transformer):
         tie_word_embeddings: bool,
         stacked_mlp: bool,
         stacked_qkv: bool,
+        logits_postprocessor: Callable[[TensorValue], TensorValue] | None,
         devices: list[DeviceRef],
     ):
         rope = OptimizedRotaryEmbedding(
@@ -181,4 +182,5 @@ class Llama3(Transformer):
             kv_params=kv_params,
             kv_collection_constructor=kv_collection_cls(kv_params),
             all_logits=all_logits,
+            logits_postprocessor=logits_postprocessor,
         )

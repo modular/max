@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Callable
 
 from max.dtype import DType
 from max.graph import TensorValue, TensorValueLike, ops
@@ -87,6 +88,8 @@ class Transformer(LayerV2):
             | FetchPagedKVCacheCollection
         ),
         all_logits: bool = False,
+        logits_postprocessor: Callable[[TensorValue], TensorValue]
+        | None = None,
     ):
         super().__init__()
         self.dim = dim
@@ -98,6 +101,14 @@ class Transformer(LayerV2):
         self.kv_params = kv_params
         self.kv_collection_constructor = kv_collection_constructor
         self.all_logits = all_logits
+        self.logits_postprocessor = logits_postprocessor
+
+    def _apply_logits_postprocessor(
+        self, output: tuple[TensorValue, ...]
+    ) -> tuple[TensorValue, ...]:
+        if self.logits_postprocessor is None:
+            return output
+        return tuple(self.logits_postprocessor(elem) for elem in output)
 
     def __call__(
         self,
@@ -131,6 +142,8 @@ class Transformer(LayerV2):
 
         if self.all_logits:
             all_logits = ops.cast(self.lm_head(normalized), DType.float32)
-            return (last_token_logits, all_logits)
+            return self._apply_logits_postprocessor(
+                (last_token_logits, all_logits)
+            )
 
-        return (last_token_logits,)
+        return self._apply_logits_postprocessor((last_token_logits,))
