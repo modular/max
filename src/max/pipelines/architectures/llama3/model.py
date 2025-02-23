@@ -454,10 +454,11 @@ class LlamaModelBase(PipelineModel[TextContext]):
             adapter = self.pipeline_config._weight_adapters.get(
                 self.pipeline_config.weights_format
             )
+            huggingface_config = self.pipeline_config.huggingface_config
             if adapter:
                 state_dict = adapter(
                     dict(weights.items()),
-                    huggingface_config=self.pipeline_config.huggingface_config,
+                    huggingface_config=huggingface_config,
                     pipeline_config=self.pipeline_config,
                 )
             else:
@@ -478,15 +479,10 @@ class LlamaModelBase(PipelineModel[TextContext]):
             )
             rms_norm_eps = None
             if self.norm_method == "rms_norm":
-                if (
-                    self.pipeline_config.huggingface_config.model_type
-                    == "exaone"
-                ):
-                    rms_norm_eps = self.pipeline_config.huggingface_config.layer_norm_epsilon
+                if huggingface_config.model_type == "exaone":
+                    rms_norm_eps = huggingface_config.layer_norm_epsilon
                 else:
-                    rms_norm_eps = (
-                        self.pipeline_config.huggingface_config.rms_norm_eps
-                    )
+                    rms_norm_eps = huggingface_config.rms_norm_eps
 
             device_refs = [
                 DeviceRef(spec.device_type, spec.id)
@@ -494,16 +490,16 @@ class LlamaModelBase(PipelineModel[TextContext]):
             ]
 
             nn_model = Llama3(
-                hidden_size=self.pipeline_config.huggingface_config.hidden_size,
-                num_attention_heads=self.pipeline_config.huggingface_config.num_attention_heads,
-                num_key_value_heads=self.pipeline_config.huggingface_config.num_key_value_heads,
-                num_hidden_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
-                rope_theta=self.pipeline_config.huggingface_config.rope_theta,
+                hidden_size=huggingface_config.hidden_size,
+                num_attention_heads=huggingface_config.num_attention_heads,
+                num_key_value_heads=huggingface_config.num_key_value_heads,
+                num_hidden_layers=huggingface_config.num_hidden_layers,
+                rope_theta=huggingface_config.rope_theta,
                 rms_norm_eps=rms_norm_eps,
-                intermediate_size=self.pipeline_config.huggingface_config.intermediate_size,
+                intermediate_size=huggingface_config.intermediate_size,
                 interleaved_rope_weights=interleaved_rope_weights,
                 rope_scaling=rope_scaling,
-                vocab_size=self.pipeline_config.huggingface_config.vocab_size,
+                vocab_size=huggingface_config.vocab_size,
                 dtype=self.pipeline_config.dtype,
                 quantization_encoding=self.pipeline_config.graph_quantization_encoding,
                 quantization_config=self.pipeline_config._quant_config,
@@ -558,10 +554,11 @@ class LlamaModelBase(PipelineModel[TextContext]):
         adapter = self.pipeline_config._weight_adapters.get(
             self.pipeline_config.weights_format
         )
+        huggingface_config = self.pipeline_config.huggingface_config
         if adapter:
             state_dict = adapter(
                 dict(weights.items()),
-                huggingface_config=self.pipeline_config.huggingface_config,
+                huggingface_config=huggingface_config,
                 pipeline_config=self.pipeline_config,
             )
         else:
@@ -575,30 +572,26 @@ class LlamaModelBase(PipelineModel[TextContext]):
 
         rms_norm_eps = None
         if self.norm_method == "rms_norm":
-            if self.pipeline_config.huggingface_config.model_type == "exaone":
-                rms_norm_eps = (
-                    self.pipeline_config.huggingface_config.layer_norm_epsilon
-                )
+            if huggingface_config.model_type == "exaone":
+                rms_norm_eps = huggingface_config.layer_norm_epsilon
             else:
-                rms_norm_eps = (
-                    self.pipeline_config.huggingface_config.rms_norm_eps
-                )
+                rms_norm_eps = huggingface_config.rms_norm_eps
 
         device_refs = [
             DeviceRef(spec.device_type, spec.id)
             for spec in self.pipeline_config.device_specs
         ]
         nn_model = NaiveLlama3(
-            hidden_size=self.pipeline_config.huggingface_config.hidden_size,
-            num_attention_heads=self.pipeline_config.huggingface_config.num_attention_heads,
-            num_key_value_heads=self.pipeline_config.huggingface_config.num_key_value_heads,
-            num_hidden_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
-            rope_theta=self.pipeline_config.huggingface_config.rope_theta,
+            hidden_size=huggingface_config.hidden_size,
+            num_attention_heads=huggingface_config.num_attention_heads,
+            num_key_value_heads=huggingface_config.num_key_value_heads,
+            num_hidden_layers=huggingface_config.num_hidden_layers,
+            rope_theta=huggingface_config.rope_theta,
             rms_norm_eps=rms_norm_eps,
-            intermediate_size=self.pipeline_config.huggingface_config.intermediate_size,
+            intermediate_size=huggingface_config.intermediate_size,
             interleaved_rope_weights=interleaved_rope_weights,
             rope_scaling=rope_scaling,
-            vocab_size=self.pipeline_config.huggingface_config.vocab_size,
+            vocab_size=huggingface_config.vocab_size,
             dtype=self.pipeline_config.dtype,
             quantization_encoding=self.pipeline_config.graph_quantization_encoding,
             quantization_config=self.pipeline_config._quant_config,
