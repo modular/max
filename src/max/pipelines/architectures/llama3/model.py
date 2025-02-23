@@ -492,11 +492,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
             # When tie_word_embeddings=True, the embedding weights are shared with
             # the output weights.
             tie_word_embeddings = (
-                getattr(
-                    self.pipeline_config.huggingface_config,
-                    "tie_word_embeddings",
-                    False,
-                )
+                getattr(huggingface_config, "tie_word_embeddings", False)
                 or "lm_head.weight" not in state_dict
             )
             nn_model = Llama3(
@@ -595,11 +591,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
         # When tie_word_embeddings=True, the embedding weights are shared with
         # the output weights.
         tie_word_embeddings = (
-            getattr(
-                self.pipeline_config.huggingface_config,
-                "tie_word_embeddings",
-                False,
-            )
+            getattr(huggingface_config, "tie_word_embeddings", False)
             or "lm_head.weight" not in state_dict
         )
         nn_model = NaiveLlama3(
