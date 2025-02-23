@@ -64,7 +64,7 @@ class Llama3(Transformer):
         all_logits: bool,
         norm_method: Literal["rms_norm"] | Literal["layer_norm"],
         rms_norm_eps: Optional[float],
-        share_embedding_weights: bool,
+        tie_word_embeddings: bool,
         stacked_mlp: bool,
         stacked_qkv: bool,
         devices: list[DeviceRef],
@@ -155,7 +155,7 @@ class Llama3(Transformer):
             quantization_encoding=embedding_output_quantization,
         )
 
-        if share_embedding_weights:
+        if tie_word_embeddings:
             output.set_shared_weight("weight", embedding_layer.weight)
 
         kv_collection_cls: (

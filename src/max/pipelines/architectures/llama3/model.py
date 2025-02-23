@@ -489,6 +489,16 @@ class LlamaModelBase(PipelineModel[TextContext]):
                 for spec in self.pipeline_config.device_specs
             ]
 
+            # When tie_word_embeddings=True, the embedding weights are shared with
+            # the output weights.
+            tie_word_embeddings = (
+                getattr(
+                    self.pipeline_config.huggingface_config,
+                    "tie_word_embeddings",
+                    False,
+                )
+                or "lm_head.weight" not in state_dict
+            )
             nn_model = Llama3(
                 hidden_size=huggingface_config.hidden_size,
                 num_attention_heads=huggingface_config.num_attention_heads,
@@ -507,7 +517,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
                 max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
                 kv_params=self.get_kv_params(self.pipeline_config),
                 norm_method=self.norm_method,
-                share_embedding_weights="lm_head.weight" not in state_dict,
+                tie_word_embeddings=tie_word_embeddings,
                 stacked_mlp="layers.0.mlp.gate_up_proj.weight" in state_dict,
                 stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,
                 devices=device_refs,
@@ -581,6 +591,17 @@ class LlamaModelBase(PipelineModel[TextContext]):
             DeviceRef(spec.device_type, spec.id)
             for spec in self.pipeline_config.device_specs
         ]
+
+        # When tie_word_embeddings=True, the embedding weights are shared with
+        # the output weights.
+        tie_word_embeddings = (
+            getattr(
+                self.pipeline_config.huggingface_config,
+                "tie_word_embeddings",
+                False,
+            )
+            or "lm_head.weight" not in state_dict
+        )
         nn_model = NaiveLlama3(
             hidden_size=huggingface_config.hidden_size,
             num_attention_heads=huggingface_config.num_attention_heads,
@@ -598,7 +619,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
             max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             kv_params=self.get_kv_params(self.pipeline_config),
             norm_method=self.norm_method,
-            share_embedding_weights="lm_head.weight" not in state_dict,
+            tie_word_embeddings=tie_word_embeddings,
             stacked_mlp="layers.0.mlp.gate_up_proj.weight" in state_dict,
             stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,
             devices=device_refs,

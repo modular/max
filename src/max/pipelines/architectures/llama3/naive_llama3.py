@@ -84,7 +84,7 @@ class NaiveLlama3(NaiveTransformer):
         quantization_config: Optional[QuantizationConfig],
         kv_params: KVCacheParams,
         norm_method: Literal["rms_norm"] | Literal["layer_norm"],
-        share_embedding_weights: bool,
+        tie_word_embeddings: bool,
         stacked_mlp: bool,
         stacked_qkv: bool,
         devices: list[DeviceRef],
@@ -165,7 +165,7 @@ class NaiveLlama3(NaiveTransformer):
             devices[0],
             quantization_encoding=quantization_encoding,
         )
-        if share_embedding_weights:
+        if tie_word_embeddings:
             output.set_shared_weight("weight", embedding_layer.weight)
 
         super().__init__(
