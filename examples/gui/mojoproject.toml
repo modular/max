@@ -13,7 +13,7 @@ tokenizers = "<0.21"
 transformers = "<4.47"
 
 [pypi-dependencies]
-pipelines = { path = "../../pipelines/python", editable = true}
+pipelines = { path = "../../src/max", editable = true}
 accelerate = "<=0.34.2"
 diffusers = "<=0.30.3"
 gguf = "<=0.10.0"

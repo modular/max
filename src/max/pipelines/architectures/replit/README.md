@@ -50,7 +50,7 @@ The easiest way to try out this pipeline is with our Magic command-line tool.
    directory, and you can change to it after cloning:
 
    ```shell
-   cd max/pipelines/python/
+   cd max/src/max/
    ```
 
 3. Now run the Replit code completion demo with the following command:
