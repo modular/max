@@ -48,6 +48,7 @@ from max.pipelines.nn.compute_log_probabilities import compute_log_probabilities
 from .gguf import distributed_transformer_opaque
 from .llama3 import Llama3
 from .naive_llama3 import NaiveLlama3
+from .weight_adapters import LlamaSafetensorWeights
 
 logger = logging.getLogger("max.pipelines")
 
@@ -427,6 +428,13 @@ class LlamaModelBase(PipelineModel[TextContext]):
                     for d in self.pipeline_config.devices
                 )
             )
+
+            # Distributed Llama still uses GGUF weights, so make sure that
+            # safetensor weights are converted to GGUF.
+            if self.pipeline_config.weights_format == WeightsFormat.safetensors:
+                weights = LlamaSafetensorWeights.from_safetensor_weights(
+                    weights, huggingface_config
+                )
             with Graph(
                 getattr(huggingface_config, "model_type", "llama3"),
                 input_types=[
