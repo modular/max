@@ -16,7 +16,7 @@
 from dataclasses import dataclass
 
 from max.dtype import DType
-from max.graph import TensorValue, Value, ops
+from max.graph import TensorValue, ops
 from max.pipelines.nn import Linear
 from max.pipelines.nn.layer import LayerV2
 
@@ -27,8 +27,19 @@ class MaxMoEGate(LayerV2):
 
     Args:
         gate_score: Linear layer that projects from hidden_size to intermediate_size.
-    Input shape: (batch_size, seq_length, hidden_size)
-    Output shapes: (num_experts_per_tok), num_experts_per_tok)
+        num_experts_per_tok: Number of experts to route each token to.
+        n_routed_experts: Total number of experts in the model.
+        routed_scaling_factor: Scaling factor for routing weights.
+        aux_loss_alpha: Weight for auxiliary loss.
+        n_group: Number of groups for expert routing.
+        topk_group: Number of top experts per group.
+        gating_dim: Hidden dimension size for gating.
+
+    Shape:
+        Input: (batch_size, seq_length, hidden_size)
+        Output: tuple of:
+            - topk_idx: (batch_size * seq_length, num_experts_per_tok)
+            - topk_weight: (batch_size * seq_length, num_experts_per_tok)
     """
 
     def __post_init__(self):
@@ -43,7 +54,19 @@ class MaxMoEGate(LayerV2):
     topk_group: int = 1
     gating_dim: int = 2048  # equal to config.hidden_size
 
-    def __call__(self, hidden_states: TensorValue) -> tuple[Value, Value]:
+    def __call__(
+        self, hidden_states: TensorValue
+    ) -> tuple[TensorValue, TensorValue]:
+        """Compute expert routing weights and indices for input hidden states.
+
+        Args:
+            hidden_states: Input tensor of shape (batch_size, seq_length, hidden_size)
+
+        Returns:
+            tuple containing:
+                - topk_idx: Indices of top-k selected experts of shape (batch_size * seq_length, num_experts_per_tok)
+                - topk_weight: Routing weights for selected experts of shape (batch_size * seq_length, num_experts_per_tok)
+        """
         # compute gating score
         bsz, seq_len, h = hidden_states.shape
         hidden_states = hidden_states.reshape([bsz * seq_len, h])
