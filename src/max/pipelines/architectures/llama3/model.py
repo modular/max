@@ -412,6 +412,8 @@ class LlamaModelBase(PipelineModel[TextContext]):
             DType.uint32, shape=["input_row_offsets_len"], device=device_ref
         )
 
+        huggingface_config = self.pipeline_config.huggingface_config
+
         if len(self.pipeline_config.devices) > 1:
             kv_cache_args = self.kv_manager.input_symbols()
             flattened_kv_types = [
@@ -426,7 +428,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
                 )
             )
             with Graph(
-                "llama3",
+                getattr(huggingface_config, "model_type", "llama3"),
                 input_types=[
                     tokens_type,
                     input_row_offsets_type,
@@ -473,7 +475,6 @@ class LlamaModelBase(PipelineModel[TextContext]):
             adapter = self.pipeline_config._weight_adapters.get(
                 self.pipeline_config.weights_format
             )
-            huggingface_config = self.pipeline_config.huggingface_config
             if adapter:
                 state_dict = adapter(
                     dict(weights.items()),
@@ -648,7 +649,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
         self.state_dict = nn_model.state_dict()
 
         with Graph(
-            "llama3",
+            getattr(huggingface_config, "model_type", "llama3"),
             input_types=[
                 tokens_type,
                 attn_mask_type,
