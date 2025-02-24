@@ -88,7 +88,9 @@ class NaiveLlama3(NaiveTransformer):
         stacked_mlp: bool,
         stacked_qkv: bool,
         logits_postprocessor: Callable[[TensorValue], TensorValue] | None,
-        attention_multiplier: float | None,
+        attention_multiplier: float,
+        embedding_multiplier: float,
+        residual_multiplier: float,
         devices: list[DeviceRef],
     ):
         if stacked_qkv:
@@ -149,6 +151,7 @@ class NaiveLlama3(NaiveTransformer):
                 ),
                 attention_norm=create_norm(),
                 mlp_norm=create_norm(),
+                residual_multiplier=residual_multiplier,
             )
             for i in range(num_hidden_layers)
         ]
@@ -179,6 +182,7 @@ class NaiveLlama3(NaiveTransformer):
             output=output,
             theta=rope_theta,
             embedding=embedding_layer,
+            embedding_multiplier=embedding_multiplier,
             logits_postprocessor=logits_postprocessor,
         )
 

@@ -69,6 +69,8 @@ class Llama3(Transformer):
         stacked_qkv: bool,
         logits_postprocessor: Callable[[TensorValue], TensorValue] | None,
         attention_multiplier: float,
+        embedding_multiplier: float,
+        residual_multiplier: float,
         devices: list[DeviceRef],
     ):
         rope = OptimizedRotaryEmbedding(
@@ -112,6 +114,7 @@ class Llama3(Transformer):
                 stacked_qkv=stacked_qkv,
                 scale=attention_multiplier,
             )
+
         layers = [
             TransformerBlock(
                 attention=attention_cls(
@@ -135,6 +138,7 @@ class Llama3(Transformer):
                 ),
                 attention_norm=create_norm(),
                 mlp_norm=create_norm(),
+                residual_multiplier=residual_multiplier,
             )
             for i in range(num_hidden_layers)
         ]
@@ -187,5 +191,6 @@ class Llama3(Transformer):
             kv_params=kv_params,
             kv_collection_constructor=kv_collection_cls(kv_params),
             all_logits=all_logits,
+            embedding_multiplier=embedding_multiplier,
             logits_postprocessor=logits_postprocessor,
         )

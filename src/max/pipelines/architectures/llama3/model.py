@@ -515,6 +515,12 @@ class LlamaModelBase(PipelineModel[TextContext]):
                 getattr(huggingface_config, "tie_word_embeddings", False)
                 or "lm_head.weight" not in state_dict
             )
+            embedding_multiplier = getattr(
+                huggingface_config, "embedding_multiplier", 1.0
+            )
+            residual_multiplier = getattr(
+                huggingface_config, "residual_multiplier", 1.0
+            )
             nn_model = Llama3(
                 hidden_size=huggingface_config.hidden_size,
                 num_attention_heads=huggingface_config.num_attention_heads,
@@ -538,6 +544,8 @@ class LlamaModelBase(PipelineModel[TextContext]):
                 stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,
                 logits_postprocessor=self.logits_postprocessor,
                 attention_multiplier=self._attention_multiplier,
+                embedding_multiplier=embedding_multiplier,
+                residual_multiplier=residual_multiplier,
                 devices=device_refs,
             )
             nn_model.load_state_dict(state_dict)
@@ -616,6 +624,12 @@ class LlamaModelBase(PipelineModel[TextContext]):
             getattr(huggingface_config, "tie_word_embeddings", False)
             or "lm_head.weight" not in state_dict
         )
+        embedding_multiplier = getattr(
+            huggingface_config, "embedding_multiplier", 1.0
+        )
+        residual_multiplier = getattr(
+            huggingface_config, "residual_multiplier", 1.0
+        )
         nn_model = NaiveLlama3(
             hidden_size=huggingface_config.hidden_size,
             num_attention_heads=huggingface_config.num_attention_heads,
@@ -638,6 +652,8 @@ class LlamaModelBase(PipelineModel[TextContext]):
             stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,
             logits_postprocessor=self.logits_postprocessor,
             attention_multiplier=self._attention_multiplier,
+            embedding_multiplier=embedding_multiplier,
+            residual_multiplier=residual_multiplier,
             devices=device_refs,
         )
 

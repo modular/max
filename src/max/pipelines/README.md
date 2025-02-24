@@ -114,5 +114,6 @@ The following table lists the model architectures tested to work with MAX.
 | LlamaForCausalLM | deepseek-ai/deepseek-coder-1.3b-instruct |
 | PhiForCausalLM | microsoft/phi-2 |
 | Phi3ForCausalLM | microsoft/Phi-3-mini-4k-instruct |
+| GraniteForCausalLM | ibm-granite/granite-3.1-8b-instruct |
 | Qwen2ForCausalLM | Qwen/Qwen2.5-1.5B-Instruct |
 | OlmoForCausalLM | allenai/OLMo-1B-0724-hf |

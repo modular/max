@@ -59,7 +59,7 @@ class TransformerBlock(Layer):
         attention_mask: TensorValueLike,
         position_embeddings: tuple[TensorValue, TensorValue],
     ) -> TensorValue:
-        residual = ops.constant(self.residual_multiplier, x.dtype)
+        residual_multiplier = ops.constant(self.residual_multiplier, x.dtype)
         attn_out = self.attention(
             self.attention_norm(x),
             attention_mask,
@@ -67,12 +67,12 @@ class TransformerBlock(Layer):
         )
 
         if self.residual_multiplier != 1.0:
-            attn_out = attn_out * residual
+            attn_out = attn_out * residual_multiplier
 
         h = x + attn_out
         mlp = self.mlp(self.mlp_norm(h))
         if self.residual_multiplier != 1.0:
-            mlp = mlp * residual
+            mlp = mlp * residual_multiplier
 
         return h + mlp
 

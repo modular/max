@@ -61,7 +61,7 @@ class TransformerBlock(LayerV2):
         | PagedKVCacheCollection,
         **kwargs,
     ) -> TensorValue:
-        residual = ops.constant(self.residual_multiplier, x.dtype)
+        residual_multiplier = ops.constant(self.residual_multiplier, x.dtype)
         attn_out = self.self_attn(
             self.input_layernorm(x),
             kv_collection,
@@ -69,12 +69,12 @@ class TransformerBlock(LayerV2):
         )
 
         if self.residual_multiplier != 1.0:
-            attn_out = attn_out * residual
+            attn_out = attn_out * residual_multiplier
 
         h = x + attn_out
         mlp = self.mlp(self.post_attention_layernorm(h))
         if self.residual_multiplier != 1.0:
-            mlp = mlp * residual
+            mlp = mlp * residual_multiplier
 
         return h + mlp
 
@@ -96,6 +96,7 @@ class Transformer(LayerV2):
             | FetchPagedKVCacheCollection
         ),
         all_logits: bool = False,
+        embedding_multiplier: float = 1.0,
         logits_postprocessor: Callable[[TensorValue], TensorValue]
         | None = None,
     ):
@@ -109,6 +110,7 @@ class Transformer(LayerV2):
         self.kv_params = kv_params
         self.kv_collection_constructor = kv_collection_constructor
         self.all_logits = all_logits
+        self.embedding_multiplier = embedding_multiplier
         self.logits_postprocessor = logits_postprocessor
 
     def _apply_logits_postprocessor(
@@ -126,6 +128,9 @@ class Transformer(LayerV2):
     ) -> tuple[TensorValue, ...]:
         # TODO: Split into a ragged and non-ragged version.
         h = self.embed_tokens(tokens)
+
+        if self.embedding_multiplier != 1.0:
+            h = h * ops.constant(self.embedding_multiplier, h.dtype)
 
         kv_collection = self.kv_collection_constructor(*kv_cache_inputs)
 

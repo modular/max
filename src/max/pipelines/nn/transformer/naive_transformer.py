@@ -51,7 +51,7 @@ class NaiveTransformerBlock(LayerV2):
         start_pos: TensorValue,
         layer_index: int,
     ) -> tuple[TensorValue, TensorValue, TensorValue]:
-        residual = ops.constant(self.residual_multiplier, x.dtype)
+        residual_multiplier = ops.constant(self.residual_multiplier, x.dtype)
         attn_out = self.self_attn(
             self.input_layernorm(x),
             attention_mask,
@@ -62,12 +62,12 @@ class NaiveTransformerBlock(LayerV2):
         )
 
         if self.residual_multiplier != 1.0:
-            attn_out = attn_out * residual
+            attn_out = attn_out * residual_multiplier
 
         h = x + attn_out
         mlp = self.mlp(self.post_attention_layernorm(h))
         if self.residual_multiplier != 1.0:
-            mlp = mlp * residual
+            mlp = mlp * residual_multiplier
 
         return h + mlp
 
@@ -85,6 +85,7 @@ class NaiveTransformer(LayerV2):
         theta: float,
         embedding: Embedding | EmbeddingV2,
         output_type: DType | None = None,
+        embedding_multiplier: float = 1.0,
         logits_postprocessor: Callable[[TensorValue], TensorValue]
         | None = None,
     ):
@@ -97,6 +98,7 @@ class NaiveTransformer(LayerV2):
         self.theta = theta
         self.embed_tokens = embedding
         self.output_type = output_type
+        self.embedding_multiplier = embedding_multiplier
         self.logits_postprocessor = logits_postprocessor
 
     def _apply_logits_postprocessor(
@@ -115,6 +117,9 @@ class NaiveTransformer(LayerV2):
         start_pos: TensorValueLike,
     ) -> tuple[TensorValue]:
         h = self.embed_tokens(tokens)
+
+        if self.embedding_multiplier != 1.0:
+            h = h * ops.constant(self.embedding_multiplier, h.dtype)
 
         for i in range(len(self.layers)):
             h = self.layers[i](
