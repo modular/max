@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import functools
+from collections.abc import Sequence
 from typing import Callable, Literal, Optional, Union
 
 import numpy as np
@@ -250,7 +251,7 @@ class Llama3MLP(MLPV2):
         hidden_dim: int,
         feed_forward_length: int,
         linear_cls: Callable[..., LinearV2],
-        devices: list[DeviceRef] = [],
+        devices: Sequence[DeviceRef] = (),
     ):
         super().__init__(
             gate_proj=linear_cls(
@@ -285,7 +286,7 @@ class StackedMLP(LayerV2):
         hidden_dim: int,
         feed_forward_length: int,
         linear_cls: Callable[..., LinearV2],
-        devices: list[DeviceRef] = [],
+        devices: Sequence[DeviceRef] = (),
     ):
         super().__init__()
         self.gate_up_proj = linear_cls(

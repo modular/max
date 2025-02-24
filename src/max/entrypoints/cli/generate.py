@@ -11,12 +11,14 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-
 """Utilities for generating text in the cli."""
+
+from __future__ import annotations
 
 import asyncio
 import logging
 import uuid
+from collections.abc import Iterable
 from typing import Optional
 
 import requests
@@ -111,7 +113,7 @@ async def stream_text_to_console(
 def generate_text_for_pipeline(
     pipeline_config: PipelineConfig,
     prompt: str,
-    image_urls: list[str] = [],
+    image_urls: Iterable[str] = (),
     num_warmups: int = 0,
 ) -> None:
     # Run timed run & print results.
