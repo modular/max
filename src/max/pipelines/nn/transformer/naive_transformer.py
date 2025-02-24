@@ -33,12 +33,14 @@ class NaiveTransformerBlock(LayerV2):
         mlp: Layer,
         attention_norm: Layer,
         mlp_norm: Layer,
+        residual_multiplier: float = 1.0,
     ):
         super().__init__()
         self.self_attn = attention
         self.mlp = mlp
         self.input_layernorm = attention_norm
         self.post_attention_layernorm = mlp_norm
+        self.residual_multiplier = residual_multiplier
 
     def __call__(
         self,
@@ -49,7 +51,8 @@ class NaiveTransformerBlock(LayerV2):
         start_pos: TensorValue,
         layer_index: int,
     ) -> tuple[TensorValue, TensorValue, TensorValue]:
-        attention_out = self.self_attn(
+        residual = ops.constant(self.residual_multiplier, x.dtype)
+        attn_out = self.self_attn(
             self.input_layernorm(x),
             attention_mask,
             k_cache,  # type: ignore
@@ -58,10 +61,15 @@ class NaiveTransformerBlock(LayerV2):
             layer_index,
         )
 
-        h = x + attention_out
-        h = h + self.mlp(self.post_attention_layernorm(h))
+        if self.residual_multiplier != 1.0:
+            attn_out = attn_out * residual
 
-        return h  # type: ignore
+        h = x + attn_out
+        mlp = self.mlp(self.post_attention_layernorm(h))
+        if self.residual_multiplier != 1.0:
+            mlp = mlp * residual
+
+        return h + mlp
 
 
 class NaiveTransformer(LayerV2):

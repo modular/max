@@ -45,12 +45,14 @@ class TransformerBlock(LayerV2):
         mlp: Layer,
         attention_norm: Layer,
         mlp_norm: Layer,
+        residual_multiplier: float = 1.0,
     ):
         super().__init__()
         self.self_attn = attention
         self.mlp = mlp
         self.input_layernorm = attention_norm
         self.post_attention_layernorm = mlp_norm
+        self.residual_multiplier = residual_multiplier
 
     def __call__(
         self,
@@ -59,16 +61,22 @@ class TransformerBlock(LayerV2):
         | PagedKVCacheCollection,
         **kwargs,
     ) -> TensorValue:
+        residual = ops.constant(self.residual_multiplier, x.dtype)
         attn_out = self.self_attn(
             self.input_layernorm(x),
             kv_collection,
             **kwargs,
         )
 
-        h = x + attn_out
-        h = h + self.mlp(self.post_attention_layernorm(h))
+        if self.residual_multiplier != 1.0:
+            attn_out = attn_out * residual
 
-        return h
+        h = x + attn_out
+        mlp = self.mlp(self.post_attention_layernorm(h))
+        if self.residual_multiplier != 1.0:
+            mlp = mlp * residual
+
+        return h + mlp
 
 
 class Transformer(LayerV2):

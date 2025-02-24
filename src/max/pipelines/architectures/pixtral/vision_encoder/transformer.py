@@ -51,6 +51,7 @@ class TransformerBlock(Layer):
     mlp: MLP
     attention_norm: RMSNorm
     mlp_norm: RMSNorm
+    residual_multiplier: float = 1.0
 
     def __call__(
         self,
@@ -58,16 +59,22 @@ class TransformerBlock(Layer):
         attention_mask: TensorValueLike,
         position_embeddings: tuple[TensorValue, TensorValue],
     ) -> TensorValue:
-        attention_out = self.attention(
+        residual = ops.constant(self.residual_multiplier, x.dtype)
+        attn_out = self.attention(
             self.attention_norm(x),
             attention_mask,
             position_embeddings,
         )
 
-        h = x + attention_out
-        h = h + self.mlp(self.mlp_norm(h))
+        if self.residual_multiplier != 1.0:
+            attn_out = attn_out * residual
 
-        return h
+        h = x + attn_out
+        mlp = self.mlp(self.mlp_norm(h))
+        if self.residual_multiplier != 1.0:
+            mlp = mlp * residual
+
+        return h + mlp
 
 
 @dataclass
