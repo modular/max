@@ -103,6 +103,8 @@ class TrieNode:
         if res is None:
             return None
         key, prefix_len = res
+        if prefix_len == 0:
+            return None
         assert prefix_len <= len(target)
         assert target[:prefix_len] == key[:prefix_len]
         return self.children[tuple(key)].blocks[0], prefix_len

@@ -437,6 +437,7 @@ class PagedKVCacheManager(KVCacheManager):
         # Initialize the radix trie if prefix caching is enabled.
         self.radix_trie: Optional[RadixTrie] = None
         self.cow_strided_memcpy_graph: Optional[Model] = None
+        self.cow_count = 0
         if params.enable_prefix_caching:
             self.radix_trie = RadixTrie(page_size=self.page_size)
             # Load single op graph for performing memory transfers needed for COW
@@ -739,6 +740,68 @@ class PagedKVCacheManager(KVCacheManager):
         data.cached_idx += num_cache_hit_tokens
         return prefix_blocks
 
+    def _fetch_prefix_caching_cow(
+        self,
+        data: _PagedCacheMetadata,
+    ) -> None:
+        """Extend the kv cache for given request with any cached prefixes by
+        copying a portion of the tokens in a committed block to a fresh block.
+
+        This will keep the committed_idx the same, but increment the cached_idx
+        by between [1, page_size) tokens if we do perform a cow operation. The
+        prompt will be trimmed in the event that cached_idx is bumped.
+        """
+        # If page_size is 1, there is no need to perform COW
+        if self.page_size == 1:
+            return
+        assert self.cow_strided_memcpy_graph is not None
+
+        # Match page_size tokens in the radix trie
+        committable_tokens = data.committable_tokens[:-1]
+        if len(committable_tokens) == 0:
+            return
+        committable_tokens_cropped = list(committable_tokens[: self.page_size])
+        assert data.node is not None
+        res = data.node.find_block_with_largest_common_prefix(
+            committable_tokens_cropped
+        )
+        if res is None:
+            return
+        partial_match_block, num_cache_hit_tokens = res
+        assert 0 < num_cache_hit_tokens < self.page_size
+
+        # No point in performing COW if we have more cached but uncommitted tokens
+        # in the existing partial block than the matched prefix length.
+        partial_tokens = data.cached_idx - data.committed_idx
+        if num_cache_hit_tokens <= partial_tokens:
+            return
+
+        # If we have a partially cached block, we need to release it before
+        # appending additional blocks.
+        if partial_tokens > 0:
+            assert data.committed_idx + num_cache_hit_tokens > data.cached_idx
+            partial_blocks = data.committable_blocks
+            assert len(partial_blocks) == 1
+            self.release_block(partial_blocks[0])
+            data.blocks.pop()
+            assert partial_tokens < self.page_size
+            data.cached_idx -= partial_tokens
+            assert data.committed_idx == data.cached_idx
+
+        # Copy prefix_len tokens from partial_match_block to new_block.
+        new_block = self.alloc_block()
+        self.cow_count += 1
+        self.cow_strided_memcpy_graph.execute(
+            new_block,
+            partial_match_block,
+            num_cache_hit_tokens,
+            *self.blocks,
+        )
+        data.blocks.append(new_block)
+        data.cached_idx += num_cache_hit_tokens
+        assert len(data.prompt_tokens) > 0
+        assert data.cached_idx < data.inflight_idx
+
     def _fetch(
         self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
     ) -> Sequence[tuple[Tensor, ...]]:
@@ -800,6 +863,8 @@ class PagedKVCacheManager(KVCacheManager):
                 # bump the committed_idx, and possibly the cached_idx
                 prefix_blocks = self._fetch_prefix_caching(seq_id, data)
                 all_cache_hit_blocks.update(prefix_blocks)
+                # bump the cached_idx
+                self._fetch_prefix_caching_cow(data)
                 # Possibly trim the input prompt.
                 seq_ids_and_prompts[seq_id] = data.prompt_tokens
 
