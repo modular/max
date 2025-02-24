@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 """Build a Qwen2 model via Graph API from GGUF weights."""
 
+import math
 from typing import List, Union, cast
 
 from max.dtype import DType
@@ -193,6 +194,7 @@ def attention(
         rope=rope,
         layer_idx=layer_idx,
         bias=bias_qkv,
+        scale=math.sqrt(1.0 / kv_params.head_dim),
     )
 
 

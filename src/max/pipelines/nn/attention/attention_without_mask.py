@@ -66,6 +66,7 @@ class AttentionWithoutMask(AttentionImpl):
             layer_idx=self.layer_idx,
             input_row_offsets=kwargs["input_row_offsets"],
             mask_variant=self.mask_variant,
+            scale=self.scale,
         )
 
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])

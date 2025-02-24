@@ -82,6 +82,7 @@ class Attention(AttentionImpl):
             layer_idx=self.layer_idx,
             attention_mask=attention_mask,
             valid_lengths=kwargs["valid_lengths"],
+            scale=self.scale,
         )
 
         attn_out = ops.reshape(attn_out, shape=[batch_size, seq_len, -1])
@@ -148,6 +149,7 @@ class AttentionQKV(AttentionImplQKV):
             layer_idx=ops.constant(self.layer_idx, DType.uint32),
             attention_mask=attention_mask,
             valid_lengths=kwargs["valid_lengths"],
+            scale=self.scale,
         )
 
         attn_out = ops.reshape(attn_out, shape=[batch_size, seq_len, -1])

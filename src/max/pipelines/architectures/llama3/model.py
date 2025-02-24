@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import Any, Callable, List, Literal, Sequence, cast
 
@@ -385,6 +386,21 @@ class LlamaModelBase(PipelineModel[TextContext]):
         ]
         return kv_caches_per_dev
 
+    @property
+    def _attention_multiplier(self) -> float:
+        """The attention multiplier is a scalar that scales the attention scores.
+        It is used to control the variance of the attention scores.
+
+        This function is used to get the attention multiplier from the
+        huggingface config. If the attention multiplier is not set, it will be
+        calculated as the square root of 1.0 divided by the head dimension.
+        """
+        return getattr(
+            self.pipeline_config.huggingface_config,
+            "attention_multiplier",
+            math.sqrt(1.0 / self.get_kv_params(self.pipeline_config).head_dim),
+        )
+
     def _build_opaque_graph(self, weights: Weights) -> Graph:
         device0 = self.pipeline_config.devices[0]
         device_ref = DeviceRef(device0.label, device0.id)
@@ -520,6 +536,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
                 stacked_mlp="layers.0.mlp.gate_up_proj.weight" in state_dict,
                 stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,
                 logits_postprocessor=self.logits_postprocessor,
+                attention_multiplier=self._attention_multiplier,
                 devices=device_refs,
             )
             nn_model.load_state_dict(state_dict)
@@ -619,6 +636,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
             stacked_mlp="layers.0.mlp.gate_up_proj.weight" in state_dict,
             stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,
             logits_postprocessor=self.logits_postprocessor,
+            attention_multiplier=self._attention_multiplier,
             devices=device_refs,
         )
 

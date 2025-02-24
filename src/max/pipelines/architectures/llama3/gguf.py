@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import List, Literal, Optional
 
@@ -307,6 +308,7 @@ def distributed_attention_opaque(
             wo=Linear(wo_shards[rank]),
             rope=rope,
             layer_idx=layer_idx,
+            scale=math.sqrt(1.0 / kv_params.head_dim),
         )
         for rank in range(len(devices))
     ]

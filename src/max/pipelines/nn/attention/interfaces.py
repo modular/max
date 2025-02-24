@@ -96,7 +96,12 @@ class AttentionImpl(Layer, ABC):
     wo: Linear
     """A linear layer for the output projection."""
 
+    scale: float
+    """The scale factor for the attention."""
+
     def __post_init__(self) -> None:
+        assert self.scale is not None, "scale must be provided to AttentionImpl"
+
         if not self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
                 f"{self.kv_params.cache_strategy} cache strategy, not supported"
@@ -259,7 +264,14 @@ class AttentionImplQKV(Layer, ABC):
     wo: Linear
     """A linear layer for the output projection."""
 
+    scale: float
+    """The scale factor for the attention."""
+
     def __post_init__(self) -> None:
+        assert self.scale is not None, (
+            "scale must be provided to AttentionImplQKV"
+        )
+
         if not self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
                 f"{self.kv_params.cache_strategy} cache strategy, not supported"

@@ -88,6 +88,7 @@ class NaiveLlama3(NaiveTransformer):
         stacked_mlp: bool,
         stacked_qkv: bool,
         logits_postprocessor: Callable[[TensorValue], TensorValue] | None,
+        attention_multiplier: float | None,
         devices: list[DeviceRef],
     ):
         if stacked_qkv:
@@ -135,6 +136,7 @@ class NaiveLlama3(NaiveTransformer):
                     dtype,
                     quantization_encoding,
                     linear_cls,
+                    scale=attention_multiplier,
                     device=devices[0],
                 ),
                 mlp=mlp_cls(
@@ -192,6 +194,7 @@ class NaiveLLama3Attention(NaiveAttentionWithRope):
         dtype: DType,
         quantization_encoding: Optional[QuantizationEncoding],
         linear_cls: Callable[..., LinearV2],
+        scale: float | None,
         device: DeviceRef,
     ):
         kv_weight_dim = (
@@ -231,6 +234,7 @@ class NaiveLLama3Attention(NaiveAttentionWithRope):
                 quantization_encoding=quantization_encoding,
             ),
             rope=rope,
+            scale=scale,
         )
 
 

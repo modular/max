@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from max.dtype import DType
@@ -310,6 +311,7 @@ def self_attention_decoder_layer(
         wv=wv,
         wo=o_proj,
         rope=rotary_embedding,
+        scale=math.sqrt(1.0 / head_dim),
     )
 
     return TransformerBlock(

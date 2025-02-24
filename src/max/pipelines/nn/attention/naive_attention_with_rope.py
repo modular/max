@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 
+from max.dtype import DType
 from max.graph import BufferValue, TensorValue, TensorValueLike, ops
 from max.pipelines.kv_cache import KVCacheParams
 
@@ -35,6 +36,7 @@ class NaiveAttentionWithRope(LayerV2):
         wv: Linear | LinearV2,
         wo: Linear | LinearV2,
         rope: RotaryEmbedding,
+        scale: float | None = None,
     ):
         super().__init__()
         self.n_heads = n_heads
@@ -45,6 +47,9 @@ class NaiveAttentionWithRope(LayerV2):
         self.v_proj = wv
         self.o_proj = wo
         self.rope = rope
+        self.scale = (
+            scale if scale else math.sqrt(1.0 / self.kv_params.head_dim)
+        )
 
         if self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
@@ -100,12 +105,17 @@ class NaiveAttentionWithRope(LayerV2):
         keys = keys.transpose(1, 2)
         values = values.transpose(1, 2)
 
-        scale = math.sqrt(1.0 / self.kv_params.head_dim)
         scores = xq @ ops.transpose(keys, 2, 3)
         # Note, the graph compiler currently requires the order of operands
         # to be `scores * scale` in order to pattern match the fused attention
         # operator.
-        return ops.softmax(scores * scale + attn_mask) @ values
+        return (
+            ops.softmax(
+                scores * ops.constant(self.scale, dtype=DType.float32)
+                + attn_mask
+            )
+            @ values
+        )
 
     def __call__(
         self,

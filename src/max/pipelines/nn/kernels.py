@@ -484,6 +484,7 @@ def flash_attention(
     layer_idx: TensorValue,
     attention_mask: TensorValue,
     valid_lengths: TensorValue,
+    scale: float,
 ) -> TensorValue:
     """Computes flash attention provided the mo.opaque KV Cache."""
     input_rank_expected = 4
@@ -515,9 +516,6 @@ def flash_attention(
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     op_name = f"mo.mha.padded.{cache_strategy_str}.tensor_mask.no_pos"
 
-    # NOTE: The scale argument to the flash attention kernel is constrained to
-    # float32.
-    scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
     return ops.inplace_custom(
         op_name,
         values=[
@@ -526,7 +524,9 @@ def flash_attention(
             layer_idx,
             attention_mask,
             valid_lengths,
-            scale,
+            # NOTE: The scale argument to the flash attention kernel is
+            # constrained to float32.
+            ops.constant(scale, dtype=DType.float32),
         ],
         out_types=[
             TensorType(
@@ -546,6 +546,7 @@ def flash_attention_with_causal_mask(
     kv_collection: ContinuousBatchingKVCacheCollection,
     layer_idx: TensorValue,
     valid_lengths: TensorValue,
+    scale: float,
 ) -> TensorValue:
     """Computes flash attention provided the mo.opaque KV Cache.
     Notably, materializes the causal mask within the kernel."""
@@ -579,11 +580,16 @@ def flash_attention_with_causal_mask(
     cache_strategy_str = kv_params.cache_strategy.kernel_substring()
     op_name = f"mo.mha.padded.{cache_strategy_str}.causal_mask.no_pos"
 
-    # NOTE: The scale argument to flash attention is constrained to float32.
-    scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
     return ops.inplace_custom(
         op_name,
-        values=[input, kv_collection, layer_idx, valid_lengths, scale],
+        values=[
+            input,
+            kv_collection,
+            layer_idx,
+            valid_lengths,
+            # NOTE: The scale argument to flash attention is constrained to float32.
+            ops.constant(scale, dtype=DType.float32),
+        ],
         out_types=[
             TensorType(
                 dtype=input.dtype, shape=input.shape, device=input.device
@@ -642,6 +648,7 @@ def flash_attention_ragged(
     kv_collection: ContinuousBatchingKVCacheCollection | PagedKVCacheCollection,
     layer_idx: TensorValue,
     mask_variant: MHAMaskVariant,
+    scale: float,
 ) -> TensorValue:
     """Computes flash (self) attention provided the `!mo.opaque` KV Cache.
 
@@ -695,12 +702,16 @@ def flash_attention_ragged(
     mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
     op_name = f"mo.mha.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}"
 
-    # NOTE: The scale argument to flash attention is constrained to float32.
-    scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
-
     return ops.inplace_custom(
         op_name,
-        values=[input, input_row_offsets, kv_collection, layer_idx, scale],
+        values=[
+            input,
+            input_row_offsets,
+            kv_collection,
+            layer_idx,
+            # NOTE: The scale argument to flash attention is constrained to float32.
+            ops.constant(scale, dtype=DType.float32),
+        ],
         out_types=[
             TensorType(
                 dtype=input.dtype, shape=input.shape, device=input.device
@@ -719,6 +730,7 @@ def cross_attention_ragged(
     mask_variant: MHAMaskVariant,
     kv_input_row_offsets: TensorValue,
     q_max_seq_len: TensorValue,
+    scale: float,
 ) -> TensorValue:
     """Computes cross attention provided the `!mo.opaque` KV Cache.
 
@@ -776,9 +788,6 @@ def cross_attention_ragged(
     mha_mask_config = _MHA_MASK_CONFIG_DICT[mask_variant]
     op_name = f"mo.cross_attention.ragged.{cache_strategy_str}.{str(mha_mask_config.attention_mask_variant.value)}.{str(mha_mask_config.positional_encoding_variant.value)}"
 
-    # NOTE: The scale argument to flash attention is constrained to float32.
-    scale = ops.rsqrt(ops.constant(kv_params.head_dim, dtype=DType.float32))
-
     return ops.inplace_custom(
         op_name,
         values=[
@@ -791,7 +800,8 @@ def cross_attention_ragged(
             kv_input_row_offsets,
             kv_collection,
             layer_idx,
-            scale,
+            # NOTE: The scale argument to flash attention is constrained to float32.
+            ops.constant(scale, dtype=DType.float32),
         ],
         out_types=[
             TensorType(

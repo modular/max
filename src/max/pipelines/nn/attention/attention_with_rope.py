@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Union
 
@@ -124,6 +125,7 @@ class AttentionWithRope(AttentionImpl):
             layer_idx=self.layer_idx,
             input_row_offsets=kwargs["input_row_offsets"],
             mask_variant=MHAMaskVariant.CAUSAL_MASK,
+            scale=self.scale,
         )
 
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])
@@ -156,6 +158,7 @@ class AttentionWithRopeV2(AttentionImplV2):
         device: DeviceRef = DeviceRef.CPU(),
         linear_cls: Callable[..., LinearV2] = LinearV2,
         stacked_qkv: bool = False,
+        scale: float | None = None,
         has_bias: bool = False,
     ):
         """Initializes the attention layer.
@@ -179,6 +182,9 @@ class AttentionWithRopeV2(AttentionImplV2):
         self.layer_idx = layer_idx
         self.kv_params = kv_params
         self.has_bias = has_bias
+        self.scale = (
+            scale if scale else math.sqrt(1.0 / self.kv_params.head_dim)
+        )
 
         if not self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
@@ -301,6 +307,7 @@ class AttentionWithRopeV2(AttentionImplV2):
             layer_idx=layer_idx,
             input_row_offsets=kwargs["input_row_offsets"],
             mask_variant=MHAMaskVariant.CAUSAL_MASK,
+            scale=self.scale,
         )
 
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])
@@ -322,6 +329,7 @@ class GPTQAttentionWithRope(AttentionWithRopeV2):
         layer_idx: int,
         dtype: DType = DType.float32,
         device: DeviceRef | None = None,
+        scale: float | None = None,
         linear_cls: Callable[..., LinearV2] = LinearV2,
     ):
         # Skip AttentionWithRopeV2.__init__ because the weights are created
@@ -334,7 +342,9 @@ class GPTQAttentionWithRope(AttentionWithRopeV2):
         self.kv_params = kv_params
         self.hidden_size = hidden_size
         self.device = device
-
+        self.scale = (
+            scale if scale else math.sqrt(1.0 / self.kv_params.head_dim)
+        )
         if not self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
                 f"{self.kv_params.cache_strategy} cache strategy, not supported"
@@ -489,6 +499,7 @@ class GPTQAttentionWithRope(AttentionWithRopeV2):
             layer_idx=layer_idx,
             input_row_offsets=kwargs["input_row_offsets"],
             mask_variant=MHAMaskVariant.CAUSAL_MASK,
+            scale=self.scale,
         )
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])
 
@@ -589,6 +600,7 @@ class AttentionWithRopeQKV(AttentionImplQKV):
             layer_idx=ops.constant(self.layer_idx, DType.uint32),
             input_row_offsets=kwargs["input_row_offsets"],
             mask_variant=MHAMaskVariant.CAUSAL_MASK,
+            scale=self.scale,
         )
 
         attn_out = ops.reshape(attn_out, shape=[total_seq_len, -1])

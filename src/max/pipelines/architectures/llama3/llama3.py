@@ -68,6 +68,7 @@ class Llama3(Transformer):
         stacked_mlp: bool,
         stacked_qkv: bool,
         logits_postprocessor: Callable[[TensorValue], TensorValue] | None,
+        attention_multiplier: float,
         devices: list[DeviceRef],
     ):
         rope = OptimizedRotaryEmbedding(
@@ -101,11 +102,15 @@ class Llama3(Transformer):
         attention_cls: Callable[..., AttentionWithRopeV2]
         if quantization_config:
             attention_cls = functools.partial(
-                GPTQAttentionWithRope, quantization_config=quantization_config
+                GPTQAttentionWithRope,
+                quantization_config=quantization_config,
+                scale=attention_multiplier,
             )
         else:
             attention_cls = functools.partial(
-                AttentionWithRopeV2, stacked_qkv=stacked_qkv
+                AttentionWithRopeV2,
+                stacked_qkv=stacked_qkv,
+                scale=attention_multiplier,
             )
         layers = [
             TransformerBlock(

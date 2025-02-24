@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from max.dtype import DType
@@ -122,6 +123,7 @@ class CrossSdpaAttention(Layer):
             mask_variant=MHAMaskVariant.NULL_MASK,
             kv_input_row_offsets=cross_input_row_offsets,
             q_max_seq_len=hidden_max_seq_len,
+            scale=math.sqrt(1.0 / self.kv_params.head_dim),
         )
 
         # Reshape back to (hidden total seq len, hidden size).
