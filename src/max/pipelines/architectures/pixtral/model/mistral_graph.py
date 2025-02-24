@@ -167,7 +167,7 @@ def _transformer(
                     params,
                     rope,
                     weights.language_model.model.layers[i],
-                    layer_idx=ops.constant(i, DType.uint32),  # type: ignore
+                    layer_idx=i,
                 ),
                 mlp=feed_forward(
                     params.dtype,
