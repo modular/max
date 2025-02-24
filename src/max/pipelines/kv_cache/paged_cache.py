@@ -255,6 +255,8 @@ class _PagedCacheMetadata:
 
     @property
     def committable_tokens_aligned(self) -> np.ndarray:
+        # Return all tokens that are committable and part of a block that only
+        # contains committable tokens.
         inflight_idx = self.inflight_idx
         partial_tokens = inflight_idx % self.page_size
         if partial_tokens > 0:
@@ -262,32 +264,46 @@ class _PagedCacheMetadata:
         return self.tokens[self.committed_idx : inflight_idx]
 
     @property
-    def committable_tokens(self) -> np.ndarray:
-        return self.tokens[self.committed_idx : self.inflight_idx]
-
-    @property
-    def committable_blocks(self) -> list[int]:
+    def committable_blocks_aligned(self) -> list[int]:
+        # Returns all blocks that only contain committable tokens.
         return self.blocks[
             self.committed_idx // self.page_size : self.inflight_idx
             // self.page_size
         ]
 
-    def _validate_indices(self) -> bool:
-        # Each of these indices has a strict ordering and the commited_idx is
-        # always a multiple of the page size since we can't commit a partial
-        # page into the prefix cache.
-        return (
+    @property
+    def committable_tokens(self) -> np.ndarray:
+        # Returns all tokens that are committable.
+        return self.tokens[self.committed_idx : self.inflight_idx]
+
+    @property
+    def committable_blocks(self) -> list[int]:
+        # Returns any block that contains at least one committable token.
+        return self.blocks[
+            self.committed_idx // self.page_size : ceildiv(
+                self.inflight_idx, self.page_size
+            )
+        ]
+
+    def _validate_indices(self):
+        assert (
             0
             <= self.committed_idx
             <= self.cached_idx
             <= self.inflight_idx
             <= self.seq_len
-            <= len(self.tokens)
-        ) and self.committed_idx % self.page_size == 0
+        ), "The indices must be in the correct order"
+        assert self.seq_len <= len(self.tokens), (
+            "Sequence has exceeded the max sequence length"
+        )
+        assert self.committed_idx % self.page_size == 0, (
+            "The committed_idx must be a multiple of the page size since we "
+            "can't commit a partial page into the prefix cache"
+        )
 
     def fetch(self, prompt: np.ndarray, num_steps: int) -> None:
         """Add prompt to token array and reserve space for inflight tokens."""
-        assert self._validate_indices()
+        self._validate_indices()
         assert len(self.prompt_tokens) == 0, (
             "At the start of fetch, there should be no prompt tokens"
         )
@@ -301,11 +317,11 @@ class _PagedCacheMetadata:
         self.inflight_idx += len(prompt)
         self.seq_len += len(prompt) + num_inflight_tokens
         self.tokens[self.cached_idx : self.inflight_idx] = prompt
-        assert self._validate_indices()
+        self._validate_indices()
 
     def step(self, new_tokens: np.ndarray) -> None:
         """Write new tokens into inflight token slots. Also update the cached_idx."""
-        assert self._validate_indices()
+        self._validate_indices()
         assert len(self.prompt_tokens) > 0, (
             "We could not have executed the model without at least one prompt token"
         )
@@ -319,7 +335,7 @@ class _PagedCacheMetadata:
         assert len(self.uncached_tokens) == 0, (
             "After step, all tokens should have a backing KV projection in the cache"
         )
-        assert self._validate_indices()
+        self._validate_indices()
 
 
 class PagedKVCacheManager(KVCacheManager):
@@ -706,10 +722,8 @@ class PagedKVCacheManager(KVCacheManager):
 
         # If there is a block with partially cached tokens, we should release it
         # if the cache hit blocks already contain these tokens and more
-        if (
-            data.committed_idx < data.cached_idx
-            and data.committed_idx + num_cache_hit_tokens > data.cached_idx
-        ):
+        if data.committed_idx < data.cached_idx and num_cache_hit_tokens > 0:
+            assert data.committed_idx + num_cache_hit_tokens > data.cached_idx
             partial_blocks = data.committable_blocks
             assert len(partial_blocks) == 1
             self.release_block(partial_blocks[0])
@@ -974,7 +988,7 @@ class PagedKVCacheManager(KVCacheManager):
 
         # If we computed a kv entry for a token that was already cached,
         # we will just release that block we just computed.
-        for b0, b1 in zip(existing_blocks, data.committable_blocks):
+        for b0, b1 in zip(existing_blocks, data.committable_blocks_aligned):
             if b0 != b1:
                 self.release_block(b1)
 
@@ -986,7 +1000,7 @@ class PagedKVCacheManager(KVCacheManager):
         data.committed_idx += len(existing_blocks) * self.page_size
 
         committable_tokens = data.committable_tokens_aligned
-        committable_blocks = data.committable_blocks
+        committable_blocks = data.committable_blocks_aligned
         assert len(committable_tokens) % self.page_size == 0
         assert (
             len(committable_tokens) == len(committable_blocks) * self.page_size
