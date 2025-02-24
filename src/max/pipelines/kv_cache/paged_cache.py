@@ -626,6 +626,9 @@ class PagedKVCacheManager(KVCacheManager):
                 self.radix_trie.get_evictable_blocks()
             )
 
+    def get_num_used_blocks(self) -> int:
+        return self.total_num_pages - self.get_num_free_blocks()
+
     def can_fetch(
         self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
     ) -> bool:
