@@ -346,6 +346,7 @@ class TextAndVisionContext:
         if self._active_idx <= self._end_idx:
             self._start_idx = self._active_idx
             self._active_idx = self._end_idx
+            self.is_initial_prompt = False
             return
 
         if self._active_idx >= self.size:
