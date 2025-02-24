@@ -12,6 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 """Build a Mistral model via Graph API from Safetensor weights."""
 
+import math
 from typing import Union
 
 from max.dtype import DType
@@ -137,6 +138,7 @@ def _attention_opaque(
         ),
         rope=rope,
         layer_idx=layer_idx,  # type: ignore
+        scale=math.sqrt(1 / kv_params.head_dim),
     )
 
 
