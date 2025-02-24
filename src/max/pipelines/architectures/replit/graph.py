@@ -11,6 +11,7 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
+import math
 from typing import Optional
 
 from max.dtype import DType
@@ -103,6 +104,7 @@ def _attention(
         ),
         layer_idx=ops.constant(layer_index, dtype=DType.uint32),
         mask_variant=MHAMaskVariant.CAUSAL_ALIBI_MASK,
+        scale=math.sqrt(1 / kv_params.head_dim),
     )
 
 
