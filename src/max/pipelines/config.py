@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import struct
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
@@ -39,6 +40,13 @@ from huggingface_hub import (
 )
 from huggingface_hub import constants as hf_hub_constants
 from huggingface_hub.hf_api import ModelInfo
+from huggingface_hub.utils import (
+    EntryNotFoundError,
+    GatedRepoError,
+    HfHubHTTPError,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
+)
 from huggingface_hub.utils import tqdm as hf_tqdm
 from max.driver import CPU, Accelerator, Device, DeviceSpec, accelerator_count
 from max.dtype import DType
@@ -184,6 +192,52 @@ class RopeType(str, Enum):
     neox = "neox"
 
 
+def _repo_exists_with_retry(repo_id: str) -> bool:
+    """
+    Wrapper around huggingface_hub.repo_exists with retry logic.
+    Retries after 5, 30 and 60 seconds if we get a transient HTTP error.
+
+    See huggingface_hub.repo_exists for details
+    """
+    max_attempts = 3
+    retry_delays_in_seconds = [
+        5,
+        30,
+        60,
+    ]
+
+    for attempt, delay_in_seconds in enumerate(retry_delays_in_seconds):
+        try:
+            return repo_exists(repo_id)
+        except (
+            RepositoryNotFoundError,
+            GatedRepoError,
+            RevisionNotFoundError,
+            EntryNotFoundError,
+        ) as e:
+            # Forward these specific errors to the user
+            logger.error(f"Hugging Face repository error: {str(e)}")
+            raise
+        except HfHubHTTPError as e:
+            if attempt == max_attempts - 1:
+                logger.error(
+                    f"Failed to connect to Hugging Face Hub after {max_attempts} attempts: {str(e)}"
+                )
+                raise
+
+            logger.warning(
+                f"Transient Hugging Face Hub connection error (attempt {attempt + 1}/{max_attempts}): {str(e)}"
+            )
+            logger.warning(
+                f"Retrying Hugging Face connection in {delay_in_seconds} seconds..."
+            )
+            time.sleep(delay_in_seconds)
+
+    assert False, (
+        "This should never be reached due to the raise in the last attempt"
+    )
+
+
 @dataclass
 class HuggingFaceRepo:
     repo_id: str
@@ -198,7 +252,9 @@ class HuggingFaceRepo:
             else:
                 self.repo_type = RepoType.online
 
-        if self.repo_type == RepoType.online and not repo_exists(self.repo_id):
+        if self.repo_type == RepoType.online and not _repo_exists_with_retry(
+            self.repo_id
+        ):
             msg = f"model_path: {self.repo_id} does not exist"
             raise ValueError(msg)
 
@@ -713,7 +769,7 @@ class PipelineConfig:
                 msg = "model_path must be provided and must be a valid Hugging Face repository"
                 raise ValueError(msg)
             elif (not os.path.exists(self.model_path)) and (
-                not repo_exists(self.model_path)
+                not _repo_exists_with_retry(self.model_path)
             ):
                 msg = (
                     f"{self.model_path} is not a valid Hugging Face repository"
