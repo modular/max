@@ -88,6 +88,21 @@ class KVCacheInputs:
     def __setitem__(self, index, value):
         list(self)[index] = value
 
+    def __len__(self):
+        count = 0
+        # Iterate over all fields in the dataclass. If we run into a sequence of
+        # KVCacheInputs, we expand and recursively call `len` on the KVCacheInputs
+        # elements.
+        for field in self.__dataclass_fields__:
+            value = getattr(self, field)
+            if isinstance(value, Sequence) and all(
+                isinstance(x, KVCacheInputs) for x in value
+            ):
+                count += sum(len(x) for x in value)
+            else:
+                count += 1
+        return count
+
 
 @dataclass
 class PaddedKVCacheInputs(KVCacheInputs):
@@ -368,11 +383,6 @@ class KVCacheManager(ABC):
         This should also not update the cache lengths in our manager, this batch is
         still considered in-progress.
         """
-        # Check the assumption on input length made by the internal function.
-        assert len(list(kv_cache_inputs[0])) == KVCacheManager.num_kv_inputs(
-            self
-        )
-
         if self.is_ragged:
             return self._increment_cache_lengths_ragged(
                 kv_cache_inputs=cast(
