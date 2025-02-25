@@ -31,6 +31,7 @@ from max.pipelines import (
     upper_bounded_default,
 )
 from max.pipelines.kv_cache import (
+    KVCacheInputs,
     KVCacheManager,
     KVCacheParams,
     estimate_kv_cache_size,
@@ -98,7 +99,7 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
         self,
         model_inputs: ModelInputs,
         # TODO(zheng): This should be folded as KVCacheInputs into ModelInputs.
-        kv_cache_inputs: Sequence[Tensor] | None = None,
+        kv_cache_inputs: KVCacheInputs | None = None,
     ) -> ModelOutputs:
         model_inputs = cast(PixtralInputs, model_inputs)
         if model_inputs.has_vision_inputs:
@@ -117,7 +118,6 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
                 ],
                 dtype=self.pipeline_config.dtype,
             ).to(self.pipeline_config.devices[0])
-
         assert kv_cache_inputs is not None, (
             "Pixtral has KV cache inputs, but none were provided"
         )

@@ -16,7 +16,7 @@
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import Any, List
+from typing import Any, List, cast
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -25,7 +25,12 @@ from max.engine import InferenceSession
 from max.graph import BufferType, TensorType
 
 from .cache_params import KVCacheParams
-from .manager import KVCacheInputSymbols, KVCacheManager
+from .manager import (
+    KVCacheInputs,
+    KVCacheInputSymbols,
+    KVCacheManager,
+    PaddedKVCacheInputs,
+)
 
 
 @dataclass
@@ -144,7 +149,7 @@ class NaiveKVCacheManager(KVCacheManager):
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> List[tuple[Tensor, ...]]:
+    ) -> List[KVCacheInputs]:
         existing_keys = list(self.cache_lengths.keys())
         for i, (seq_id, prompt) in enumerate(seq_ids_and_prompts.items()):
             if existing_keys[i] != seq_id:
@@ -162,21 +167,22 @@ class NaiveKVCacheManager(KVCacheManager):
                 f"seq_id: {seq_id} would overrun the max cache length of {self.max_seq_len} "
                 f"with {len(prompt)} new tokens and {num_steps} steps. Existing length: {self.cache_lengths[seq_id]}"
             )
-        return [
-            (
-                self.keys,
-                self.values,
-                Tensor.scalar(
+        padded_kv_cache_inputs = [
+            PaddedKVCacheInputs(
+                k_cache=self.keys,
+                v_cache=self.values,
+                start_pos=Tensor.scalar(
                     self.max_sequence_length, DType.int64, self.devices[0]
                 ),
                 # TODO: MSDK-1201 - This next variable is not used upstream.
                 # It is included here, as a placeholder, until we can dynamically
                 # return a number of tensors from both `fetch` and `input_symbols`.
-                Tensor.scalar(
+                null_op=Tensor.scalar(
                     self.max_sequence_length, DType.int64, self.devices[0]
                 ),
             )
         ]
+        return cast(List[KVCacheInputs], padded_kv_cache_inputs)
 
     def input_symbols(
         self,

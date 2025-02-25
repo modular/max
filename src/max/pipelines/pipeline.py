@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import (
     Any,
     Generic,
+    List,
     Optional,
     Protocol,
     Sequence,
@@ -33,7 +34,11 @@ import torch
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession
-from max.pipelines.kv_cache import infer_optimal_batch_size
+from max.pipelines.kv_cache import (
+    KVCacheInputs,
+    KVCacheInputsSequence,
+    infer_optimal_batch_size,
+)
 from max.profiler import Tracer, traced
 from transformers import AutoTokenizer
 
@@ -237,8 +242,8 @@ class PipelineModel(ABC, Generic[T]):
     def execute(
         self,
         model_inputs: ModelInputs,
-        # TODO(zheng): This should be wrapped in a class called KVCacheInputs in the future.
-        kv_cache_inputs: Sequence[Tensor] | None = None,
+        # TODO(zheng): This should be tucked inside ModelInputs in the future.
+        kv_cache_inputs: KVCacheInputs | None = None,
     ) -> ModelOutputs:
         """Executes the graph with the given inputs.
 
@@ -442,7 +447,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         self,
         batch: list[T],
         num_steps: int,
-    ) -> tuple[ModelInputs, Any, int, Optional[torch.Tensor]]:
+    ) -> tuple[ModelInputs, List[KVCacheInputs], int, Optional[torch.Tensor]]:
         tracer: Tracer = Tracer("prepare_batch")
 
         if self._pipeline_config.enable_structured_output:
@@ -574,8 +579,8 @@ class TextGenerationPipeline(TokenGenerator[T]):
         ]
 
         # Prepare the batch.
-        model_inputs, kv_cache_inputs, num_steps, bitmask = self.prepare_batch(
-            context_batch, num_steps
+        model_inputs, batched_kv_cache_inputs, num_steps, bitmask = (
+            self.prepare_batch(context_batch, num_steps)
         )
 
         # Multistep execution loop.
@@ -591,16 +596,13 @@ class TextGenerationPipeline(TokenGenerator[T]):
         tracer.next(f"multistep_execution_loop_{num_steps}_steps")
         for i in range(num_steps):
             tracer.push(f"step_{i}")
-            # Extract the kv-cache inputs and flatten before pushing to execute
-            kv_cache_inputs_tuple = [
-                inp
-                for kv_cache_input in kv_cache_inputs
-                for inp in kv_cache_input
-            ]
+
             # Execute the model and get next tokens.
             model_outputs = self._pipeline_model.execute(
                 model_inputs=curr_step_inputs,
-                kv_cache_inputs=kv_cache_inputs_tuple,
+                kv_cache_inputs=KVCacheInputsSequence(
+                    kv_cache_inputs=batched_kv_cache_inputs,
+                ),
             )
             assert model_outputs.next_token_logits is not None
             next_token_logits = model_outputs.next_token_logits
@@ -656,9 +658,10 @@ class TextGenerationPipeline(TokenGenerator[T]):
             # Prepare inputs for the next token in multistep execution
             tracer.next("increment_cache_lengths")  # pops sample_next_token
             # Unpack model inputs for execute() call by getting all fields
-            kv_cache_inputs = (
+            batched_kv_cache_inputs = (
                 self._pipeline_model.kv_manager.increment_cache_lengths(
-                    kv_cache_inputs, curr_step_inputs
+                    batched_kv_cache_inputs,  # type: ignore
+                    curr_step_inputs,
                 )
             )
             tracer.next("prepare_next_token_inputs")  # pops inc_cache_lengths

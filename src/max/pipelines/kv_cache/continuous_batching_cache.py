@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import Any, List
+from typing import Any, List, cast
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -35,7 +35,12 @@ from max.graph import (
 
 from ._utils import build_max_lengths_tensor
 from .cache_params import KVCacheParams
-from .manager import KVCacheInputSymbols, KVCacheManager
+from .manager import (
+    KVCacheInputs,
+    KVCacheInputSymbols,
+    KVCacheManager,
+    RaggedKVCacheInputs,
+)
 
 
 @dataclass
@@ -218,7 +223,7 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> List[tuple[Tensor, ...]]:
+    ) -> List[KVCacheInputs]:
         """Fetches the KV cache state for the given sequence IDs.
 
         This method retrieves the current cache state for a batch of sequences, including their
@@ -292,15 +297,16 @@ class ContinuousBatchingKVCacheManager(KVCacheManager):
             num_steps, max_seq_length, max_cache_length
         )
 
-        return [
-            (
-                self.blocks[i],
-                cache_lengths[i],
-                lookup_table_tensor_list[i],
-                max_lengths_host,
+        result = [
+            RaggedKVCacheInputs(
+                blocks=self.blocks[i],
+                cache_lengths=cache_lengths[i],
+                lookup_table=lookup_table_tensor_list[i],
+                max_lengths=max_lengths_host,
             )
             for i in range(len(self.devices))
         ]
+        return cast(List[KVCacheInputs], result)
 
     def block_shape(self, n_sequences: int) -> list[int]:
         """Returns the shape of the KV cache blocks for the given number of sequences.

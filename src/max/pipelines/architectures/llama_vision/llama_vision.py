@@ -35,10 +35,13 @@ from max.pipelines import (
 )
 from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheManager,
+    KVCacheInputs,
     KVCacheInputSymbols,
     KVCacheManager,
     KVCacheParams,
     KVCacheStrategy,
+    PaddedKVCacheInputs,
+    RaggedKVCacheInputs,
     estimate_kv_cache_size,
     infer_optimal_batch_size,
     load_kv_manager,
@@ -57,6 +60,12 @@ logger = logging.getLogger("max.pipelines")
 class MultimodalKVCacheInputSymbols(KVCacheInputSymbols):
     text_kv_input_symbols: KVCacheInputSymbols
     vision_kv_input_symbols: KVCacheInputSymbols
+
+
+@dataclass
+class MultimodalKVCacheInputs(KVCacheInputs):
+    text_kv_cache_inputs: KVCacheInputs
+    vision_kv_cache_inputs: KVCacheInputs
 
 
 class MultimodalKVCacheManager(KVCacheManager):
@@ -220,7 +229,7 @@ class MultimodalKVCacheManager(KVCacheManager):
     @final
     def _fetch(
         self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
-    ) -> list[tuple[Tensor, ...]]:
+    ) -> list[KVCacheInputs]:
         """Returns KV cache inputs for both modalities' KV managers."""
         # Here we call into the text KV manager's fetch method to update
         # its fetch metadata.
@@ -264,16 +273,19 @@ class MultimodalKVCacheManager(KVCacheManager):
             num_steps, max_seq_length, max_cache_length
         )
 
-        vision_fetch_results = (
+        vision_fetch_results = RaggedKVCacheInputs(
             # Block 0 for the first device (since MultimodalKVCacheManager
             # assumes only 1 device).
-            self.vision_kv_manager.blocks[0],
-            Tensor.from_numpy(cache_lengths_np).to(device),
-            lookup_table_tensor.to(device),
-            max_lengths_host,
+            blocks=self.vision_kv_manager.blocks[0],
+            cache_lengths=Tensor.from_numpy(cache_lengths_np).to(device),
+            lookup_table=lookup_table_tensor.to(device),
+            max_lengths=max_lengths_host,
         )
 
-        return [text_fetch_results + vision_fetch_results]
+        multimodal_kv_inputs = [
+            MultimodalKVCacheInputs(text_fetch_results, vision_fetch_results)
+        ]
+        return cast(list[KVCacheInputs], multimodal_kv_inputs)
 
     @final
     def input_symbols(
@@ -368,28 +380,32 @@ class MultimodalKVCacheManager(KVCacheManager):
 
     def increment_cache_lengths(
         self,
-        kv_cache_inputs: Sequence[tuple[Tensor, ...]],
+        kv_cache_inputs: list[RaggedKVCacheInputs] | list[PaddedKVCacheInputs],
         prev_model_inputs: Iterable[Any],
-    ) -> list[tuple[Tensor, ...]]:
+    ) -> list[RaggedKVCacheInputs] | list[PaddedKVCacheInputs]:
         """Updates the cache lengths for multistep execution.
 
         This increments the text and vision KV cache lengths separately using
         their respective KV cache inputs.
         """
-        text_kv_inputs = kv_cache_inputs[0][
-            : self.text_kv_manager.num_kv_inputs()
+        # Cast the input to MultimodalKVCacheInputs to access its components
+        multimodal_inputs = cast(list[MultimodalKVCacheInputs], kv_cache_inputs)
+        text_kv_inputs = multimodal_inputs[0].text_kv_cache_inputs
+        vision_kv_inputs = multimodal_inputs[0].vision_kv_cache_inputs
+
+        multimodal_kv_inputs = [
+            MultimodalKVCacheInputs(
+                text_kv_cache_inputs=self.text_kv_manager.increment_cache_lengths(
+                    [text_kv_inputs],  # type: ignore
+                    prev_model_inputs,
+                )[0],
+                vision_kv_cache_inputs=self.vision_kv_manager.increment_cache_lengths(
+                    [vision_kv_inputs],  # type: ignore
+                    prev_model_inputs,
+                )[0],
+            )
         ]
-        vision_kv_inputs = kv_cache_inputs[0][
-            self.text_kv_manager.num_kv_inputs() :
-        ]
-        return [
-            self.text_kv_manager.increment_cache_lengths(
-                [text_kv_inputs], prev_model_inputs
-            )[0]
-            + self.vision_kv_manager.increment_cache_lengths(
-                [vision_kv_inputs], prev_model_inputs
-            )[0]
-        ]
+        return cast(list[RaggedKVCacheInputs], multimodal_kv_inputs)
 
 
 # TODO(bduke): use `@dataclass(slots=True)` when we drop 3.9 support.
@@ -969,8 +985,11 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
         self,
         model_inputs: ModelInputs,
         # TODO(zheng): This should be folded as KVCacheInputs into ModelInputs.
-        kv_cache_inputs: Sequence[Tensor] | None = None,
+        text_and_vision_kv_cache_inputs: Optional[KVCacheInputs] = None,
     ) -> ModelOutputs:
+        assert isinstance(
+            text_and_vision_kv_cache_inputs, MultimodalKVCacheInputs
+        )
         # batch_size * num_concurrent_media * max_num_tiles * num_patches
         # are set to 0 here to imitate a dummy tensor (used in text-only mode).
         cross_attention_states = Tensor.zeros(
@@ -990,14 +1009,20 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
             assert isinstance(exec_result, Tensor)
             cross_attention_states = exec_result
 
-        assert kv_cache_inputs is not None
+        text_kv_cache_inputs = (
+            text_and_vision_kv_cache_inputs.text_kv_cache_inputs
+        )
+        vision_kv_cache_inputs = (
+            text_and_vision_kv_cache_inputs.vision_kv_cache_inputs
+        )
         model_outputs = self.language_model.execute(
             cross_attention_states,
             model_inputs.input_id_values,
             model_inputs.input_row_offsets,
             model_inputs.input_id_max_seq_len,
             model_inputs.pixel_row_offsets,
-            *kv_cache_inputs,
+            *text_kv_cache_inputs,
+            *vision_kv_cache_inputs,
             copy_inputs_to_device=False,
         )
         assert not self.pipeline_config.enable_echo

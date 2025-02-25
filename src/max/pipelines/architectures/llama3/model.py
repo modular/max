@@ -38,6 +38,7 @@ from max.pipelines import (
 )
 from max.pipelines.dataprocessing import batch_padded_tokens_and_mask
 from max.pipelines.kv_cache import (
+    KVCacheInputs,
     KVCacheManager,
     KVCacheParams,
     estimate_kv_cache_size,
@@ -162,17 +163,16 @@ class LlamaModelBase(PipelineModel[TextContext]):
     def execute(
         self,
         model_inputs: ModelInputs,
-        kv_cache_inputs: Sequence[Tensor] | None = None,
+        kv_cache_inputs: KVCacheInputs | None = None,
     ) -> ModelOutputs:
         model_inputs = cast(Llama3Inputs, model_inputs)
         if kv_cache_inputs is None:
-            kv_cache_inputs = ()
-
+            kv_cache_inputs = ()  # type: ignore
         model_outputs = self.model.execute(
             model_inputs.tokens,
             model_inputs.input_row_offsets_or_attn_mask,
             *model_inputs.signal_buffers,
-            *kv_cache_inputs,
+            *kv_cache_inputs,  # type: ignore
             copy_inputs_to_device=(
                 not self.pipeline_config.cache_strategy.uses_opaque()
             ),

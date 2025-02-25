@@ -34,7 +34,7 @@ from max.pipelines import (
     upper_bounded_default,
 )
 from max.pipelines.dataprocessing import collate_batch
-from max.pipelines.kv_cache import KVCacheParams
+from max.pipelines.kv_cache import KVCacheInputs, KVCacheParams
 
 from .graph import build_graph
 
@@ -106,7 +106,7 @@ class MPNetPipelineModel(PipelineModel[TextContext]):
     def execute(
         self,
         model_inputs: ModelInputs,
-        kv_cache_inputs: Sequence[Tensor] | None = None,
+        kv_cache_inputs: KVCacheInputs | None = None,
     ) -> ModelOutputs:
         model_inputs = cast(MPNetInputs, model_inputs)
         assert kv_cache_inputs is None, "MPNet does not have KV cache inputs"

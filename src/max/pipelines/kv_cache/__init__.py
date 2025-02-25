@@ -27,7 +27,14 @@ from .continuous_batching_cache import (
     FetchContinuousBatchingKVCacheCollection,
 )
 from .hf import ContinuousHFStaticCache
-from .manager import KVCacheInputSymbols, KVCacheManager
+from .manager import (
+    KVCacheInputs,
+    KVCacheInputsSequence,
+    KVCacheInputSymbols,
+    KVCacheManager,
+    PaddedKVCacheInputs,
+    RaggedKVCacheInputs,
+)
 from .naive_cache import NaiveKVCacheManager
 from .paged_cache import (
     FetchPagedKVCacheCollection,
@@ -165,6 +172,10 @@ __all__ = [
     "PagedKVCacheCollection",
     "PagedKVCacheType",
     "KVCacheManager",
+    "KVCacheInputs",
+    "KVCacheInputsSequence",
+    "RaggedKVCacheInputs",
+    "PaddedKVCacheInputs",
     "KVCacheInputSymbols",
     "NaiveKVCacheManager",
     "ContinuousHFStaticCache",

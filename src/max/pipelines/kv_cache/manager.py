@@ -18,7 +18,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, List, Sequence, final
+from typing import Any, List, Sequence, cast, final
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -38,6 +38,92 @@ class _FetchMetadata:
 
     prompt: np.ndarray
     num_steps: int
+
+
+@dataclass
+class KVCacheInputs:
+    """
+    A base class that holds KV cache related (Tensor) inputs.
+
+    It is meant to be subclassed by concrete KV cache input types.
+
+    Example:
+        >>> @dataclass
+        ... class RaggedKVCacheInputs(KVCacheInputs):
+        ...     blocks: Tensor
+        ...     cache_lengths: Tensor
+        ...     lookup_table: Tensor
+        ...     max_lengths: Tensor
+    """
+
+    def __iter__(self):
+        """Iterates through each Type in order."""
+        fields = deque(
+            getattr(self, field) for field in self.__dataclass_fields__
+        )
+        while fields:
+            value = fields.popleft()
+            if isinstance(value, Sequence) and all(
+                isinstance(x, KVCacheInputs) for x in value
+            ):
+                # Add sequence elements in original order
+                fields.extendleft([x for x in reversed(value)])
+                continue
+            elif isinstance(value, KVCacheInputs):
+                fields.extendleft(
+                    reversed(
+                        [
+                            getattr(value, field)
+                            for field in value.__dataclass_fields__
+                        ]
+                    )
+                )
+                continue
+            else:
+                yield cast(Tensor, value)
+
+    def __getitem__(self, index):
+        return list(self)[index]
+
+    def __setitem__(self, index, value):
+        list(self)[index] = value
+
+
+@dataclass
+class PaddedKVCacheInputs(KVCacheInputs):
+    """
+    PaddedKVCacheInputs is a class that holds the inputs for
+    KV cache when used together with padded tensors.
+    """
+
+    k_cache: Tensor
+    v_cache: Tensor
+    start_pos: Tensor
+    null_op: Tensor
+
+
+@dataclass
+class RaggedKVCacheInputs(KVCacheInputs):
+    """
+    RaggedKVCacheInputs is a class that holds the inputs for
+    KV cache when used together with ragged tensors.
+    """
+
+    blocks: Tensor
+    cache_lengths: Tensor
+    lookup_table: Tensor
+    max_lengths: Tensor
+
+
+@dataclass
+class KVCacheInputsSequence(KVCacheInputs):
+    """
+    KVCacheInputsSequence is a sequence of KVCacheInputs.
+    It is primarily used in our multistep execution to represent batched
+    KVCacheInputs.
+    """
+
+    kv_cache_inputs: Sequence[KVCacheInputs]
 
 
 @dataclass
@@ -66,8 +152,12 @@ class KVCacheInputSymbols:
             value = fields.popleft()
             if isinstance(value, KVCacheInputSymbols):
                 fields.extendleft(
-                    getattr(value, field)
-                    for field in value.__dataclass_fields__
+                    reversed(
+                        [
+                            getattr(value, field)
+                            for field in value.__dataclass_fields__
+                        ]
+                    )
                 )
                 continue
             else:
@@ -142,7 +232,7 @@ class KVCacheManager(ABC):
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> Sequence[tuple[Tensor, ...]]:
+    ) -> List[KVCacheInputs]:
         """Used by `fetch` and should be implemented by child classes."""
         ...
 
@@ -151,7 +241,7 @@ class KVCacheManager(ABC):
         self,
         seq_ids_and_prompts: dict[int, np.ndarray],
         num_steps: int = 1,
-    ) -> Sequence[tuple[Tensor, ...]]:
+    ) -> List[KVCacheInputs]:
         """Returns blocks and other inputs to kv cache kernel for given
         sequence ids and prompts."""
         # Call into `_fetch` method implemented by child classes.
@@ -267,9 +357,9 @@ class KVCacheManager(ABC):
 
     def increment_cache_lengths(
         self,
-        kv_cache_inputs: Sequence[tuple[Tensor, ...]],
+        kv_cache_inputs: List[RaggedKVCacheInputs] | List[PaddedKVCacheInputs],
         prev_model_inputs: Any,
-    ) -> List[tuple[Tensor, ...]]:
+    ) -> List[RaggedKVCacheInputs] | List[PaddedKVCacheInputs]:
         """
         Prepare the inputs for a multistep execution, generally by incrementing
         the cache lengths. This should not require a device synchronization,
@@ -278,29 +368,29 @@ class KVCacheManager(ABC):
         This should also not update the cache lengths in our manager, this batch is
         still considered in-progress.
         """
-
-        # Make typechecking happy.
-        assert isinstance(kv_cache_inputs, List)
-
         # Check the assumption on input length made by the internal function.
-        assert len(kv_cache_inputs[0]) == KVCacheManager.num_kv_inputs(self)
+        assert len(list(kv_cache_inputs[0])) == KVCacheManager.num_kv_inputs(
+            self
+        )
 
         if self.is_ragged:
             return self._increment_cache_lengths_ragged(
-                kv_cache_inputs,
-                prev_model_inputs,
+                kv_cache_inputs=cast(
+                    list[RaggedKVCacheInputs], kv_cache_inputs
+                ),
+                prev_model_inputs=prev_model_inputs,
             )
 
         return self._increment_cache_lengths_padded(
-            kv_cache_inputs,
-            prev_model_inputs,
+            kv_cache_inputs=cast(list[PaddedKVCacheInputs], kv_cache_inputs),
+            prev_model_inputs=prev_model_inputs,
         )
 
     def _increment_cache_lengths_ragged(
         self,
-        kv_cache_inputs: List[tuple[Tensor, ...]],
+        kv_cache_inputs: List[RaggedKVCacheInputs],
         prev_model_inputs: Any,
-    ) -> List[tuple[Tensor, ...]]:
+    ) -> List[RaggedKVCacheInputs]:
         """Prepares cache inputs for the next token in multistep execution.
 
         Updates the cache lengths for the next inference step without requiring device
@@ -314,14 +404,16 @@ class KVCacheManager(ABC):
         Returns:
             Updated cache input tuples with incremented lengths.
         """
-        blocks = [kv_cache_inputs[i][0] for i in range(len(self.devices))]
+        blocks = [kv_cache_inputs[i].blocks for i in range(len(self.devices))]
         cache_lengths = [
-            kv_cache_inputs[i][1] for i in range(len(self.devices))
+            kv_cache_inputs[i].cache_lengths for i in range(len(self.devices))
         ]
-        lookup_table = [kv_cache_inputs[i][2] for i in range(len(self.devices))]
+        lookup_table = [
+            kv_cache_inputs[i].lookup_table for i in range(len(self.devices))
+        ]
 
         # max_lengths is host allocated and the same across all devices.
-        max_lengths = kv_cache_inputs[0][3]
+        max_lengths = kv_cache_inputs[0].max_lengths
 
         # Update the cache_lengths of our batch by the previous sequence length.
         updated_cache_lengths = self.increment_cache_lengths_model.execute(
@@ -335,19 +427,19 @@ class KVCacheManager(ABC):
         for i in range(len(self.devices)):
             updated_cache_length = updated_cache_lengths[i]
             assert isinstance(updated_cache_length, Tensor)
-            kv_cache_inputs[i] = (
-                blocks[i],
-                updated_cache_length,
-                lookup_table[i],
-                updated_max_lengths,
+            kv_cache_inputs[i] = RaggedKVCacheInputs(
+                blocks=blocks[i],
+                cache_lengths=updated_cache_length,
+                lookup_table=lookup_table[i],
+                max_lengths=updated_max_lengths,
             )
         return kv_cache_inputs
 
     def _increment_cache_lengths_padded(
         self,
-        kv_cache_inputs: List[tuple[Tensor, ...]],
+        kv_cache_inputs: List[PaddedKVCacheInputs],
         prev_model_inputs: Any,
-    ) -> List[tuple[Tensor, ...]]:
+    ) -> List[PaddedKVCacheInputs]:
         """
         Prepare the inputs for a multistep execution, generally by incrementing
         the cache lengths. This should not require a device synchronization,
@@ -357,13 +449,20 @@ class KVCacheManager(ABC):
         still considered in-progress.
         """
         assert len(kv_cache_inputs) == 1
-        k_cache, v_cache, start_pos, _ = kv_cache_inputs[0]
+        curr_kv_cache_inputs = kv_cache_inputs[0]
 
         new_start_pos = self.increment_cache_lengths_model(
-            start_pos, prev_model_inputs.tokens
+            curr_kv_cache_inputs.start_pos, prev_model_inputs.tokens
         )[0]
         assert isinstance(new_start_pos, Tensor)
-        return [(k_cache, v_cache, new_start_pos, new_start_pos)]
+        return [
+            PaddedKVCacheInputs(
+                k_cache=curr_kv_cache_inputs.k_cache,
+                v_cache=curr_kv_cache_inputs.v_cache,
+                start_pos=new_start_pos,
+                null_op=new_start_pos,
+            )
+        ]
 
     def _create_increment_cache_lengths_graph(self) -> Graph:
         """Constructs a graph to increment the cache_lengths argument during multi-step inference.

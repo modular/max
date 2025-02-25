@@ -35,6 +35,7 @@ from max.pipelines import (
 )
 from max.pipelines.dataprocessing import batch_padded_tokens_and_mask
 from max.pipelines.kv_cache import (
+    KVCacheInputs,
     KVCacheManager,
     KVCacheParams,
     estimate_kv_cache_size,
@@ -82,7 +83,7 @@ class Qwen2Model(PipelineModel[TextContext]):
     def execute(
         self,
         model_inputs: ModelInputs,
-        kv_cache_inputs: Sequence[Tensor] | None = None,
+        kv_cache_inputs: KVCacheInputs | None = None,
     ) -> ModelOutputs:
         assert kv_cache_inputs is not None
 

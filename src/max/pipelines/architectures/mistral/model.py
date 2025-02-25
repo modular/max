@@ -30,6 +30,7 @@ from max.pipelines import (
     upper_bounded_default,
 )
 from max.pipelines.kv_cache import (
+    KVCacheInputs,
     KVCacheManager,
     KVCacheParams,
     estimate_kv_cache_size,
@@ -71,11 +72,13 @@ class MistralModel(PipelineModel[TextContext]):
     def execute(
         self,
         model_inputs: ModelInputs,
-        kv_cache_inputs: Sequence[Tensor] | None = None,
+        kv_cache_inputs: KVCacheInputs | None = None,
     ) -> ModelOutputs:
         """Runs the graph."""
         model_inputs = cast(MistralInputs, model_inputs)
-        assert kv_cache_inputs is not None
+        assert kv_cache_inputs is not None, (
+            "Mistral has KV cache inputs, but none were provided"
+        )
         model_outputs = self.model.execute(
             model_inputs.input_tokens,
             model_inputs.input_row_offsets,

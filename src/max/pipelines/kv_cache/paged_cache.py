@@ -17,11 +17,10 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -40,7 +39,12 @@ from max.graph import (
 
 from ._utils import build_max_lengths_tensor
 from .cache_params import KVCacheParams
-from .manager import KVCacheInputSymbols, KVCacheManager
+from .manager import (
+    KVCacheInputs,
+    KVCacheInputSymbols,
+    KVCacheManager,
+    RaggedKVCacheInputs,
+)
 from .radix_trie import RadixTrie, TrieNode
 
 logger = logging.getLogger("max.pipelines")
@@ -807,7 +811,7 @@ class PagedKVCacheManager(KVCacheManager):
 
     def _fetch(
         self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
-    ) -> Sequence[tuple[Tensor, ...]]:
+    ) -> List[KVCacheInputs]:
         """This method identifies available blocks to service the given requests and marks them as inflight.
         They're assigned to the request as "in-flight" until step is called.
 
@@ -944,17 +948,17 @@ class PagedKVCacheManager(KVCacheManager):
         ret_list = []
         for i, device in enumerate(self.devices):
             ret_list.append(
-                (
-                    self.blocks[i],
-                    cache_lengths_host.to(device=device),
-                    lut_table_host.to(device=device),
-                    max_lengths_host,
+                RaggedKVCacheInputs(
+                    blocks=self.blocks[i],
+                    cache_lengths=cache_lengths_host.to(device=device),
+                    lookup_table=lut_table_host.to(device=device),
+                    max_lengths=max_lengths_host,
                 )
             )
 
         self._runtime_check()
 
-        return ret_list
+        return cast(List[KVCacheInputs], ret_list)
 
     def input_symbols(
         self,
