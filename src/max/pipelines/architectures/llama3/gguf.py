@@ -46,11 +46,11 @@ from max.pipelines.nn import (
     DistributedTransformer,
     DistributedTransformerBlock,
     Embedding,
-    EmbeddingV2,
     Linear,
     LinearV2,
     OptimizedRotaryEmbedding,
     RMSNorm,
+    VocabParallelEmbedding,
 )
 from max.pipelines.nn.layer import Layer
 
@@ -434,11 +434,11 @@ def distributed_transformer_opaque(
             ],
         )
 
-        embedding_layer = EmbeddingV2(
+        embedding_layer = VocabParallelEmbedding(
             vocab_size=pipeline_config.huggingface_config.vocab_size,
             hidden_dim=pipeline_config.huggingface_config.hidden_size,
             dtype=pipeline_config.dtype,
-            device=devices[0],
+            devices=devices,
             # Use the embedding weight's name, which mismatches between
             # Safetensors and GGUF Llama 3.
             name=embedding_weight.name,

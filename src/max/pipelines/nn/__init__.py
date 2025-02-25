@@ -27,7 +27,7 @@ from .attention import (
 )
 from .comm import Signals
 from .conv import Conv1D, Conv2D, Conv3D
-from .embedding import Embedding, EmbeddingV2
+from .embedding import Embedding, EmbeddingV2, VocabParallelEmbedding
 from .kernels import MHAMaskVariant
 from .layer import Layer, LayerV2
 from .linear import MLP, MLPV2, DistributedMLP, GPTQLinearV2, Linear, LinearV2
