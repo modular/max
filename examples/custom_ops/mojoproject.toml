@@ -14,7 +14,7 @@ vector_addition = { cmd = "python vector_addition.py", depends-on = ["package"] 
 top_k = { cmd = "python top_k.py", depends-on = ["package"] }
 fused_attention = { cmd = "python fused_attention.py", depends-on = ["package"] }
 matrix_multiplication = { cmd = "python matrix_multiplication.py", depends-on = ["package"] }
-test = { depends-on = ["addition", "mandelbrot", "vector_addition", "top_k"] }
+test = { depends-on = ["addition", "mandelbrot", "vector_addition", "top_k", "fused_attention", "matrix_multiplication"] }
 
 [dependencies]
 python = ">=3.9,<3.13"

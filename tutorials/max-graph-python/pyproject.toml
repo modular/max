@@ -22,6 +22,7 @@ addition = "python3 src/max_ops/addition.py"
 mypy = "mypy . --config .mypy.ini"
 black = "black src/max_ops/addition.py tests/test_addition.py"
 isort = "isort src/max_ops/addition.py tests/test_addition.py"
+test = { depends-on = ["addition"] }
 
 
 [tool.pixi.dependencies]

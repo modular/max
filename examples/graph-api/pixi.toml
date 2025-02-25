@@ -8,6 +8,7 @@ platforms = ["osx-arm64", "linux-aarch64", "linux-64"]
 
 [tasks]
 basic = "mojo basics/basic.🔥"
+test = { depends-on = ["basic"] }
 
 [dependencies]
 python = ">=3.9,<3.13"
