@@ -215,7 +215,6 @@ fn matmul[
     out res: LayoutTensor[
         lhs.dtype,
         Layout.row_major(lhs.shape[0](), rhs.shape[0]()),
-        lhs.rank,
         address_space = lhs.address_space,
         element_layout = lhs.element_layout,
         layout_bitwidth = lhs.layout_bitwidth,
