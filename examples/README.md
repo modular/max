@@ -15,6 +15,18 @@ The examples here illustrate how to construct custom graph operations in Mojo
 that run on GPUs and CPUs, as well as how to build computational graphs that
 contain and run them on different hardware architectures.
 
+## [Compiling and running Mojo functions on a GPU](gpu_functions/)
+
+In addition to placing custom Mojo functions within a computational graph, the
+MAX Driver API can handle direct compilation of GPU functions written in Mojo
+and can dispatch them onto the GPU. This is a programming model that may be
+familiar to those who have worked with CUDA or similar GPGPU frameworks.
+
+These examples show how to compile and run Mojo functions, from simple to
+complex, on an available GPU. Note that
+[a MAX-compatible GPU](https://docs.modular.com/max/faq/#gpu-requirements) will
+be necessary to build and run these.
+
 ## [PyTorch and ONNX inference on MAX](inference/)
 
 MAX has the power to accelerate existing PyTorch and ONNX models directly, and
