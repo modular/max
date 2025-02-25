@@ -28,6 +28,8 @@ from max.entrypoints.cli import (
 )
 from max.pipelines import PIPELINE_REGISTRY, PipelineConfig
 from max.pipelines.architectures import register_all_models
+from max.serve.config import Settings
+from max.serve.telemetry.common import configure_logging, configure_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,9 @@ class ModelGroup(click.Group):
 
 @click.command(cls=ModelGroup)
 def main():
+    settings = Settings()
+    configure_logging(settings)
+    configure_metrics(settings)
     register_all_models()
 
 

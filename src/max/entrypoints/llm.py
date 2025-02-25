@@ -32,6 +32,7 @@ from max.serve.pipelines.llm import (
     batch_config_from_pipeline_config,
 )
 from max.serve.pipelines.model_worker import start_model_worker
+from max.serve.pipelines.telemetry_worker import start_telemetry_consumer
 from max.serve.scheduler.process_control import ProcessControl
 
 RequestQueue = Queue[tuple[Sequence[str], Optional[int], bool]]
@@ -116,66 +117,69 @@ async def _async_worker(
     batch_config = batch_config_from_pipeline_config(pipeline_config)
     model_name = pipeline_config.model_path
 
-    async with (
-        # Start the model worker process.
-        start_model_worker(
+    async with start_telemetry_consumer(settings) as metric_client:
+        async with start_model_worker(
             model_factory=model_factory,
             batch_config=batch_config,
             settings=settings,
-        ) as engine_queue,
-        # Create dynamic and continuous batching workers and associated queues
-        # to feed the model worker process.
-        TokenGeneratorPipeline(
-            model_name=model_name,
-            tokenizer=tokenizer,
-            engine_queue=engine_queue,
-        ) as pipeline,
-    ):
-        pc.set_started()
-        while True:
-            pc.beat()
-            if pc.is_canceled():
-                break
+            metric_client=metric_client,
+        ) as engine_queue:
+            # Start the model worker process.
+            # Create dynamic and continuous batching workers and associated queues
+            # to feed the model worker process.
+            async with TokenGeneratorPipeline(
+                model_name=model_name,
+                tokenizer=tokenizer,
+                engine_queue=engine_queue,
+            ) as pipeline:
+                pc.set_started()
+                while True:
+                    pc.beat()
+                    if pc.is_canceled():
+                        break
 
-            try:
-                (prompts, max_new_tokens, use_tqdm) = request_queue.get(
-                    timeout=0.3
-                )
+                    try:
+                        (prompts, max_new_tokens, use_tqdm) = request_queue.get(
+                            timeout=0.3
+                        )
 
-                if use_tqdm:
-                    pbar = tqdm.tqdm(total=len(prompts))
+                        if use_tqdm:
+                            pbar = tqdm.tqdm(total=len(prompts))
 
-                # Lambda to do a full text generation for a request.
-                async def all_tokens(
-                    i: int,
-                    prompt: str,
-                ) -> tuple[int, str]:
-                    request = TokenGeneratorRequest(
-                        id=str(i),
-                        index=0,
-                        model_name=model_name,
-                        prompt=prompt,
-                        max_new_tokens=max_new_tokens,
-                    )
+                        # Lambda to do a full text generation for a request.
+                        async def all_tokens(
+                            i: int,
+                            prompt: str,
+                        ) -> tuple[int, str]:
+                            request = TokenGeneratorRequest(
+                                id=str(i),
+                                index=0,
+                                model_name=model_name,
+                                prompt=prompt,
+                                max_new_tokens=max_new_tokens,
+                            )
 
-                    # Generate this request until complete
-                    tokens = await pipeline.all_tokens(request)
-                    if use_tqdm:
-                        pbar.update(1)
-                    return (i, "".join(t.decoded_token for t in tokens))
+                            # Generate this request until complete
+                            tokens = await pipeline.all_tokens(request)
+                            if use_tqdm:
+                                pbar.update(1)
+                            return (i, "".join(t.decoded_token for t in tokens))
 
-                all_tokens_tasks = [
-                    all_tokens(i, prompt) for i, prompt in enumerate(prompts)
-                ]
-                responses = [""] * len(prompts)
-                for i, response in await asyncio.gather(*all_tokens_tasks):
-                    responses[i] = response
+                        all_tokens_tasks = [
+                            all_tokens(i, prompt)
+                            for i, prompt in enumerate(prompts)
+                        ]
+                        responses = [""] * len(prompts)
+                        for i, response in await asyncio.gather(
+                            *all_tokens_tasks
+                        ):
+                            responses[i] = response
 
-                if use_tqdm:
-                    pbar.close()
+                        if use_tqdm:
+                            pbar.close()
 
-                response_queue.put(responses)
+                        response_queue.put(responses)
 
-            except queue.Empty:
-                continue
-        pc.set_completed()
+                    except queue.Empty:
+                        continue
+                pc.set_completed()
