@@ -255,7 +255,7 @@ class TextContext:
         self.is_initial_prompt = True
 
 
-class TextAndVisionContext:
+class TextAndVisionContext(TextContext):
     """A base class for model context, specifically for Vision model variants."""
 
     def __init__(
@@ -270,137 +270,25 @@ class TextAndVisionContext:
         log_probabilities_echo: bool = False,
         json_schema: str | None = None,
     ) -> None:
-        self.cache_seq_id = cache_seq_id
-        self.prompt = prompt
-        self.max_length = max_length
-
-        if tokens.ndim != 1:
-            msg = f"tokens must be one dimensional array: got shape '{tokens.shape}'"
-            raise ValueError(msg)
-
-        self.size = int(np.ceil(len(tokens) / CHUNK_SIZE) * CHUNK_SIZE)
-
-        # Create a fresh array since the input tokens may be a view or share memory with
-        # another array in the caller, which prevents us from resizing it directly.
-        # The extra space is initialized to zero and will be filled with generated tokens.
-        assert len(tokens) <= self.size
-        self.tokens = np.zeros(self.size, dtype=tokens.dtype)
-        self.tokens[: len(tokens)] = tokens
-
-        self._active_idx = len(tokens)
-        self._start_idx = 0
-        self._end_idx = self._active_idx
-
+        super().__init__(
+            cache_seq_id=cache_seq_id,
+            prompt=prompt,
+            max_length=max_length,
+            tokens=tokens,
+            log_probabilities=log_probabilities,
+            log_probabilities_echo=log_probabilities_echo,
+            json_schema=json_schema,
+        )
         self.pixel_values = pixel_values
         self.extra_model_args = extra_model_args
-
-        self.log_probabilities = log_probabilities
-        self.log_probabilities_echo = log_probabilities_echo
-
-        self.matcher = None
-        self.json_schema = json_schema
-        self.is_initial_prompt = True
-
-    @property
-    def active_idx(self) -> int:
-        return self._active_idx
-
-    @property
-    def start_idx(self) -> int:
-        return self._start_idx
-
-    @property
-    def end_idx(self) -> int:
-        return self._end_idx
-
-    def set_matcher(self, matcher: "xgr.GrammarMatcher") -> None:  # type: ignore
-        self.matcher = matcher
-
-    @property
-    def next_tokens(self) -> np.ndarray:
-        return self.tokens[self._start_idx : self._active_idx]
-
-    @property
-    def current_length(self) -> int:
-        """The current length of the sequence, including completed and active tokens."""
-        return self._end_idx
-
-    @property
-    def active_length(self) -> int:
-        """Current sequence length: num tokens input this iteration.
-
-        This will be the prompt size for context encoding, and simply 1 (or more) for
-        token generation.
-        """
-        return self._active_idx - self._start_idx
 
     def update(
         self,
         new_token: int,
     ) -> None:
-        """Updates the next_tokens attribute, and extends current_length if needed, based on the provided num_steps."""
-        # This is required for chunked prefill.
-        # The scheduler will update the active_idx via bump_token_indices and pass through the model
-        # To accomodate for this, if we identify that the active_idx is not at the end of the completed
-        # token array, we only update the start_idx and active_idx, leaving the token array alone.
-        if self._active_idx < self._end_idx:
-            self._start_idx = self._active_idx
-            self._active_idx = self._end_idx
-            self.is_initial_prompt = False
-            return
-
-        if self._active_idx >= self.size:
-            self.size += CHUNK_SIZE
-            if self.tokens.flags.owndata:
-                self.tokens.resize(self.size)
-            else:
-                self.tokens = np.resize(self.tokens, self.size)
-
-        self.tokens[self._active_idx] = new_token
-        self._start_idx = self._active_idx
-        self._active_idx += 1
-        self._end_idx += 1
+        """Updates the next_tokens and extends existing tokens to include all generated tokens."""
+        super().update(new_token=new_token)
 
         # Update context not to re-encode the same image in next steps. There are no image tokens
         # expected after context encoding.
         self.pixel_values = []
-
-        # Accept the token, and move the FSM for constrained decoding forward.
-        if self.matcher:
-            assert self.matcher.accept_token(new_token)
-
-        self.is_initial_prompt = False
-
-    def bump_token_indices(
-        self,
-        start_idx: Optional[int] = None,
-        active_idx: Optional[int] = None,
-        end_idx: Optional[int] = None,
-    ) -> None:
-        """Update the start_idx, active_idx and end_idx without manipulating the token array."""
-        new_start_idx = (start_idx if start_idx else 0) + self._start_idx
-        new_active_idx = (active_idx if active_idx else 0) + self._active_idx
-        new_end_idx = (end_idx if end_idx else 0) + self._end_idx
-
-        if new_start_idx >= new_active_idx:
-            msg = f"""
-            active_idx must always be greater than start_idx, unable to bump token indices
-            as new start_idx ({new_start_idx}) is greater than new active_idx ({new_active_idx}).
-            """
-            raise ValueError(msg)
-
-        if new_active_idx > new_end_idx:
-            msg = f"""
-            end_idx must always be greater than active_idx, unable to bump token indices
-            as new active_idx ({new_active_idx}) is greater than new end_idx ({new_end_idx}).
-            """
-            raise ValueError(msg)
-
-        self._start_idx = new_start_idx
-        self._active_idx = new_active_idx
-        self._end_idx = new_end_idx
-
-    def reset(self) -> None:
-        """Resets the context's state by combining all tokens into a new prompt."""
-        self._start_idx = 0
-        self.is_initial_prompt = True
