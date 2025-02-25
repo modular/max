@@ -35,7 +35,7 @@ def _compute_safetensor_rope_scaling(
 ) -> np.ndarray | None:
     # Unlike the `transformers` library's Llama model, MAX Llama expects the
     # rope scaling value to be in the state dict (this is similar to GGUF).
-    if rope_scaling := huggingface_config.rope_scaling:
+    if rope_scaling := getattr(huggingface_config, "rope_scaling", None):
         if rope_scaling.get("rope_type", "").lower() == "llama3":
             return _compute_rope_scaling(
                 rope_scaling, huggingface_config
@@ -197,7 +197,7 @@ class LlamaSafetensorWeights(SafetensorWeights):
         assert isinstance(weights, SafetensorWeights)
         has_rope_scaling = False
         rope_freqs_tensor = None
-        if rope_scaling := huggingface_config.rope_scaling:
+        if rope_scaling := getattr(huggingface_config, "rope_scaling", None):
             if rope_scaling.get("rope_type", "").lower() == "llama3":
                 has_rope_scaling = True
                 rope_freqs_tensor = _compute_rope_scaling(
