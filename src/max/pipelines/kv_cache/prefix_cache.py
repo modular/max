@@ -157,8 +157,7 @@ class PrefixCache:
 
     def get_cached_blocks(self, seq_id: int, prompt: np.ndarray) -> list[int]:
         """Returns the blocks from the prefix cache that can be reused for the given prompt."""
-        assert seq_id in self.active_requests
-        node = self.active_requests[seq_id]
+        node = self.active_requests.get(seq_id, self.radix_trie.root)
         # Attempt to match all but the last token in the prompt. This is
         # because the model expects a prompt of length at least 1.
         _, cached_blocks = self.radix_trie.match_prefix(prompt[:-1], node=node)
