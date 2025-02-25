@@ -475,7 +475,8 @@ class TextGenerationPipeline(TokenGenerator[T]):
                 try:
                     compiled_grammar = (
                         self._grammar_compiler.compile_json_schema(
-                            context.json_schema
+                            context.json_schema,
+                            any_whitespace=False,
                         )
                     )
                     matcher = xgr.GrammarMatcher(compiled_grammar)
