@@ -34,19 +34,23 @@ class HuggingFaceFile:
 
     repo_id: str
     filename: str
+    revision: str | None = None
 
     def download(self, force_download: bool = False) -> Path:
         """Download the file and return the file path where the data is saved locally."""
         return Path(
             hf_hub_download(
-                self.repo_id, self.filename, force_download=force_download
+                self.repo_id,
+                self.filename,
+                revision=self.revision,
+                force_download=force_download,
             )
         )
 
     def size(self) -> int | None:
-        url = hf_hub_url(self.repo_id, self.filename)
+        url = hf_hub_url(self.repo_id, self.filename, revision=self.revision)
         metadata = get_hf_file_metadata(url)
         return metadata.size
 
     def exists(self) -> bool:
-        return file_exists(self.repo_id, self.filename)
+        return file_exists(self.repo_id, self.filename, revision=self.revision)

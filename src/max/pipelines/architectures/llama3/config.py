@@ -12,71 +12,43 @@
 # ===----------------------------------------------------------------------=== #
 """All configurable parameters for Llama3."""
 
+from __future__ import annotations
+
 from max.pipelines import HuggingFaceFile, SupportedEncoding
 
 
 def get_llama_huggingface_file(
-    version: str, encoding: SupportedEncoding
+    version: str, encoding: SupportedEncoding, revision: str | None = None
 ) -> HuggingFaceFile:
     if version == "3":
-        if encoding == SupportedEncoding.bfloat16:
-            return HuggingFaceFile(
-                "modularai/llama-3",
-                "llama-3-8b-instruct-bf16.gguf",
-            )
-        elif encoding == SupportedEncoding.float32:
-            return HuggingFaceFile(
-                "modularai/llama-3",
-                "llama-3-8b-f32.gguf",
-            )
-        elif encoding == SupportedEncoding.q4_k:
-            return HuggingFaceFile(
-                "modularai/llama-3",
-                "llama-3-8b-instruct-q4_k_m.gguf",
-            )
-        elif encoding == SupportedEncoding.q4_0:
-            return HuggingFaceFile(
-                "modularai/llama-3",
-                "llama-3-8b-instruct-q4_0.gguf",
-            )
-        elif encoding == SupportedEncoding.q6_k:
-            return HuggingFaceFile(
-                "modularai/llama-3",
-                "llama-3-8b-instruct-q6_k.gguf",
-            )
-        else:
+        filenames = {
+            SupportedEncoding.bfloat16: "llama-3-8b-instruct-bf16.gguf",
+            SupportedEncoding.float32: "llama-3-8b-f32.gguf",
+            SupportedEncoding.q4_k: "llama-3-8b-instruct-q4_k_m.gguf",
+            SupportedEncoding.q4_0: "llama-3-8b-instruct-q4_0.gguf",
+            SupportedEncoding.q6_k: "llama-3-8b-instruct-q6_k.gguf",
+        }
+        filename = filenames.get(encoding)
+        if filename is None:
             raise ValueError(
                 f"encoding does not have default hf file: {encoding}"
             )
+        return HuggingFaceFile("modularai/llama-3", filename, revision)
 
     elif version == "3.1":
-        if encoding == SupportedEncoding.bfloat16:
-            return HuggingFaceFile(
-                "modularai/llama-3.1",
-                "llama-3.1-8b-instruct-bf16.gguf",
+        filenames = {
+            SupportedEncoding.bfloat16: "llama-3.1-8b-instruct-bf16.gguf",
+            SupportedEncoding.float32: "llama-3.1-8b-instruct-f32.gguf",
+            SupportedEncoding.q4_k: "llama-3.1-8b-instruct-q4_k_m.gguf",
+            SupportedEncoding.q4_0: "llama-3.1-8b-instruct-q4_0.gguf",
+            SupportedEncoding.q6_k: "llama-3.1-8b-instruct-q6_k.gguf",
+        }
+        filename = filenames.get(encoding)
+        if filename is None:
+            raise ValueError(
+                f"encoding does not have default hf file: {encoding}"
             )
-        elif encoding == SupportedEncoding.float32:
-            return HuggingFaceFile(
-                "modularai/llama-3.1",
-                "llama-3.1-8b-instruct-f32.gguf",
-            )
-        elif encoding == SupportedEncoding.q4_k:
-            return HuggingFaceFile(
-                "modularai/llama-3.1",
-                "llama-3.1-8b-instruct-q4_k_m.gguf",
-            )
-        elif encoding == SupportedEncoding.q4_0:
-            return HuggingFaceFile(
-                "modularai/llama-3.1",
-                "llama-3.1-8b-instruct-q4_0.gguf",
-            )
-        elif encoding == SupportedEncoding.q6_k:
-            return HuggingFaceFile(
-                "modularai/llama-3.1",
-                "llama-3.1-8b-instruct-q6_k.gguf",
-            )
-        else:
-            raise ValueError(f"encoding does not hf file: {encoding}")
+        return HuggingFaceFile("modularai/llama-3.1", filename, revision)
 
     else:
         raise ValueError(f"version {version} not supported for llama")
