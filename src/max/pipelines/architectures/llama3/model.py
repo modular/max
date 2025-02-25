@@ -22,7 +22,7 @@ import numpy as np
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
-from max.graph import DeviceRef, Graph, TensorType, TensorValue, ops
+from max.graph import DeviceRef, Graph, TensorType, TensorValue
 from max.graph.weights import Weights
 from max.pipelines import (
     LogProbabilities,
@@ -44,6 +44,7 @@ from max.pipelines.kv_cache import (
     estimate_kv_cache_size,
     load_kv_manager,
 )
+from max.pipelines.nn import Signals
 from max.pipelines.nn.compute_log_probabilities import compute_log_probabilities
 
 from .gguf import distributed_transformer_opaque
@@ -129,7 +130,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
         self.signal_buffers = (
             [
                 Tensor.zeros(
-                    shape=(ops.allreduce.Signals.NUM_BYTES,),
+                    shape=(Signals.NUM_BYTES,),
                     dtype=DType.uint8,
                     device=dev,
                 )
@@ -422,7 +423,7 @@ class LlamaModelBase(PipelineModel[TextContext]):
             ]
 
             # Create metadata for signal buffers.
-            signals = ops.allreduce.Signals(
+            signals = Signals(
                 devices=(
                     DeviceRef(d.label, d.id)
                     for d in self.pipeline_config.devices
