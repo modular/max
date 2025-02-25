@@ -25,11 +25,9 @@ from typing import Any, Dict, List, Optional, cast
 import numpy as np
 from max.driver import Device, Tensor
 from max.dtype import DType
-from max.engine import InferenceSession, Model
+from max.engine import InferenceSession
 from max.graph import (
-    BufferType,
     DeviceRef,
-    Graph,
     TensorType,
     TensorValue,
     _OpaqueType,
@@ -45,17 +43,12 @@ from .manager import (
     KVCacheManager,
     RaggedKVCacheInputs,
 )
-from .radix_trie import RadixTrie, TrieNode
+from .paged_cache_metadata import PagedCacheMetadata, ceildiv
+from .prefix_cache import PrefixCache
 
 logger = logging.getLogger("max.pipelines")
 
 PERCENTAGE_BLOCKS_TO_EVICT = 0.05
-
-
-def ceildiv(n: int, d: int) -> int:
-    """Compute ceil(n/d) using strictly integer arithmetic."""
-    q, r = divmod(n, d)
-    return q + bool(r)
 
 
 @dataclass
@@ -153,195 +146,6 @@ class FetchPagedKVCacheCollection:
         )
 
 
-def construct_cow_strided_memcpy_graph(
-    block_shape: list[int | str], dtype: DType, devices: list[Device]
-) -> Graph:
-    """
-    Returns a graph for performing COW operations on the KV cache.
-    """
-
-    assert len(block_shape) == 6
-    device_refs = [DeviceRef(device.label, device.id) for device in devices]
-    blocks_ty = [
-        BufferType(dtype, shape=block_shape, device=device_ref)
-        for device_ref in device_refs
-    ]
-    block_src_idx_ty = TensorType(DType.uint32, shape=[])
-    block_dst_idx_ty = TensorType(DType.uint32, shape=[])
-    num_tokens_ty = TensorType(DType.uint32, shape=[])
-
-    with Graph(
-        "mo.kv_collection_cow_strided_memcpy.paged",
-        input_types=[
-            block_dst_idx_ty,
-            block_src_idx_ty,
-            num_tokens_ty,
-            *blocks_ty,
-        ],
-        output_types=[],
-    ) as graph:
-        block_dst_idx, block_src_idx, num_tokens, *all_blocks = graph.inputs
-        for blocks in all_blocks:
-            ops.inplace_custom(
-                "mo.kv_collection_cow_strided_memcpy.paged",
-                values=[blocks, block_dst_idx, block_src_idx, num_tokens],
-                out_types=[],
-            )
-        graph.output()
-
-    return graph
-
-
-class _PagedCacheMetadata:
-    """Metadata for a single sequence in the paged KV cache.
-
-    Token array layout:
-
-    - Committed tokens have been inserted into the prefix cache. This must be a
-      multiple of the page size.
-    - Cached tokens are tokens that have a backing KV projection in the cache.
-      Uncached tokens will be written to the cache when the model is run.
-    - Committable tokens are tokens that are not yet committed but have a known
-      value (i.e. not inflight). We can query the prefix cache for such tokens.
-    - Inflight tokens are slots allocated for tokens that have not been generated
-      yet. Such tokens have a filler value of 0. After `fetch`, there should be
-      `num_steps - 1` inflight tokens. They will be replaced with actual tokens
-      in `step`.
-
-                  committed_idx V                              seq_len V
-       +----------------------------------------------------------------+
-       | committed              | uncommitted                           |
-       |----------------------------------------------------------------|
-       |                        | committable            |              |
-       |----------------------------------------------------------------|
-       | cached                      | uncached                         |
-       |----------------------------------------------------------------|
-       |                             | prompt            | inflight     |
-       +----------------------------------------------------------------+
-                          cached_idx ^      inflight_idx ^
-    """
-
-    def __init__(self, page_size: int, max_seq_len: int) -> None:
-        self.page_size = page_size
-        self.committed_idx: int = 0
-        self.cached_idx: int = 0
-        self.inflight_idx: int = 0
-        self.seq_len: int = 0
-        self.blocks: list[int] = []
-        self.tokens: np.ndarray = np.full((max_seq_len,), 0, dtype=np.int64)
-        # This is a pointer into the radix trie indicating the prefix of the sequence
-        # that has been committed into the radix trie.
-        self.node: Optional[TrieNode] = None
-
-    @property
-    def committed_blocks(self) -> list[int]:
-        return self.blocks[: self.committed_idx // self.page_size]
-
-    @property
-    def uncommitted_blocks(self) -> list[int]:
-        return self.blocks[self.committed_idx // self.page_size : self.seq_len]
-
-    @property
-    def committed_tokens(self) -> np.ndarray:
-        return self.tokens[: self.committed_idx]
-
-    @property
-    def uncached_tokens(self) -> np.ndarray:
-        return self.tokens[self.cached_idx : self.seq_len]
-
-    @property
-    def prompt_tokens(self) -> np.ndarray:
-        return self.tokens[self.cached_idx : self.inflight_idx]
-
-    @property
-    def inflight_tokens(self) -> np.ndarray:
-        return self.tokens[self.inflight_idx : self.seq_len]
-
-    @property
-    def committable_tokens_aligned(self) -> np.ndarray:
-        # Return all tokens that are committable and part of a block that only
-        # contains committable tokens.
-        inflight_idx = self.inflight_idx
-        partial_tokens = inflight_idx % self.page_size
-        if partial_tokens > 0:
-            inflight_idx -= partial_tokens
-        return self.tokens[self.committed_idx : inflight_idx]
-
-    @property
-    def committable_blocks_aligned(self) -> list[int]:
-        # Returns all blocks that only contain committable tokens.
-        return self.blocks[
-            self.committed_idx // self.page_size : self.inflight_idx
-            // self.page_size
-        ]
-
-    @property
-    def committable_tokens(self) -> np.ndarray:
-        # Returns all tokens that are committable.
-        return self.tokens[self.committed_idx : self.inflight_idx]
-
-    @property
-    def committable_blocks(self) -> list[int]:
-        # Returns any block that contains at least one committable token.
-        return self.blocks[
-            self.committed_idx // self.page_size : ceildiv(
-                self.inflight_idx, self.page_size
-            )
-        ]
-
-    def _validate_indices(self):
-        assert (
-            0
-            <= self.committed_idx
-            <= self.cached_idx
-            <= self.inflight_idx
-            <= self.seq_len
-        ), "The indices must be in the correct order"
-        assert self.seq_len <= len(self.tokens), (
-            "Sequence has exceeded the max sequence length"
-        )
-        assert self.committed_idx % self.page_size == 0, (
-            "The committed_idx must be a multiple of the page size since we "
-            "can't commit a partial page into the prefix cache"
-        )
-
-    def fetch(self, prompt: np.ndarray, num_steps: int) -> None:
-        """Add prompt to token array and reserve space for inflight tokens."""
-        self._validate_indices()
-        assert len(self.prompt_tokens) == 0, (
-            "At the start of fetch, there should be no prompt tokens"
-        )
-        assert len(self.inflight_tokens) == 0, (
-            "At the start of fetch, there should be no inflight tokens"
-        )
-        assert len(prompt) > 0, (
-            "The prompt provided to fetch should be non-empty"
-        )
-        num_inflight_tokens = num_steps - 1
-        self.inflight_idx += len(prompt)
-        self.seq_len += len(prompt) + num_inflight_tokens
-        self.tokens[self.cached_idx : self.inflight_idx] = prompt
-        self._validate_indices()
-
-    def step(self, new_tokens: np.ndarray) -> None:
-        """Write new tokens into inflight token slots. Also update the cached_idx."""
-        self._validate_indices()
-        assert len(self.prompt_tokens) > 0, (
-            "We could not have executed the model without at least one prompt token"
-        )
-        num_inflight_tokens = len(new_tokens) - 1
-        assert len(self.inflight_tokens) == num_inflight_tokens, (
-            "The existing slots for inflight tokens should correspond to all but the last newly generated token"
-        )
-        self.tokens[self.inflight_idx : self.seq_len] = new_tokens[:-1]
-        self.cached_idx = self.seq_len
-        self.inflight_idx = self.seq_len
-        assert len(self.uncached_tokens) == 0, (
-            "After step, all tokens should have a backing KV projection in the cache"
-        )
-        self._validate_indices()
-
-
 class PagedKVCacheManager(KVCacheManager):
     def __init__(
         self,
@@ -436,25 +240,18 @@ class PagedKVCacheManager(KVCacheManager):
                 )
             )
 
-        self.active_requests: Dict[int, _PagedCacheMetadata] = {}
+        self.active_requests: Dict[int, PagedCacheMetadata] = {}
 
-        # Initialize the radix trie if prefix caching is enabled.
-        self.radix_trie: Optional[RadixTrie] = None
-        self.cow_strided_memcpy_graph: Optional[Model] = None
-        self.cow_count = 0
+        self.prefix_cache: Optional[PrefixCache] = None
         if params.enable_prefix_caching:
-            self.radix_trie = RadixTrie(page_size=self.page_size)
-            # Load single op graph for performing memory transfers needed for COW
-            if self.page_size > 1:
-                self.cow_strided_memcpy_graph = session.load(
-                    construct_cow_strided_memcpy_graph(
-                        self.block_shape(is_parameterized=True),
-                        params.dtype,
-                        devices,
-                    ),
-                )
-        self.ce_all_tokens = 0
-        self.ce_cache_hit_tokens = 0
+            self.prefix_cache = PrefixCache(
+                session=session,
+                page_size=self.page_size,
+                block_shape=self.block_shape(is_parameterized=True),
+                dtype=self.params.dtype,
+                devices=devices,
+                tensors=self.blocks,
+            )
 
         # Whether to enable runtime correctness checks. These correctness checks
         # are expensive and should only be used in tests.
@@ -464,49 +261,28 @@ class PagedKVCacheManager(KVCacheManager):
         if not self.enable_runtime_checks:
             return
         assert self._count_all_pages() == self.total_num_pages
-        if self.radix_trie is None:
+        if self.prefix_cache is None:
             return
-        for data in self.active_requests.values():
-            # Check that the committed tokens and blocks match what was actually
-            # committed into the radix trie.
-            if data.node is not None:
-                # Climb up the trie from the given node, accumulating all the
-                # prefix tokens and blocks.
-                tokens, blocks = data.node.get_prefix_tokens_and_blocks()
-            else:
-                tokens, blocks = np.array([], dtype=np.int64), []
-            assert (tokens == data.committed_tokens).all()
-            assert blocks == data.committed_blocks
-
-    def cache_hit_rate(self) -> float:
-        """Returns the prefix cache hit rate.
-
-        This is the number of CE prompt tokens that were read from the prefix
-        cache divided by the total number of CE prompt tokens.
-        """
-        if self.ce_all_tokens == 0:
-            return 0.0
-        return self.ce_cache_hit_tokens / self.ce_all_tokens
-
-    def evict_blocks(self, percentage_to_evict: float = 1.0):
-        if self.radix_trie is None:
-            return
-
-        # Evict a percentage of all blocks according to a LRU policy on the
-        # trie leaves.
-        evicted_blocks = self.radix_trie.evict_blocks(
-            desired_num_evicted=int(
-                max(1, self.total_num_pages * percentage_to_evict)
+        for seq_id, data in self.active_requests.items():
+            self.prefix_cache.validate_req_state_valid(
+                seq_id,
+                data.committed_tokens,
+                data.committed_blocks,
             )
-        )
 
-        for block in evicted_blocks:
-            assert block not in self.available_blocks
-            self.available_blocks.add(block)
+    @property
+    def cache_hit_rate(self) -> float:
+        if self.prefix_cache is None:
+            return 0.0
+        return self.prefix_cache.cache_hit_rate
 
     def alloc_block(self) -> int:
-        if len(self.available_blocks) == 0:
-            self.evict_blocks(percentage_to_evict=PERCENTAGE_BLOCKS_TO_EVICT)
+        if len(self.available_blocks) == 0 and self.prefix_cache is not None:
+            blocks_to_evict = self.total_num_pages * PERCENTAGE_BLOCKS_TO_EVICT
+            blocks_to_evict = int(max(1, blocks_to_evict))
+            evicted = self.prefix_cache.evict_blocks(blocks_to_evict)
+            for block in evicted:
+                self.available_blocks.add(block)
 
         if len(self.available_blocks) == 0:
             raise RuntimeError(
@@ -523,13 +299,13 @@ class PagedKVCacheManager(KVCacheManager):
         If it is committed, it may be in the radix tree and in use by other sequences.
         This means it can't be safely released without further checks.
         """
-        if self.radix_trie is None:
+        if self.prefix_cache is None:
             self.available_blocks.add(block)
             return
 
         # We can only add the block to the available set if it is not committed
         # to the prefix cache.
-        if block not in self.radix_trie.get_all_blocks():
+        if block not in self.prefix_cache:
             self.available_blocks.add(block)
 
     @classmethod
@@ -623,12 +399,9 @@ class PagedKVCacheManager(KVCacheManager):
         ]
 
     def get_num_free_blocks(self) -> int:
-        if self.radix_trie is None:
+        if self.prefix_cache is None:
             return len(self.available_blocks)
-        else:
-            return len(self.available_blocks) + len(
-                self.radix_trie.get_evictable_blocks()
-            )
+        return len(self.available_blocks) + len(self.prefix_cache.stale_blocks)
 
     def get_num_used_blocks(self) -> int:
         return self.total_num_pages - self.get_num_free_blocks()
@@ -647,16 +420,14 @@ class PagedKVCacheManager(KVCacheManager):
 
         for seq_id, prompt in seq_ids_and_prompts.items():
             data = self.active_requests.get(
-                seq_id, _PagedCacheMetadata(self.page_size, self.max_seq_len)
+                seq_id, PagedCacheMetadata(self.page_size, self.max_seq_len)
             )
 
             # Extend the kv cache for given request with any cached prefixes.
             cached_blocks: list[int] = []
-            if self.radix_trie is not None:
-                # Attempt to match all but the last token in the prompt. This is
-                # because the model expects a prompt of length at least 1.
-                _, cached_blocks = self.radix_trie.match_prefix(
-                    prompt[:-1], node=data.node
+            if self.prefix_cache is not None:
+                cached_blocks = self.prefix_cache.get_cached_blocks(
+                    seq_id, prompt
                 )
 
             # Compute the total sequence length and the number of pages required to store it.
@@ -674,11 +445,11 @@ class PagedKVCacheManager(KVCacheManager):
             all_cache_hit_blocks.update(cached_blocks)
 
         num_evictable_blocks = 0
-        if self.radix_trie is not None:
+        if self.prefix_cache is not None:
             # the blocks in the prefix cache that will be used by sequences in
             # this batch are no longer eligible for eviction / allocation.
             num_evictable_blocks = len(
-                self.radix_trie.get_evictable_blocks() - all_cache_hit_blocks
+                self.prefix_cache.stale_blocks - all_cache_hit_blocks
             )
 
         num_free_blocks = len(self.available_blocks) + num_evictable_blocks
@@ -689,125 +460,9 @@ class PagedKVCacheManager(KVCacheManager):
         """Returns the number of tokens in the CE prompt that are found in the
         prefix cache.
         """
-        if self.radix_trie is None:
+        if self.prefix_cache is None:
             return 0
-        _, cached_blocks = self.radix_trie.match_prefix(prompt[:-1])
-        return len(cached_blocks) * self.page_size
-
-    def _fetch_prefix_caching(
-        self,
-        seq_id: int,
-        data: _PagedCacheMetadata,
-    ) -> list[int]:
-        """Extend the kv cache for given request with any cached prefixes.
-
-        This will increment the committed_idx and cached_idx if there is a cache
-        hit. The prompt will be trimmed in the event that cached_idx is bumped.
-        """
-        assert self.radix_trie is not None
-
-        # If there is only one committable token, that means that the prompt
-        # is one token. We cannot reduce the prompt length any further since
-        # the model expects a prompt of length at least 1.
-        committable_tokens = data.committable_tokens[:-1]
-        if len(committable_tokens) == 0:
-            return []
-
-        # Query trie for all but last token.
-        data.node, prefix_blocks = self.radix_trie.match_prefix(
-            committable_tokens, node=data.node
-        )
-
-        # Mark the prefix blocks we retrieved from the radix trie cache as
-        # in use by this sequence so they don't get evicted prematurely.
-        assert data.node is not None
-        self.radix_trie.mark_in_use_by(data.node, seq_id)
-
-        # Update the cache hit rate metrics.
-        num_cache_hit_tokens = len(prefix_blocks) * self.page_size
-        self.ce_cache_hit_tokens += num_cache_hit_tokens
-        self.ce_all_tokens += len(committable_tokens)
-
-        # If there is a block with partially cached tokens, we should release it
-        # if the cache hit blocks already contain these tokens and more
-        if data.committed_idx < data.cached_idx and num_cache_hit_tokens > 0:
-            assert data.committed_idx + num_cache_hit_tokens > data.cached_idx
-            partial_blocks = data.committable_blocks
-            assert len(partial_blocks) == 1
-            self.release_block(partial_blocks[0])
-            data.blocks.pop()
-            partial_tokens = data.cached_idx - data.committed_idx
-            assert 0 < partial_tokens < self.page_size
-            data.cached_idx -= partial_tokens
-            assert data.committed_idx == data.cached_idx
-
-        data.blocks.extend(prefix_blocks)
-        # Bump the committed_idx since we got cache hits
-        data.committed_idx += num_cache_hit_tokens
-        data.cached_idx += num_cache_hit_tokens
-        return prefix_blocks
-
-    def _fetch_prefix_caching_cow(
-        self,
-        data: _PagedCacheMetadata,
-    ) -> None:
-        """Extend the kv cache for given request with any cached prefixes by
-        copying a portion of the tokens in a committed block to a fresh block.
-
-        This will keep the committed_idx the same, but increment the cached_idx
-        by between [1, page_size) tokens if we do perform a cow operation. The
-        prompt will be trimmed in the event that cached_idx is bumped.
-        """
-        # If page_size is 1, there is no need to perform COW
-        if self.page_size == 1:
-            return
-        assert self.cow_strided_memcpy_graph is not None
-
-        # Match page_size tokens in the radix trie
-        committable_tokens = data.committable_tokens[:-1]
-        if len(committable_tokens) == 0:
-            return
-        committable_tokens_cropped = list(committable_tokens[: self.page_size])
-        assert data.node is not None
-        res = data.node.find_block_with_largest_common_prefix(
-            committable_tokens_cropped
-        )
-        if res is None:
-            return
-        partial_match_block, num_cache_hit_tokens = res
-        assert 0 < num_cache_hit_tokens < self.page_size
-
-        # No point in performing COW if we have more cached but uncommitted tokens
-        # in the existing partial block than the matched prefix length.
-        partial_tokens = data.cached_idx - data.committed_idx
-        if num_cache_hit_tokens <= partial_tokens:
-            return
-
-        # If we have a partially cached block, we need to release it before
-        # appending additional blocks.
-        if partial_tokens > 0:
-            assert data.committed_idx + num_cache_hit_tokens > data.cached_idx
-            partial_blocks = data.committable_blocks
-            assert len(partial_blocks) == 1
-            self.release_block(partial_blocks[0])
-            data.blocks.pop()
-            assert partial_tokens < self.page_size
-            data.cached_idx -= partial_tokens
-            assert data.committed_idx == data.cached_idx
-
-        # Copy prefix_len tokens from partial_match_block to new_block.
-        new_block = self.alloc_block()
-        self.cow_count += 1
-        self.cow_strided_memcpy_graph.execute(
-            new_block,
-            partial_match_block,
-            num_cache_hit_tokens,
-            *self.blocks,
-        )
-        data.blocks.append(new_block)
-        data.cached_idx += num_cache_hit_tokens
-        assert len(data.prompt_tokens) > 0
-        assert data.cached_idx < data.inflight_idx
+        return self.prefix_cache.get_num_cached_tokens(prompt)
 
     def _fetch(
         self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
@@ -865,13 +520,16 @@ class PagedKVCacheManager(KVCacheManager):
             if seq_id not in self.active_requests:
                 raise ValueError(f"seq_id: {seq_id} not in active requests.")
 
-            if self.radix_trie is not None:
+            if self.prefix_cache is not None:
                 data = self.active_requests[seq_id]
                 # bump the committed_idx, and possibly the cached_idx
-                prefix_blocks = self._fetch_prefix_caching(seq_id, data)
+                prefix_blocks = self.prefix_cache.fetch(
+                    seq_id,
+                    data,
+                    free_block_fn=self.release_block,
+                    alloc_block_fn=self.alloc_block,
+                )
                 all_cache_hit_blocks.update(prefix_blocks)
-                # bump the cached_idx
-                self._fetch_prefix_caching_cow(data)
                 # Possibly trim the input prompt.
                 seq_ids_and_prompts[seq_id] = data.prompt_tokens
 
@@ -906,11 +564,11 @@ class PagedKVCacheManager(KVCacheManager):
 
         # Check if we have enough free blocks to service all requests.
         num_evictable_blocks = 0
-        if self.radix_trie is not None:
+        if self.prefix_cache is not None:
             # the blocks in the prefix cache that will be used by sequences in
             # this batch are no longer eligible for eviction / allocation.
             num_evictable_blocks = len(
-                self.radix_trie.get_evictable_blocks() - all_cache_hit_blocks
+                self.prefix_cache.stale_blocks - all_cache_hit_blocks
             )
         num_free_blocks = len(self.available_blocks) + num_evictable_blocks
         if total_blocks_to_allocate > num_free_blocks:
@@ -997,24 +655,30 @@ class PagedKVCacheManager(KVCacheManager):
         """
         seq_ids = super().claim(n)
         for seq_id in seq_ids:
-            self.active_requests[seq_id] = _PagedCacheMetadata(
+            self.active_requests[seq_id] = PagedCacheMetadata(
                 self.page_size, self.max_seq_len
             )
+        if self.prefix_cache is not None:
+            for seq_id in seq_ids:
+                self.prefix_cache.external_claim(seq_id)
         return seq_ids
 
     def external_claim(self, seq_ids: list[int]) -> None:
         """Variant of the above where sequence ids are reserved externally."""
         super().external_claim(seq_ids)
         for seq_id in seq_ids:
-            self.active_requests[seq_id] = _PagedCacheMetadata(
+            self.active_requests[seq_id] = PagedCacheMetadata(
                 self.page_size, self.max_seq_len
             )
+        if self.prefix_cache is not None:
+            for seq_id in seq_ids:
+                self.prefix_cache.external_claim(seq_id)
 
     def _count_all_pages(self) -> int:
         available_blocks = self.available_blocks
         prefix_cache_blocks = set()
-        if self.radix_trie is not None:
-            prefix_cache_blocks = self.radix_trie.get_all_blocks()
+        if self.prefix_cache is not None:
+            prefix_cache_blocks = self.prefix_cache.blocks
         uncommitted_blocks = set()
         for seq_id in self.active_requests:
             uncommitted_blocks.update(
@@ -1030,66 +694,12 @@ class PagedKVCacheManager(KVCacheManager):
         super().release(seq_id)
         data = self.active_requests[seq_id]
 
-        if self.radix_trie is not None:
-            # mark the prefix blocks as not in use by this sequence so they can
-            # potentially be evicted when we need more memory
-            assert data.node is not None
-            self.radix_trie.mark_not_in_use_by(data.node, seq_id)
+        if self.prefix_cache is not None:
+            self.prefix_cache.release(seq_id)
 
         for block in data.blocks:
             self.release_block(block)
         del self.active_requests[seq_id]
-
-    def _step_prefix_caching(
-        self, seq_id: int, data: _PagedCacheMetadata
-    ) -> None:
-        """Now that we have written to the inflight blocks, we will try to commit
-        them to the radix trie.
-
-        This increments the committed_idx. We guarantee that the number of committed
-        tokens will be a multiple of the page size. There may be some uncommitted
-        tokens left over due to there being a partial page at the end. Thus the
-        number of uncommitted tokens will always be less than the page size.
-        """
-        assert self.radix_trie is not None
-
-        committable_tokens = data.committable_tokens_aligned
-        data.node, existing_blocks = self.radix_trie.match_prefix(
-            committable_tokens, node=data.node
-        )
-
-        # If we computed a kv entry for a token that was already cached,
-        # we will just release that block we just computed.
-        for b0, b1 in zip(existing_blocks, data.committable_blocks_aligned):
-            if b0 != b1:
-                self.release_block(b1)
-
-        # Replace the inflight blocks with the existing prefix blocks.
-        committed_block_idx = data.committed_idx // self.page_size
-        data.blocks[
-            committed_block_idx : committed_block_idx + len(existing_blocks)
-        ] = existing_blocks
-        data.committed_idx += len(existing_blocks) * self.page_size
-
-        committable_tokens = data.committable_tokens_aligned
-        committable_blocks = data.committable_blocks_aligned
-        assert len(committable_tokens) % self.page_size == 0
-        assert (
-            len(committable_tokens) == len(committable_blocks) * self.page_size
-        )
-
-        # If there are any tokens to commit, insert them into the prefix cache.
-        data.node = self.radix_trie.insert(
-            committable_tokens,
-            committable_blocks,
-            node=data.node,
-        )
-        data.committed_idx += len(committable_tokens)
-
-        # Mark the recently committed blocks as in use by this sequence
-        # so they don't get evicted prematurely.
-        assert data.node is not None
-        self.radix_trie.mark_in_use_by(data.node, seq_id)
 
     def _step(
         self,
@@ -1111,9 +721,13 @@ class PagedKVCacheManager(KVCacheManager):
             data = self.active_requests[seq_id]
             data.step(new_tokens)
 
-            if self.radix_trie is not None:
+            if self.prefix_cache is not None:
                 # Bump the committed_idx
-                self._step_prefix_caching(seq_id, data)
+                self.prefix_cache.step(
+                    seq_id,
+                    data,
+                    free_block_fn=self.release_block,
+                )
 
             expected_num_pages = ceildiv(data.seq_len, self.page_size)
             actual_num_pages = len(data.blocks)
