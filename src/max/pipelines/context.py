@@ -343,7 +343,7 @@ class TextAndVisionContext:
         # The scheduler will update the active_idx via bump_token_indices and pass through the model
         # To accomodate for this, if we identify that the active_idx is not at the end of the completed
         # token array, we only update the start_idx and active_idx, leaving the token array alone.
-        if self._active_idx <= self._end_idx:
+        if self._active_idx < self._end_idx:
             self._start_idx = self._active_idx
             self._active_idx = self._end_idx
             self.is_initial_prompt = False
