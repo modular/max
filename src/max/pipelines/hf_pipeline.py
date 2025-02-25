@@ -179,19 +179,14 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
         generated_tokens = generated_tokens.cpu()
 
         # Prepare the response, pruning away completed requests as we go.
-        res: list[dict[str, Any]] = []
-        is_done = {r: False for r in batch.keys()}
-        for step in range(num_steps):
-            step_res = {}
-            for batch_idx, (request_id, context) in enumerate(batch.items()):
-                if is_done[request_id]:
-                    continue
-
+        res: list[dict[str, Any]] = [{} for i in range(num_steps)]
+        for batch_idx, (request_id, context) in enumerate(batch.items()):
+            for step in range(num_steps):
                 next_token_id = generated_tokens[batch_idx, step].item()
 
                 # Update context
-                next_tokens = np.array([next_token_id])
                 context.update(next_token_id)
+                next_tokens = np.array([next_token_id])
                 self._cache.tokens[context.cache_seq_id] = np.append(
                     self._cache.tokens[context.cache_seq_id], next_tokens
                 )
@@ -203,19 +198,11 @@ class HFTextGenerationPipeline(TokenGenerator[TextContext]):
                 )
                 if (
                     next_token_id in self._eos_token_id
-                    or (context.current_length + step) >= max_length
+                    or context.current_length > max_length
                 ):
-                    is_done[request_id] = True
-                else:
-                    step_res[request_id] = TextResponse(
-                        next_token=int(next_token_id)
-                    )
+                    break
 
-            res.append(step_res)
-
-            # If all requests are done, break out early
-            if all(is_done.values()):
-                break
+                res[step][request_id] = TextResponse(next_token)
 
         return res
 
