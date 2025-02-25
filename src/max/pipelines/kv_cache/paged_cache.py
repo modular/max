@@ -686,6 +686,13 @@ class PagedKVCacheManager(KVCacheManager):
             )
         return len(available_blocks | prefix_cache_blocks | uncommitted_blocks)
 
+    def purge_prefix_cache(self) -> None:
+        if self.prefix_cache is None:
+            return
+        evicted = self.prefix_cache.evict_blocks()
+        for block in evicted:
+            self.available_blocks.add(block)
+
     def release(self, seq_id: int) -> None:
         """Release `seq_id` provided, marking this sequence as complete.
         This returns the seq_id back to the available pool of cache memory,

@@ -175,6 +175,34 @@ class PrefixCache:
             blocks_to_evict = len(self.blocks)
         return self.radix_trie.evict_blocks(desired_num_evicted=blocks_to_evict)
 
+    def _release_partial_block(
+        self,
+        data: PagedCacheMetadata,
+        free_block_fn: Callable[[int], None],
+    ) -> None:
+        """Release the partially cached and uncommitted block.
+
+        There may be a partially cached block if the seq len was not a multiple
+        of page size after the last `step` operation. We may want to release the
+        partial block if we can retrieve KV projections for additional tokens
+        in the block from the cache:
+
+        e.g:
+            - partial_block b0 = ["I", "love", "to", "dance"] (cached = 2 tokens)
+            - we have block b1 = ["I", "love", "to", "sing"] (cached = 4 tokens)
+              in the prefix cache
+            - we can delete b0 and reuse b1 for the first three tokens for COW
+        """
+        assert data.committed_idx < data.cached_idx
+        partial_blocks = data.committable_blocks
+        assert len(partial_blocks) == 1
+        free_block_fn(partial_blocks[0])
+        data.blocks.pop()
+        partial_tokens = data.cached_idx - data.committed_idx
+        assert 0 < partial_tokens < self.page_size
+        data.cached_idx -= partial_tokens
+        assert data.committed_idx == data.cached_idx
+
     def fetch(
         self,
         seq_id: int,
@@ -214,14 +242,7 @@ class PrefixCache:
         # if the cache hit blocks already contain these tokens and more
         if data.committed_idx < data.cached_idx and num_cache_hit_tokens > 0:
             assert data.committed_idx + num_cache_hit_tokens > data.cached_idx
-            partial_blocks = data.committable_blocks
-            assert len(partial_blocks) == 1
-            free_block_fn(partial_blocks[0])
-            data.blocks.pop()
-            partial_tokens = data.cached_idx - data.committed_idx
-            assert 0 < partial_tokens < self.page_size
-            data.cached_idx -= partial_tokens
-            assert data.committed_idx == data.cached_idx
+            self._release_partial_block(data, free_block_fn)
 
         data.blocks.extend(prefix_blocks)
         # Bump the committed_idx since we got cache hits
@@ -278,13 +299,7 @@ class PrefixCache:
         # appending additional blocks.
         if partial_tokens > 0:
             assert data.committed_idx + num_cache_hit_tokens > data.cached_idx
-            partial_blocks = data.committable_blocks
-            assert len(partial_blocks) == 1
-            free_block_fn(partial_blocks[0])
-            data.blocks.pop()
-            assert partial_tokens < self.page_size
-            data.cached_idx -= partial_tokens
-            assert data.committed_idx == data.cached_idx
+            self._release_partial_block(data, free_block_fn)
 
         # Copy prefix_len tokens from partial_match_block to new_block.
         new_block = alloc_block_fn()
