@@ -267,7 +267,7 @@ class Qwen2Model(PipelineModel[TextContext]):
         return load_kv_manager(
             params=self.get_kv_params(self.pipeline_config),
             max_batch_size=self.pipeline_config.max_batch_size,
-            max_seq_len=self.pipeline_config.huggingface_config.max_position_embeddings,
+            max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
             num_layers=self.pipeline_config.huggingface_config.num_hidden_layers,
             devices=self.pipeline_config.devices,
             available_cache_memory=available_cache_memory,
