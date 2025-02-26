@@ -983,7 +983,11 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     # Methods
     # ===------------------------------------------------------------------===#
 
-    fn _split(self, sep: StringSlice, maxsplit: Int = -1) raises -> List[Self]:
+    fn _split[
+        sep_mut: Bool, sep_origin: Origin[sep_mut]
+    ](self, sep: StringSlice[sep_origin], maxsplit: Int = -1) raises -> List[
+        Self
+    ]:
         """Split the string by a separator.
 
         Args:
