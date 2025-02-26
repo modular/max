@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from typing import cast
 
 import numpy as np
@@ -333,19 +334,29 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
                 return model
 
             export_path = self.pipeline_config.save_to_serialized_model_path
-            build = lambda: _build_vision_graph(
-                pipeline_config=self.pipeline_config,
-                weights=self._weights,
-            )
-            vision_model = build_and_compile_model(build, "vision", export_path)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                build = lambda: _build_vision_graph(
+                    pipeline_config=self.pipeline_config,
+                    weights=self._weights,
+                )
+                vision_model_future = executor.submit(
+                    build_and_compile_model, build, "vision", export_path
+                )
 
-            build = lambda: _build_text_graph(
-                pipeline_config=self.pipeline_config,
-                weights=self._weights,
-                max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
-                kv_params=self.get_kv_params(self.pipeline_config),
-                kv_manager=self.kv_manager,
-            )
-            text_model = build_and_compile_model(build, "text", export_path)
+                build = lambda: _build_text_graph(
+                    pipeline_config=self.pipeline_config,
+                    weights=self._weights,
+                    max_seq_len=self.calculate_max_seq_len(
+                        self.pipeline_config
+                    ),
+                    kv_params=self.get_kv_params(self.pipeline_config),
+                    kv_manager=self.kv_manager,
+                )
+                text_model_future = executor.submit(
+                    build_and_compile_model, build, "text", export_path
+                )
+
+                vision_model = vision_model_future.result()
+                text_model = text_model_future.result()
 
         return vision_model, text_model

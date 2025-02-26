@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional, cast, final
 
@@ -1146,27 +1147,38 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
         """
         self.weights = self.pipeline_config.load_weights()
 
-        logger.info("Building and compiling vision model...")
-        before = time.perf_counter()
-        vision_model_graph = self._llama3_vision_vision_graph()
+        def build_vision_model():
+            logger.info("Building and compiling vision model...")
+            before = time.perf_counter()
+            vision_model_graph = self._llama3_vision_vision_graph()
+            vision_model = session.load(
+                vision_model_graph,
+                weights_registry=self.weights.allocated_weights,
+            )
+            after = time.perf_counter()
+            logger.info(
+                f"Compiling vision model took {after - before:.6f} seconds"
+            )
+            return vision_model
 
-        vision_model = session.load(
-            vision_model_graph,
-            weights_registry=self.weights.allocated_weights,
-        )
-        after = time.perf_counter()
-        logger.info(f"Compiling vision model took {after - before:.6f} seconds")
+        def build_language_model():
+            logger.info("Building and compiling language model...")
+            before = time.perf_counter()
+            language_model_graph = self._llama3_vision_language_graph()
+            language_model = session.load(
+                language_model_graph,
+                weights_registry=self.weights.allocated_weights,
+            )
+            after = time.perf_counter()
+            logger.info(
+                f"Building and compiling language model took {after - before:.6f} seconds"
+            )
+            return language_model
 
-        logger.info("Building and compiling language model...")
-        before = time.perf_counter()
-        language_model_graph = self._llama3_vision_language_graph()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            vision_model_future = executor.submit(build_vision_model)
+            language_model_future = executor.submit(build_language_model)
+            vision_model = vision_model_future.result()
+            language_model = language_model_future.result()
 
-        language_model = session.load(
-            language_model_graph,
-            weights_registry=self.weights.allocated_weights,
-        )
-        after = time.perf_counter()
-        logger.info(
-            f"Building and compiling language model took {after - before:.6f} seconds"
-        )
         return (vision_model, language_model)
