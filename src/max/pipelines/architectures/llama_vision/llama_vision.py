@@ -985,11 +985,9 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
         self,
         model_inputs: ModelInputs,
         # TODO(zheng): This should be folded as KVCacheInputs into ModelInputs.
-        text_and_vision_kv_cache_inputs: Optional[KVCacheInputs] = None,
+        kv_cache_inputs: Optional[KVCacheInputs] = None,
     ) -> ModelOutputs:
-        assert isinstance(
-            text_and_vision_kv_cache_inputs, MultimodalKVCacheInputs
-        )
+        assert kv_cache_inputs is not None
         # batch_size * num_concurrent_media * max_num_tiles * num_patches
         # are set to 0 here to imitate a dummy tensor (used in text-only mode).
         cross_attention_states = Tensor.zeros(
@@ -1009,20 +1007,20 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
             assert isinstance(exec_result, Tensor)
             cross_attention_states = exec_result
 
-        text_kv_cache_inputs = (
-            text_and_vision_kv_cache_inputs.text_kv_cache_inputs
-        )
-        vision_kv_cache_inputs = (
-            text_and_vision_kv_cache_inputs.vision_kv_cache_inputs
-        )
+        all_kv_cache_inputs: list[Tensor] = []
+        if isinstance(kv_cache_inputs, MultimodalKVCacheInputs):
+            all_kv_cache_inputs.extend(kv_cache_inputs.text_kv_cache_inputs)
+            all_kv_cache_inputs.extend(kv_cache_inputs.vision_kv_cache_inputs)
+        else:
+            all_kv_cache_inputs = list(kv_cache_inputs)
+
         model_outputs = self.language_model.execute(
             cross_attention_states,
             model_inputs.input_id_values,
             model_inputs.input_row_offsets,
             model_inputs.input_id_max_seq_len,
             model_inputs.pixel_row_offsets,
-            *text_kv_cache_inputs,
-            *vision_kv_cache_inputs,
+            *all_kv_cache_inputs,
             copy_inputs_to_device=False,
         )
         assert not self.pipeline_config.enable_echo
