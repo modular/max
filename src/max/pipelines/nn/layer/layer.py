@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import difflib
 import threading
 from abc import ABC, abstractmethod
 from collections import deque
@@ -191,9 +192,12 @@ class LayerV2(Layer, ABC):
                     self._weight_values[full_weight_name] = data
                     weight.name = full_weight_name
                 else:
-                    raise ValueError(
-                        f"Could not find weight '{full_weight_name}'"
-                    )
+                    msg = f"Could not find weight '{full_weight_name}'. "
+                    if possible_match := difflib.get_close_matches(
+                        full_weight_name, state_dict.keys(), n=1
+                    ):
+                        msg += f" Did you mean '{possible_match[0]}'?"
+                    raise ValueError()
 
     def state_dict(
         self, auto_initialize: bool = True
