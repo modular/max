@@ -107,26 +107,27 @@ class SupportedEncoding(str, Enum):
     @property
     def quantization_encoding(self) -> Optional[QuantizationEncoding]:
         if self not in _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING:
-            msg = f"SupportedEncoding({self}) does not have corresponding QuantizationEncoding."
-            raise ValueError(msg)
+            raise ValueError(
+                f"SupportedEncoding({self}) does not have corresponding QuantizationEncoding."
+            )
         return _SUPPORTED_ENCODING_TO_QUANTIZATION_ENCODING[self]
 
     @property
     def dtype(self) -> DType:
         """The underlying model dtype associated with a quantization_encoding."""
         if self not in _SUPPORTED_ENCODING_TO_DTYPE:
-            msg = (
+            raise ValueError(
                 f"SupportedEncoding({self}) does not have corresponding dtype."
             )
-            raise ValueError(msg)
         return _SUPPORTED_ENCODING_TO_DTYPE[self]
 
     @property
     def cache_dtype(self) -> DType:
         """The dtype that must be used in the kvcache for correctness."""
         if self not in _SUPPORTED_ENCODING_TO_CACHE_DTYPE:
-            msg = f"SupportedEncoding({self}) does not have corresponding cache dtype."
-            raise ValueError(msg)
+            raise ValueError(
+                f"SupportedEncoding({self}) does not have corresponding cache dtype."
+            )
         return _SUPPORTED_ENCODING_TO_CACHE_DTYPE[self]
 
     def supported_on(self, device_spec: DeviceSpec) -> bool:
@@ -255,8 +256,7 @@ class HuggingFaceRepo:
         if self.repo_type == RepoType.online and not _repo_exists_with_retry(
             self.repo_id
         ):
-            msg = f"model_path: {self.repo_id} does not exist"
-            raise ValueError(msg)
+            raise ValueError(f"model_path: {self.repo_id} does not exist")
 
     def __str__(self) -> str:
         return self.repo_id
@@ -267,13 +267,13 @@ class HuggingFaceRepo:
     @cached_property
     def info(self) -> ModelInfo:
         if self.repo_type == RepoType.local:
-            msg = "using model info, on local repos is not supported."
-            raise ValueError(msg)
+            raise ValueError(
+                "using model info, on local repos is not supported."
+            )
         elif self.repo_type == RepoType.online:
             return model_info(self.repo_id, files_metadata=False)
         else:
-            msg = f"Unsupported repo type: {self.repo_type}"
-            raise ValueError(msg)
+            raise ValueError(f"Unsupported repo type: {self.repo_type}")
 
     @cached_property
     def weight_files(self) -> dict[WeightsFormat, list[str]]:
@@ -307,8 +307,7 @@ class HuggingFaceRepo:
                 fs.glob(f"{self.repo_id}/{pytorch_search_pattern}"),
             )
         else:
-            msg = f"Unsupported repo type: {self.repo_type}"
-            raise ValueError(msg)
+            raise ValueError(f"Unsupported repo type: {self.repo_type}")
 
         if safetensor_paths:
             if len(safetensor_paths) == 1:
@@ -386,8 +385,9 @@ class HuggingFaceRepo:
                                     SupportedEncoding.bfloat16
                                 )
                             else:
-                                msg = f"unknown dtype found in safetensors file: {weight_dtype}"
-                                logger.warning(msg)
+                                logger.warning(
+                                    f"unknown dtype found in safetensors file: {weight_dtype}"
+                                )
 
             elif self.repo_type == RepoType.online:
                 if safetensors_info := self.info.safetensors:
@@ -403,8 +403,7 @@ class HuggingFaceRepo:
                         if quant_config["quant_method"] == "gptq":
                             supported_encodings.add(SupportedEncoding.gptq)
             else:
-                msg = f"Unsupported repo_type: {self.repo_type}"
-                raise ValueError(msg)
+                raise ValueError(f"Unsupported repo_type: {self.repo_type}")
 
         # Get torch dtype for pytorch files.
         if WeightsFormat.pytorch in self.formats_available:
@@ -418,8 +417,9 @@ class HuggingFaceRepo:
                 elif torch_dtype == torch.bfloat16:
                     supported_encodings.add(SupportedEncoding.bfloat16)
             else:
-                msg = "torch_dtype not available, cant infer encoding from config.json"
-                logger.warning(msg)
+                logger.warning(
+                    "torch_dtype not available, cant infer encoding from config.json"
+                )
 
         return list(supported_encodings)
 
@@ -475,10 +475,9 @@ class HuggingFaceRepo:
         alternate_encoding: Optional[SupportedEncoding] = None,
     ) -> dict[WeightsFormat, list[Path]]:
         if weights_format == WeightsFormat.pytorch:
-            msg = (
+            logger.warning(
                 "cannot infer encoding from .bin files, returning all bin files"
             )
-            logger.warning(msg)
             return self._get_pytorch_files_for_encoding(encoding)
 
         if weights_format is WeightsFormat.gguf:
@@ -526,14 +525,16 @@ class HuggingFaceRepo:
             if encoding:
                 return encoding
 
-            msg = f"gguf file, but encoding not found in file name: {file}"
-            raise ValueError(msg)
+            raise ValueError(
+                f"gguf file, but encoding not found in file name: {file}"
+            )
         elif str(file).endswith(".bin"):
             # If this file is pytorch, return the first encoding, as Pytorch repos only likely have one.
             return self.supported_encodings[0]
         else:
-            msg = f"weight path: {file} not gguf or safetensors, cannot infer encoding from file."
-            raise ValueError(msg)
+            raise ValueError(
+                f"weight path: {file} not gguf or safetensors, cannot infer encoding from file."
+            )
 
 
 @dataclass
@@ -703,17 +704,18 @@ class PipelineConfig:
     def __post_init__(self) -> None:
         # Validate if a provided max_length is non-negative.
         if self.max_length is not None and self.max_length < 0:
-            msg = "max_length must be non-negative."
-            raise ValueError(msg)
+            raise ValueError("max_length must be non-negative.")
 
         if self.huggingface_repo_id != "":
-            msg = "--huggingface-repo-id is deprecated, use `--model-path` instead. This setting will stop working in a future release."
-            logger.warning(msg)
+            logger.warning(
+                "--huggingface-repo-id is deprecated, use `--model-path` instead. This setting will stop working in a future release."
+            )
             self.model_path = self.huggingface_repo_id
 
         if self.max_cache_batch_size is not None:
-            msg = "--max-cache-batch-size is deprecated, use `--max-batch-size` instead. This setting will stop working in a future release."
-            logger.warning(msg)
+            logger.warning(
+                "--max-cache-batch-size is deprecated, use `--max-batch-size` instead. This setting will stop working in a future release."
+            )
             self.max_batch_size = self.max_cache_batch_size
 
         # Validate that if weight_paths are passed as strings, they are converted to Path.
@@ -727,11 +729,10 @@ class PipelineConfig:
             if isinstance(path, str):
                 path = Path(path)
             elif not isinstance(path, Path):
-                msg = (
+                raise ValueError(
                     "weight_path provided must either be string or Path:"
                     f" '{path}'"
                 )
-                raise ValueError(msg)
             elif path.is_file():
                 # If we already exist on the OS. Dont parse the path, just continue.
                 weight_paths.append(path)
@@ -752,11 +753,10 @@ class PipelineConfig:
                         self._weights_repo_id = repo_id
                         path = Path(file_name)
                 elif self.model_path == "":
-                    msg = (
+                    raise ValueError(
                         "Unable to derive model_path from weight_path, "
                         "please provide a valid Hugging Face repository id."
                     )
-                    raise ValueError(msg)
 
             weight_paths.append(path)
 
@@ -766,15 +766,15 @@ class PipelineConfig:
         # to provide it.
         if len(self.weight_path) == 0:
             if self.model_path == "":
-                msg = "model_path must be provided and must be a valid Hugging Face repository"
-                raise ValueError(msg)
+                raise ValueError(
+                    "model_path must be provided and must be a valid Hugging Face repository"
+                )
             elif (not os.path.exists(self.model_path)) and (
                 not _repo_exists_with_retry(self.model_path)
             ):
-                msg = (
+                raise ValueError(
                     f"{self.model_path} is not a valid Hugging Face repository"
                 )
-                raise ValueError(msg)
         elif self.model_path == "" and self._weights_repo_id is not None:
             # weight_path is used and we should derive the repo_id from it.
             # At this point, we should have a resolved weight path - be it local or remote HF.
@@ -792,13 +792,15 @@ class PipelineConfig:
                 self.max_num_steps = 10
 
         if self.max_num_steps > 1 and self.enable_structured_output:
-            msg = "max_num_steps > 1 not supported when enable_structured_output = True"
-            raise ValueError(msg)
+            raise ValueError(
+                "max_num_steps > 1 not supported when enable_structured_output = True"
+            )
 
         if self.enable_structured_output:
             if self.device_specs[0] == DeviceSpec.cpu():
-                msg = "enable_structured_output is not currently supported on CPU."
-                raise ValueError(msg)
+                raise ValueError(
+                    "enable_structured_output is not currently supported on CPU."
+                )
 
         if self.gpu_profiling not in (
             "false",
@@ -811,8 +813,7 @@ class PipelineConfig:
             "1",
             "detailed",
         ):
-            msg = "gpu_profiling must be a boolean or 'detailed'"
-            raise ValueError(msg)
+            raise ValueError("gpu_profiling must be a boolean or 'detailed'")
 
     def __getstate__(self) -> dict[str, Any]:
         """Override `__getstate__` to exclude the Hugging Face config."""
@@ -832,8 +833,9 @@ class PipelineConfig:
             ValueError: If no CLI encoding was specified.
         """
         if self.quantization_encoding is None:
-            msg = "can't convert `None` CLI encoding to graph quantization encoding"
-            raise ValueError(msg)
+            raise ValueError(
+                "can't convert `None` CLI encoding to graph quantization encoding"
+            )
 
         return self.quantization_encoding.quantization_encoding
 
@@ -867,15 +869,15 @@ class PipelineConfig:
             architectures = getattr(hf_config, "architectures", None)
             if architectures:
                 if len(architectures) > 1:
-                    msg = (
+                    logger.warning(
                         "more than one architecture listed in Hugging Face config,"
                         " using the first one."
                     )
-                    logger.warning(msg)
                 self.architecture = architectures[0]
             else:
-                msg = "architectures not listed in Hugging Face config, trying with general `huggingface` engine"
-                logger.warning(msg)
+                logger.warning(
+                    "architectures not listed in Hugging Face config, trying with general `huggingface` engine"
+                )
 
                 self.engine = PipelineEngine.HUGGINGFACE
 
@@ -897,16 +899,18 @@ class PipelineConfig:
     @property
     def dtype(self) -> DType:
         if self.quantization_encoding is None:
-            msg = "quantization_encoding must be provided to infer dtype."
-            raise ValueError(msg)
+            raise ValueError(
+                "quantization_encoding must be provided to infer dtype."
+            )
 
         return self.quantization_encoding.dtype
 
     @property
     def cache_dtype(self) -> DType:
         if self.quantization_encoding is None:
-            msg = "quantization_encoding must be provided to infer cache dtype."
-            raise ValueError(msg)
+            raise ValueError(
+                "quantization_encoding must be provided to infer cache dtype."
+            )
 
         return self.quantization_encoding.cache_dtype
 
@@ -919,7 +923,6 @@ class PipelineConfig:
         for device_spec in self.device_specs:
             if device_spec.id >= num_devices_available:
                 msg = f"Device {device_spec.id} was requested but "
-
                 if num_devices_available == 0:
                     msg += "no devices were found."
                 else:
@@ -937,8 +940,9 @@ class PipelineConfig:
         """Identify which format our weights are expected in."""
 
         if not self.weight_path:
-            msg = "no weight_path provided cannot infer weights format."
-            raise ValueError(msg)
+            raise ValueError(
+                "no weight_path provided cannot infer weights format."
+            )
 
         # Get all weight paths.
         if all(
@@ -957,8 +961,9 @@ class PipelineConfig:
         ):
             return WeightsFormat.pytorch
         else:
-            msg = f"weights type cannot be inferred from {self.weight_path}"
-            raise ValueError(msg)
+            raise ValueError(
+                f"weights type cannot be inferred from {self.weight_path}"
+            )
 
     def weights_size(self) -> int:
         size = 0
@@ -1030,10 +1035,9 @@ class PipelineConfig:
             return SafetensorWeights(self.weight_path)
 
         else:
-            msg = (
+            raise ValueError(
                 f"loading weights format '{self.weights_format}' not supported"
             )
-            raise ValueError(msg)
 
     @staticmethod
     def help() -> dict[str, str]:
