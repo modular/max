@@ -62,7 +62,7 @@ class LinearV2(LayerV2):
         output = linear_layer(input_tensor)
     """
 
-    weight: Weight
+    weight: Weight | TensorValue
     """The weight matrix stored on CPU with shape (out_dim, in_dim).
     Model init transposes the weight and moves it to :obj:`device`."""
 
@@ -107,6 +107,7 @@ class LinearV2(LayerV2):
             device=DeviceRef.CPU() if self.device else None,
             quantization_encoding=quantization_encoding,
         )
+        self.quantization_encoding = quantization_encoding
 
         if has_bias:
             self.bias = Weight(
@@ -136,9 +137,9 @@ class LinearV2(LayerV2):
         if self.device:
             weight = weight.to(self.device)
 
-        if self.weight.quantization_encoding:
+        if self.quantization_encoding:
             res = ops.qmatmul(
-                self.weight.quantization_encoding,
+                self.quantization_encoding,
                 None,
                 x,
                 weight,

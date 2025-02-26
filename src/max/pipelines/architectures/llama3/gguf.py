@@ -25,7 +25,6 @@ from max.graph import (
     Graph,
     TensorValue,
     TensorValueLike,
-    Weight,
     ops,
 )
 from max.graph.quantization import QuantizationEncoding
@@ -314,13 +313,6 @@ def distributed_attention_opaque(
     ]
 
     return DistributedAttentionWithRope(attns, devices)
-
-
-def clamp(x: Weight, min: float, max: float) -> TensorValue:
-    return ops.min(
-        ops.max(x, ops.constant(min, x.dtype)),
-        ops.constant(max, x.dtype),
-    )
 
 
 def _kv_collection_constructor(

@@ -93,6 +93,7 @@ class NaiveLlama3(NaiveTransformer):
         embedding_multiplier: float,
         residual_multiplier: float,
         devices: list[DeviceRef],
+        clip_qkv: float | None,
     ):
         if stacked_qkv:
             raise ValueError(
@@ -141,6 +142,7 @@ class NaiveLlama3(NaiveTransformer):
                     linear_cls,
                     scale=attention_multiplier,
                     device=devices[0],
+                    clip_qkv=clip_qkv,
                 ),
                 mlp=mlp_cls(
                     dtype,
@@ -201,6 +203,7 @@ class NaiveLLama3Attention(NaiveAttentionWithRope):
         linear_cls: Callable[..., LinearV2],
         scale: float | None,
         device: DeviceRef,
+        clip_qkv: float | None,
     ):
         kv_weight_dim = (
             hidden_size // num_attention_heads
@@ -240,6 +243,7 @@ class NaiveLLama3Attention(NaiveAttentionWithRope):
             ),
             rope=rope,
             scale=scale,
+            clip_qkv=clip_qkv,
         )
 
 

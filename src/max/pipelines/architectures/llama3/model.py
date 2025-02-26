@@ -556,6 +556,9 @@ class LlamaModelBase(PipelineModel[TextContext]):
                 embedding_multiplier=embedding_multiplier,
                 residual_multiplier=residual_multiplier,
                 devices=device_refs,
+                clip_qkv=getattr(
+                    self.pipeline_config.huggingface_config, "clip_qkv", None
+                ),
             )
             nn_model.load_state_dict(state_dict)
             self.state_dict = nn_model.state_dict()
@@ -664,6 +667,9 @@ class LlamaModelBase(PipelineModel[TextContext]):
             embedding_multiplier=embedding_multiplier,
             residual_multiplier=residual_multiplier,
             devices=device_refs,
+            clip_qkv=getattr(
+                self.pipeline_config.huggingface_config, "clip_qkv", None
+            ),
         )
 
         # Load weights. We allow the weight types to be overriden due to

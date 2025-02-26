@@ -72,6 +72,7 @@ class Llama3(Transformer):
         embedding_multiplier: float,
         residual_multiplier: float,
         devices: list[DeviceRef],
+        clip_qkv: Optional[float],
     ):
         rope = OptimizedRotaryEmbedding(
             dim=hidden_size,
@@ -113,6 +114,7 @@ class Llama3(Transformer):
                 AttentionWithRopeV2,
                 stacked_qkv=stacked_qkv,
                 scale=attention_multiplier,
+                clip_qkv=clip_qkv,
             )
 
         layers = [

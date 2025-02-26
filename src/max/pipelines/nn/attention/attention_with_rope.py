@@ -43,6 +43,7 @@ from ..kernels import (
 from ..layer import LayerV2
 from ..linear import LinearV2
 from ..rotary_embedding import OptimizedRotaryEmbedding
+from .clamp import clamp
 from .interfaces import (
     AttentionImpl,
     AttentionImplQKV,
@@ -160,6 +161,7 @@ class AttentionWithRopeV2(AttentionImplV2):
         stacked_qkv: bool = False,
         scale: float | None = None,
         has_bias: bool = False,
+        clip_qkv: float | None = None,
     ):
         """Initializes the attention layer.
 
@@ -174,6 +176,10 @@ class AttentionWithRopeV2(AttentionImplV2):
             device: Device to place the weights and run the computation.
             linear_cls: Linear class to use for the outputs dense layer.
             stacked_qkv: Whether the weights are stacked together.
+            scale: Value used to scale the results of the attention output.
+            has_bias: Whether to use an attention bias.
+            clip_qkv: If provided, the QKV weights are clamped between
+                `[-clip_qkv, clip_qkv]`
         """
 
         super().__init__()
@@ -185,6 +191,12 @@ class AttentionWithRopeV2(AttentionImplV2):
         self.scale = (
             scale if scale else math.sqrt(1.0 / self.kv_params.head_dim)
         )
+        self.clip_qkv = clip_qkv
+
+        if stacked_qkv and clip_qkv:
+            raise ValueError(
+                "`clip_qkv` not yet supported when `stack_qkv=True`."
+            )
 
         if not self.kv_params.cache_strategy.uses_opaque():
             raise ValueError(
@@ -246,7 +258,14 @@ class AttentionWithRopeV2(AttentionImplV2):
         if self.stacked_qkv:
             return self.qkv_proj
         else:
-            return ops.concat((self.q_proj, self.k_proj, self.v_proj))
+            wq: TensorValue = self.q_proj
+            wk: TensorValue = self.k_proj
+            wv: TensorValue = self.v_proj
+            if self.clip_qkv:
+                wq = clamp(wq, min=-self.clip_qkv, max=self.clip_qkv)
+                wk = clamp(wk, min=-self.clip_qkv, max=self.clip_qkv)
+                wv = clamp(wv, min=-self.clip_qkv, max=self.clip_qkv)
+            return ops.concat((wq, wk, wv))
 
     @property
     def wqkv_bias(self) -> TensorValue | None:
@@ -268,7 +287,6 @@ class AttentionWithRopeV2(AttentionImplV2):
         total_seq_len = x.shape[0]
 
         layer_idx = ops.constant(self.layer_idx, DType.uint32)
-
         # Call into fused qkv ragged matmul.
         xq = fused_qkv_ragged_matmul(
             self.kv_params,
