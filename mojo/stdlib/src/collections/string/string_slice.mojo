@@ -1388,7 +1388,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         # overall length in bytes.
         # For a visual explanation of how this UTF-8 codepoint counting works:
         #   https://connorgray.com/ephemera/project-log#2025-01-13
-        var continuation_count = _count_utf8_continuation_bytes(self)
+        var continuation_count = _count_utf8_continuation_bytes(self.as_bytes())
         return self.byte_length() - continuation_count
 
     fn is_codepoint_boundary(self, index: UInt) -> Bool:
@@ -2193,36 +2193,17 @@ fn _memmem[
 
 
 @always_inline
+# FIXME(#2535): remove capturing once function effects can be parametrized
+@parameter
 fn _is_utf8_continuation_byte[
     w: Int
 ](vec: SIMD[DType.uint8, w]) -> SIMD[DType.bool, w]:
     return vec.cast[DType.int8]() < -(0b1000_0000 >> 1)
 
 
-fn _count_utf8_continuation_bytes(str_slice: StringSlice) -> Int:
-    alias sizes = (256, 128, 64, 32, 16, 8)
-    var ptr = str_slice.unsafe_ptr()
-    var num_bytes = str_slice.byte_length()
-    var amnt: Int = 0
-    var processed = 0
-
-    @parameter
-    for i in range(len(sizes)):
-        alias s = sizes[i]
-
-        @parameter
-        if simdwidthof[DType.uint8]() >= s:
-            var rest = num_bytes - processed
-            for _ in range(rest // s):
-                var vec = (ptr + processed).load[width=s]()
-                var comp = _is_utf8_continuation_byte(vec)
-                amnt += Int(comp.cast[DType.uint8]().reduce_add())
-                processed += s
-
-    for i in range(num_bytes - processed):
-        amnt += Int(_is_utf8_continuation_byte(ptr[processed + i]))
-
-    return amnt
+@always_inline
+fn _count_utf8_continuation_bytes(span: Span[Byte]) -> Int:
+    return span.count[func=_is_utf8_continuation_byte]()
 
 
 @always_inline
