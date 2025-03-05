@@ -306,16 +306,42 @@ def test_isupper():
 
 
 def test_iter():
-    # Test iterating over a string
-    var s = "one"
-    var i = 0
-    for c in s:
-        if i == 0:
-            assert_equal(String(c), "o")
-        elif i == 1:
-            assert_equal(String(c), "n")
-        elif i == 2:
-            assert_equal(String(c), "e")
+    vs = "123"
+
+    # Borrow immutably
+    fn conc(vs: StringLiteral) -> String:
+        var c = String("")
+        for v in iter(vs):
+            c += v
+        return c
+
+    assert_equal(123, atol(conc(vs)))
+
+    concat = String("")
+    for v in reversed(vs):
+        concat += v
+    assert_equal(321, atol(concat))
+
+    var idx = -1
+    vs = "mojo🔥"
+    var iterator = iter(vs)
+    assert_equal(5, len(iterator))
+    var item = next(iterator)
+    assert_equal(String("m"), String(item))
+    assert_equal(4, len(iterator))
+    item = next(iterator)
+    assert_equal(String("o"), String(item))
+    assert_equal(3, len(iterator))
+    item = next(iterator)
+    assert_equal(String("j"), String(item))
+    assert_equal(2, len(iterator))
+    item = next(iterator)
+    assert_equal(String("o"), String(item))
+    assert_equal(1, len(iterator))
+    item = next(iterator)
+    assert_equal(String("🔥"), String(item))
+    assert_equal(0, len(iterator))
+    assert_equal(4, idx)
 
 
 def test_layout():

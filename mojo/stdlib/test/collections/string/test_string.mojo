@@ -1113,22 +1113,22 @@ def test_string_char_slices_iter():
     # Borrow immutably
     fn conc(vs: String) -> String:
         var c = String("")
-        for v in vs.codepoint_slices():
+        for v in iter(vs):
             c += v
         return c
 
     assert_equal(123, atol(conc(vs)))
 
     concat = String("")
-    for v in vs.__reversed__():
+    for v in reversed(vs):
         concat += v
     assert_equal(321, atol(concat))
 
-    for v in vs.codepoint_slices():
+    for v in iter(vs):
         v.unsafe_ptr().origin_cast[mut=True]()[] = ord("1")
 
     # Borrow immutably
-    for v in vs.codepoint_slices():
+    for v in iter(vs):
         concat += v
 
     assert_equal(321111, atol(concat))
@@ -1137,19 +1137,19 @@ def test_string_char_slices_iter():
     vs = String("mojo🔥")
     var iterator = vs.codepoint_slices()
     assert_equal(5, len(iterator))
-    var item = iterator.__next__()
+    var item = next(iterator)
     assert_equal(String("m"), String(item))
     assert_equal(4, len(iterator))
-    item = iterator.__next__()
+    item = next(iterator)
     assert_equal(String("o"), String(item))
     assert_equal(3, len(iterator))
-    item = iterator.__next__()
+    item = next(iterator)
     assert_equal(String("j"), String(item))
     assert_equal(2, len(iterator))
-    item = iterator.__next__()
+    item = next(iterator)
     assert_equal(String("o"), String(item))
     assert_equal(1, len(iterator))
-    item = iterator.__next__()
+    item = next(iterator)
     assert_equal(String("🔥"), String(item))
     assert_equal(0, len(iterator))
 
@@ -1194,7 +1194,7 @@ def test_string_char_slices_iter():
 
         assert_equal(amnt_characters, items_amount_characters[item_idx])
         var concat = String("")
-        for v in item.__reversed__():
+        for v in reversed(item):
             concat += v
         assert_equal(rev[item_idx], concat)
         item_idx += 1
