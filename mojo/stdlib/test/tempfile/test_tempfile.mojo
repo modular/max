@@ -41,7 +41,7 @@ def test_mkdtemp():
     dir_name = mkdtemp(dir=Path().__fspath__())
     assert_true(exists(dir_name), "Failed to create temporary directory")
     assert_true(
-        exists(Path() / dir_name.split(os.sep)[-1]),
+        exists(Path() / String(dir_name.split(os.sep)[-1])),
         "Expected directory to be created in cwd",
     )
     os.rmdir(dir_name)
