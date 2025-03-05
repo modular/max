@@ -387,7 +387,7 @@ fn sum(*values: Int) -> Int:
 Memory-only types, such as `String`, are available as a
 [`VariadicListMem`](/mojo/stdlib/builtin/list_literal/VariadicListMem).
 Iterating over this list directly with a `for..in` loop currently produces a
-[`Reference`](/mojo/stdlib/memory/reference/Reference) for each value instead
+[`Pointer`](/mojo/stdlib/memory/pointer/Pointer) for each value instead
 of the value itself. You must add an empty subscript operator `[]` to
 dereference the reference and retrieve the value:
 
