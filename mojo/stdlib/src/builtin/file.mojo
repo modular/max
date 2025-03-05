@@ -37,7 +37,8 @@ from sys.ffi import OpaquePointer
 
 from memory import AddressSpace, Span, UnsafePointer
 
-from utils import StringSlice, write_buffered
+from collections.string import StringSlice
+from utils import write_buffered
 
 
 @register_passable
