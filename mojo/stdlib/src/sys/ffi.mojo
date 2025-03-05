@@ -16,7 +16,7 @@ from collections.string import StringSlice
 from os import abort
 from sys._libc import dlclose, dlerror, dlopen, dlsym
 
-from memory import UnsafePointer
+from memory import UnsafePointer, Span
 
 from .info import is_64bit, os_is_linux, os_is_macos, os_is_windows
 from .intrinsics import _mlirtype_is_eq
@@ -103,6 +103,122 @@ fn _c_long_long_dtype() -> DType:
         return abort[DType]()
 
 
+@always_inline
+fn c_str_ptr(
+    item: StringLiteral,
+) -> UnsafePointer[c_char, mut=False, origin=StaticConstantOrigin]:
+    """Get the `c_char` pointer.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
+@always_inline
+fn c_str_ptr(
+    ref item: Error,
+) -> UnsafePointer[
+    c_char,
+    mut = Origin(__origin_of(item)).is_mutable,
+    origin = __origin_of(item),
+]:
+    """Get the `c_char` pointer.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
+@always_inline
+fn c_str_ptr(
+    ref item: String,
+) -> UnsafePointer[
+    c_char,
+    mut = Origin(__origin_of(item)).is_mutable,
+    origin = __origin_of(item),
+]:
+    """Get the `c_char` pointer.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
+@always_inline
+fn c_str_ptr(
+    item: StringSlice,
+) -> UnsafePointer[
+    c_char, mut = __type_of(item).mut, origin = __type_of(item).origin
+]:
+    """Get the `c_char` pointer.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
+@always_inline
+fn c_str_ptr[
+    T: CollectionElement
+](item: List[T]) -> UnsafePointer[
+    c_char,
+    mut = Origin(__origin_of(item)).is_mutable,
+    origin = __origin_of(item),
+]:
+    """Get the `c_char` pointer.
+
+    Parameters:
+        T: The type.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
+@always_inline
+fn c_str_ptr[
+    T: CollectionElement
+](item: Span[T]) -> UnsafePointer[
+    c_char,
+    mut = __type_of(item).mut,
+    origin = __type_of(item).origin,
+    address_space = __type_of(item).address_space,
+    alignment = __type_of(item).alignment,
+]:
+    """Get the `c_char` pointer.
+
+    Parameters:
+        T: The type.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
 # ===-----------------------------------------------------------------------===#
 # Dynamic Library Loading
 # ===-----------------------------------------------------------------------===#
@@ -185,7 +301,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
 
         @parameter
         if not os_is_windows():
-            var handle = dlopen(path.unsafe_cstr_ptr(), flags)
+            var handle = dlopen(c_str_ptr(path), flags)
             if handle == OpaquePointer():
                 var error_message = dlerror()
                 abort(
@@ -223,8 +339,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
         ]()
 
         var opaque_function_ptr: OpaquePointer = dlsym(
-            self.handle,
-            name.unsafe_cstr_ptr(),
+            self.handle, c_str_ptr(name)
         )
 
         return Bool(opaque_function_ptr)
@@ -266,7 +381,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
             A handle to the function.
         """
 
-        return self._get_function[result_type](name.unsafe_cstr_ptr())
+        return self._get_function[result_type](c_str_ptr(name))
 
     @always_inline
     fn _get_function[
@@ -307,7 +422,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
             A handle to the function.
         """
 
-        return self._get_function[result_type](func_name.unsafe_cstr_ptr())
+        return self._get_function[result_type](c_str_ptr(func_name))
 
     fn get_symbol[
         result_type: AnyType,
@@ -324,7 +439,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
         Returns:
             A pointer to the symbol.
         """
-        return self.get_symbol[result_type](name.unsafe_cstr_ptr())
+        return self.get_symbol[result_type](c_str_ptr(name))
 
     fn get_symbol[
         result_type: AnyType

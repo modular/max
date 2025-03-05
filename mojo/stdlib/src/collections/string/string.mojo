@@ -1285,16 +1285,6 @@ struct String(
         """
         return self._buffer.unsafe_ptr()
 
-    fn unsafe_cstr_ptr(self) -> UnsafePointer[c_char]:
-        """Retrieves a C-string-compatible pointer to the underlying memory.
-
-        The returned pointer is guaranteed to be null, or NUL terminated.
-
-        Returns:
-            The pointer to the underlying memory.
-        """
-        return self.unsafe_ptr().bitcast[c_char]()
-
     @always_inline
     fn as_bytes(ref self) -> Span[Byte, __origin_of(self)]:
         """Returns a contiguous slice of the bytes owned by this string.

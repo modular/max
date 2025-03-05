@@ -21,7 +21,7 @@ from sys import is_x86
 
 from memory import UnsafePointer
 
-from .ffi import OpaquePointer, _external_call_const, external_call
+from .ffi import OpaquePointer, _external_call_const, external_call, c_str_ptr
 
 
 @always_inline("nodebug")
@@ -844,7 +844,7 @@ fn _macos_version() raises -> Tuple[Int, Int, Int]:
     var buf_len = Int(INITIAL_CAPACITY)
 
     var err = external_call["sysctlbyname", Int32](
-        "kern.osproductversion".unsafe_cstr_ptr(),
+        c_str_ptr("kern.osproductversion"),
         buf.data,
         Pointer.address_of(buf_len),
         OpaquePointer(),

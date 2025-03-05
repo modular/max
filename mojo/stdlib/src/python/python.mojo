@@ -23,7 +23,7 @@ from collections import Dict
 from collections.string import StringSlice
 from os import abort, getenv
 from sys import external_call, sizeof
-from sys.ffi import _Global
+from sys.ffi import _Global, c_str_ptr
 
 from memory import UnsafePointer
 
@@ -338,7 +338,7 @@ struct Python:
 
         var result = cpython.PyModule_AddObjectRef(
             module.unsafe_as_py_object_ptr(),
-            name.unsafe_cstr_ptr(),
+            c_str_ptr(name),
             value.unsafe_as_py_object_ptr(),
         )
 

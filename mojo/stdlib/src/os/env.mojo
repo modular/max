@@ -21,7 +21,7 @@ from os import setenv
 
 from collections.string import StringSlice
 from sys import external_call, os_is_linux, os_is_macos, os_is_windows
-from sys.ffi import c_int
+from sys.ffi import c_int, c_str_ptr
 
 from memory import UnsafePointer
 
@@ -47,8 +47,8 @@ fn setenv(name: String, value: String, overwrite: Bool = True) -> Bool:
         return False
 
     var status = external_call["setenv", Int32](
-        name.unsafe_cstr_ptr(),
-        value.unsafe_cstr_ptr(),
+        c_str_ptr(name),
+        c_str_ptr(value),
         Int32(1 if overwrite else 0),
     )
     return status == 0
@@ -67,7 +67,7 @@ fn unsetenv(name: String) -> Bool:
         not os_is_windows(), "operating system must be Linux or macOS"
     ]()
 
-    return external_call["unsetenv", c_int](name.unsafe_cstr_ptr()) == 0
+    return external_call["unsetenv", c_int](c_str_ptr(name)) == 0
 
 
 fn getenv(name: String, default: String = "") -> String:
@@ -90,9 +90,7 @@ fn getenv(name: String, default: String = "") -> String:
     if not os_is_supported:
         return default
 
-    var ptr = external_call["getenv", UnsafePointer[UInt8]](
-        name.unsafe_cstr_ptr()
-    )
+    var ptr = external_call["getenv", UnsafePointer[UInt8]](c_str_ptr(name))
     if not ptr:
         return default
     return String(StringSlice[ptr.origin](unsafe_from_utf8_ptr=ptr))
