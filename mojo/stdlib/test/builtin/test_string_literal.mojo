@@ -28,6 +28,7 @@ from builtin.string_literal import (
     _compress,
     _decompress,
 )
+from sys.intrinsics import _type_is_eq
 
 
 def test_add():
@@ -60,9 +61,17 @@ def test_mul():
     assert_equal(static_concat_1, static_concat_2)
     assert_equal("mojomojomojo", static_concat_0)
     assert_equal(static_concat_0, String("mojo") * 3)
-    var dynamic_concat = "mojo" * 3
-    assert_equal("mojomojomojo", dynamic_concat)
-    assert_equal(static_concat_0, dynamic_concat)
+    assert_true(_type_is_eq[__type_of(static_concat_0), StringLiteral]())
+    assert_true(_type_is_eq[__type_of(static_concat_1), String]())
+    assert_true(_type_is_eq[__type_of(static_concat_2), String]())
+    var dynamic_concat_0 = "mojo" * 3
+    var dynamic_concat_1 = "mojo" * `3`
+    var dynamic_concat_2 = "mojo" * `u3`
+    assert_equal("mojomojomojo", dynamic_concat_0)
+    assert_equal(static_concat_0, dynamic_concat_0)
+    assert_true(_type_is_eq[__type_of(dynamic_concat_0), StringLiteral]())
+    assert_true(_type_is_eq[__type_of(dynamic_concat_1), String]())
+    assert_true(_type_is_eq[__type_of(dynamic_concat_2), String]())
 
 
 def test_equality():
