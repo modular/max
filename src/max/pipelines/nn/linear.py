@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Sequence
 
 import numpy as np
 from max.dtype import DType
@@ -32,6 +32,7 @@ from max.graph.quantization import QuantizationConfig, QuantizationEncoding
 from max.graph.weights import Weights
 
 from .clamp import clamp
+from .comm import Allreduce
 from .kernels import swish_glu
 from .layer import Layer, LayerV2
 
@@ -81,9 +82,9 @@ class LinearV2(LayerV2):
         dtype: DType,
         device: DeviceRef | None = None,
         has_bias: bool = False,
-        quantization_encoding: Optional[QuantizationEncoding] = None,
-        name: Optional[str] = None,
-        clip_weight: Optional[float] = None,
+        quantization_encoding: QuantizationEncoding | None = None,
+        name: str | None = None,
+        clip_weight: float | None = None,
     ) -> None:
         """Initializes the linear layer with weights and optional bias.
 
@@ -169,7 +170,7 @@ class Linear(Layer):
     """A unified linear layer that delegates to either regular or quantized implementation."""
 
     weight: TensorValueLike
-    bias: Optional[TensorValueLike] = None
+    bias: TensorValueLike | None = None
 
     def __call__(self, x: TensorValue) -> TensorValue:
         weight = TensorValue(self.weight)
@@ -182,12 +183,12 @@ class Linear(Layer):
     def create(
         cls,
         dtype: DType,
-        quantization_encoding: Optional[QuantizationEncoding],
+        quantization_encoding: QuantizationEncoding | None,
         in_features: int,
         out_features: int,
         weights: Weights | Weight,
-        bias: Optional[Weights | Weight] = None,
-        quantization_config: Optional[QuantizationConfig] = None,
+        bias: Weights | Weight | None = None,
+        quantization_config: QuantizationConfig | None = None,
     ) -> "Linear":
         """Factory method to create a Linear layer with appropriate implementation."""
         if not quantization_encoding:
@@ -227,8 +228,8 @@ class QLinear(Linear):
         in_features: int,
         out_features: int,
         weights: Weights | Weight,
-        bias: Optional[Weights | Weight],
-        quantization_config: Optional[QuantizationConfig],
+        bias: Weights | Weight | None,
+        quantization_config: QuantizationConfig | None,
     ) -> "Linear":
         if quantization_encoding != QuantizationEncoding.GPTQ:
             weight = _allocate_if_needed(
@@ -276,7 +277,7 @@ class GPTQLinear(QLinear):
 
     # Because QLinear has optional fields, so must we, since we subclass QLinear
     quantization_config: QuantizationConfig | None = None
-    perm_idx: Optional[TensorValueLike] | None = None
+    perm_idx: TensorValueLike | None = None
 
     @classmethod
     def _create(
@@ -286,8 +287,8 @@ class GPTQLinear(QLinear):
         in_features: int,
         out_features: int,
         weights: Weights | Weight,
-        bias: Optional[Weights | Weight],
-        quantization_config: Optional[QuantizationConfig],
+        bias: Weights | Weight | None,
+        quantization_config: QuantizationConfig | None,
     ) -> "Linear":
         """Internal method to create a Linear layer from GPTQ weights."""
 
@@ -385,8 +386,8 @@ class GPTQLinearV2(LinearV2):
         dtype: DType,
         device: DeviceRef | None = None,
         has_bias: bool = False,
-        quantization_encoding: Optional[QuantizationEncoding] = None,
-        quantization_config: Optional[QuantizationConfig] = None,
+        quantization_encoding: QuantizationEncoding | None = None,
+        quantization_config: QuantizationConfig | None = None,
     ) -> None:
         """Initializes the linear layer with weights and optional bias with
         GPTQ quantization.
@@ -461,13 +462,12 @@ class GPTQLinearV2(LinearV2):
             perm_idx: TensorValue = self.perm_idx
             if self.device:
                 perm_idx = perm_idx.to(self.device)
-
             res = ops.qmatmul(
                 self.qweight.quantization_encoding,
                 self.quantization_config,
-                ops.gather(x, self.perm_idx, axis=(x.rank - 1)),
+                ops.gather(x, perm_idx, axis=(x.rank - 1)),
                 weight,
-                self.perm_idx,
+                perm_idx,
             )
         else:
             res = ops.qmatmul(
@@ -512,19 +512,57 @@ class MLP(Layer):
         return self.down_proj(ops.silu(self.gate_proj(x)) * self.up_proj(x))  # type: ignore
 
 
-@dataclass
 class MLPV2(LayerV2):
     """
     Simple multi-layer perceptron composed of three linear layers.
     Uses SiLU activation function.
     """
 
-    gate_proj: LinearV2
-    down_proj: LinearV2
-    up_proj: LinearV2
-
-    def __post_init__(self):
+    def __init__(
+        self,
+        dtype: DType,
+        quantization_encoding: QuantizationEncoding | None,
+        hidden_dim: int,
+        feed_forward_length: int,
+        linear_cls: Callable[..., LinearV2] = LinearV2,
+        devices: Sequence[DeviceRef] = (),
+    ):
+        """
+        Args:
+            dtype: DType to use for the layer weights, which should match the
+                input dtype.
+            quantization_encoding: Quantization encoding of the layer weights.
+            hidden_dim: The last dimension of the layer input.
+            feed_forward_length: Size of dimension used to project the inputs.
+            linear_cls: Linear class to use to create the projection layers.
+            devices: Devices to run the `MLP` layer. If multiple are provided,
+                the first device is used instead. Use `DistributedMLP` to use
+                all devices.
+        """
         super().__init__()
+        self.devices = devices
+        self.gate_proj = linear_cls(  # [ffl, hidden]
+            in_dim=hidden_dim,
+            out_dim=feed_forward_length,
+            dtype=dtype,
+            device=devices[0] if devices else None,
+            quantization_encoding=quantization_encoding,
+        )
+        self.down_proj = linear_cls(
+            in_dim=feed_forward_length,
+            out_dim=hidden_dim,
+            dtype=dtype,
+            device=devices[0] if devices else None,
+            quantization_encoding=quantization_encoding,
+        )
+        self.up_proj = linear_cls(
+            in_dim=hidden_dim,
+            out_dim=feed_forward_length,
+            dtype=dtype,
+            device=devices[0] if devices else None,
+            quantization_encoding=quantization_encoding,
+        )
+        self.quantization_encoding = quantization_encoding
 
     def __call__(self, x: TensorValueLike) -> TensorValue:
         if (
@@ -542,19 +580,89 @@ class MLPV2(LayerV2):
                     self.up_proj.weight,
                 )
             )
+        if self.quantization_encoding:
+            return self.down_proj(
+                ops.silu(self.gate_proj(x)) * self.up_proj(x)  # type: ignore
+            )
+        else:
+            # Optimization to compute a single matmul by merging the
+            # gate and up projection weights.
+            feed_forward_length = self.gate_proj.weight.shape[0]
+            gate_proj_weight: TensorValue = self.gate_proj.weight
+            if self.gate_proj.device:
+                gate_proj_weight = gate_proj_weight.to(self.gate_proj.device)
+            up_proj_weight: TensorValue = self.up_proj.weight
+            if self.up_proj.device:
+                up_proj_weight = up_proj_weight.to(self.up_proj.device)
+            output = x @ ops.concat((gate_proj_weight, up_proj_weight)).T
+            gate_out, up_out = ops.split(
+                output, [feed_forward_length, feed_forward_length], axis=1
+            )
+            return self.down_proj(ops.silu(gate_out) * up_out)
 
-        return self.down_proj(
-            ops.silu(self.gate_proj(x)) * self.up_proj(x)  # type: ignore
-        )
 
+class DistributedMLP(MLPV2):
+    """A distributed multi-layer perceptron.
 
-@dataclass
-class DistributedMLP(Layer):
-    list_of_mlps: list[MLP]
-    num_devices: int
+    This class has the same state keys as the non-distributed MLP Layer.
+    """
 
-    def __call__(
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.num_devices = len(self.devices)
+
+        def col_sharding_strategy(weight: Weight, i) -> TensorValue:
+            col_size = int(weight.shape[1]) // self.num_devices
+            return weight[:, i * col_size : (i + 1) * col_size]
+
+        def row_sharding_strategy(weight: Weight, i) -> TensorValue:
+            row_size = int(weight.shape[0]) // self.num_devices
+            return weight[i * row_size : (i + 1) * row_size, :]
+
+        self.gate_proj.weight.set_sharding_strategy(row_sharding_strategy)
+        self.down_proj.weight.set_sharding_strategy(col_sharding_strategy)
+        self.up_proj.weight.set_sharding_strategy(row_sharding_strategy)
+
+        # Create normal MLP layers for each device. These layers and weights are
+        # not recorded by the nn.LayerV2 and do not appear in the state dict.
+        self.list_of_mlps = []
+        for n, device in enumerate(self.devices):
+            layer = MLPV2(*args, **kwargs)
+
+            layer.gate_proj.device = device
+            layer.gate_proj.weight = self.gate_proj.weight.shard(n, device)
+
+            layer.down_proj.device = device
+            layer.down_proj.weight = self.down_proj.weight.shard(n, device)
+
+            layer.up_proj.device = device
+            layer.up_proj.weight = self.up_proj.weight.shard(n, device)
+
+            self.list_of_mlps.append(layer)
+
+        self.allreduce = Allreduce(num_accelerators=len(self.devices))
+
+    def __call__(  # type: ignore[override]
         self, x: list[TensorValue], signal_buffers: list[BufferValue]
     ) -> list[TensorValue]:
+        """Applies a linear transformation to the input data.
+
+        Args:
+            x: Input tensor of shape ``(..., in_dim)``.
+                The last dimension must match the layer's ``in_dim``.
+                The input tensor must reside on :obj:`device`.
+            signal_buffers: Buffers for peer-to-peer communication in allreduce.
+
+        Returns:
+            Output tensor of shape ``(..., out_dim)``.
+            The result resides on the device specified in :obj:`device`.
+
+        Raises:
+            ValueError: If the last dimension of ``x`` doesn't match ``in_dim``.
+        """
         mlp_outs = [self.list_of_mlps[i](x[i]) for i in range(self.num_devices)]
-        return ops.allreduce.sum(mlp_outs, signal_buffers)
+        return self.allreduce(mlp_outs, signal_buffers)

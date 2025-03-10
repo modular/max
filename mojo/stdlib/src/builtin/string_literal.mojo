@@ -51,7 +51,6 @@ struct StringLiteral(
     Sized,
     Stringable,
     FloatableRaising,
-    BytesCollectionElement,
     _HashableWithHasher,
 ):
     """This type represents a string literal.
@@ -96,11 +95,11 @@ struct StringLiteral(
     # for now.
     @always_inline("nodebug")
     @staticmethod
-    fn _from_string[value: String]() -> StringLiteral:
+    fn get[value: String]() -> StringLiteral:
         """Form a string literal from an arbitrary compile-time String value.
 
         Parameters:
-            value: The string value to use.
+            value: The value to convert to StringLiteral.
 
         Returns:
             The string value as a StringLiteral.
@@ -115,19 +114,6 @@ struct StringLiteral(
 
     @always_inline("nodebug")
     @staticmethod
-    fn get[value: String]() -> StringLiteral:
-        """Form a string literal from an arbitrary compile-time String value.
-
-        Parameters:
-            value: The value to convert to StringLiteral.
-
-        Returns:
-            The string value as a StringLiteral.
-        """
-        return Self._from_string[value]()
-
-    @always_inline("nodebug")
-    @staticmethod
     fn get[type: Stringable, //, value: type]() -> StringLiteral:
         """Form a string literal from an arbitrary compile-time stringable value.
 
@@ -138,7 +124,7 @@ struct StringLiteral(
         Returns:
             The string value as a StringLiteral.
         """
-        return Self._from_string[String(value)]()
+        return Self.get[String(value)]()
 
     # ===-------------------------------------------------------------------===#
     # Operator dunders
@@ -155,40 +141,6 @@ struct StringLiteral(
             The concatenated string.
         """
         return __mlir_op.`pop.string.concat`(self.value, rhs.value)
-
-    @always_inline("nodebug")
-    fn __iadd__(mut self, rhs: StringLiteral):
-        """Concatenate a string literal to an existing one. Can only be
-        evaluated at compile time using the `alias` keyword, which will write
-        the result into the binary.
-
-        Args:
-            rhs: The string to concat.
-
-        Example:
-
-        ```mojo
-        fn add_literal(
-            owned original: StringLiteral, add: StringLiteral, n: Int
-        ) -> StringLiteral:
-            for _ in range(n):
-                original += add
-            return original
-
-
-        fn main():
-            alias original = "mojo"
-            alias concat = add_literal(original, "!", 4)
-            print(concat)
-        ```
-
-        Result:
-
-        ```
-        mojo!!!!
-        ```
-        """
-        self = self + rhs
 
     fn __mul__(self, n: Int) -> String:
         """Concatenates the string `n` times.
@@ -457,7 +409,7 @@ struct StringLiteral(
         """
         return self.__str__()
 
-    fn __iter__(ref self) -> CodepointSliceIter[StaticConstantOrigin]:
+    fn __iter__(self) -> CodepointSliceIter[StaticConstantOrigin]:
         """Iterate over the string unicode characters.
 
         Returns:
@@ -554,20 +506,6 @@ struct StringLiteral(
             This does not include the trailing null terminator.
         """
         return Span[Byte, StaticConstantOrigin](
-            ptr=self.unsafe_ptr(), length=self.byte_length()
-        )
-
-    @always_inline
-    fn as_bytes(ref self) -> Span[Byte, __origin_of(self)]:
-        """Returns a contiguous slice of the bytes owned by this string.
-
-        Returns:
-            A contiguous slice pointing to the bytes owned by this string.
-
-        Notes:
-            This does not include the trailing null terminator.
-        """
-        return Span[Byte, __origin_of(self)](
             ptr=self.unsafe_ptr(), length=self.byte_length()
         )
 

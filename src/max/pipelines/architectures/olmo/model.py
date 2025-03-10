@@ -15,8 +15,10 @@ from __future__ import annotations
 
 from typing import Literal
 
+from max.driver import Device
 from max.engine import InferenceSession
-from max.pipelines import PipelineConfig
+from max.pipelines import KVCacheConfig, PipelineConfig, SupportedEncoding
+from transformers import AutoConfig
 
 from ..llama3.model import LlamaModelBase
 
@@ -27,6 +29,19 @@ class OlmoModel(LlamaModelBase):
     norm_method: Literal["rms_norm"] | Literal["layer_norm"] = "layer_norm"
 
     def __init__(
-        self, pipeline_config: PipelineConfig, session: InferenceSession
+        self,
+        pipeline_config: PipelineConfig,
+        session: InferenceSession,
+        huggingface_config: AutoConfig,
+        encoding: SupportedEncoding,
+        devices: list[Device],
+        kv_cache_config: KVCacheConfig,
     ) -> None:
-        super().__init__(pipeline_config, session)
+        super().__init__(
+            pipeline_config,
+            session,
+            huggingface_config,
+            encoding,
+            devices,
+            kv_cache_config,
+        )

@@ -34,6 +34,7 @@ from max.graph import (
     _OpaqueValue,
     ops,
 )
+from max.profiler import traced
 from max.support.human_readable_formatter import to_human_readable_bytes
 
 from ._utils import build_max_lengths_tensor
@@ -148,6 +149,7 @@ class FetchPagedKVCacheCollection:
 
 
 class PagedKVCacheManager(KVCacheManager):
+    @traced
     def __init__(
         self,
         params: KVCacheParams,
@@ -401,9 +403,9 @@ class PagedKVCacheManager(KVCacheManager):
         # 1 = value
         kv_dim = 2
         return [
-            num_layers,
-            kv_dim,
             "total_num_pages" if is_parameterized else total_num_pages,
+            kv_dim,
+            num_layers,
             page_size,
             params.n_kv_heads_per_device,
             params.head_dim,
@@ -417,6 +419,7 @@ class PagedKVCacheManager(KVCacheManager):
     def get_num_used_blocks(self) -> int:
         return self.total_num_pages - self.get_num_free_blocks()
 
+    @traced
     def can_fetch(
         self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
     ) -> bool:
@@ -448,6 +451,7 @@ class PagedKVCacheManager(KVCacheManager):
 
         return tot_new_pages_needed <= num_free_blocks
 
+    @traced
     def query_fetch_stats(
         self, seq_id: int, prompt: np.ndarray, num_steps: int = 1
     ) -> tuple[set[int], int, int]:
@@ -496,6 +500,7 @@ class PagedKVCacheManager(KVCacheManager):
 
         return prefix_blocks, tokens_to_encode, new_pages_needed
 
+    @traced
     def _fetch(
         self, seq_ids_and_prompts: dict[int, np.ndarray], num_steps: int = 1
     ) -> List[KVCacheInputs]:
@@ -520,6 +525,10 @@ class PagedKVCacheManager(KVCacheManager):
             assert seq_id not in self.fetch_metadata
 
             # Add prompt and inflight tokens to the token array
+            if seq_id not in self.active_requests:
+                raise ValueError(
+                    f"Called fetch on seq_id {seq_id} without claiming it"
+                )
             data = self.active_requests[seq_id]
             data.fetch(prompt, num_steps)
 
@@ -543,31 +552,28 @@ class PagedKVCacheManager(KVCacheManager):
         )
         cache_lengths_np = np.zeros((batch_size,), dtype=np.uint32)
 
-        # Iterate over requests and query prefix cache
-        all_cache_hit_blocks: set[int] = set()
-        for batch_idx, (seq_id, prompt) in enumerate(
-            seq_ids_and_prompts.items()
-        ):
-            # Ensure we've called claim for this sequence id.
-            if seq_id not in self.active_requests:
-                raise ValueError(f"seq_id: {seq_id} not in active requests.")
-
-            if self.prefix_cache is not None:
-                data = self.active_requests[seq_id]
-                # bump the committed_idx, and possibly the cached_idx
-                prefix_blocks = self.prefix_cache.fetch(
-                    seq_id,
-                    data,
-                    free_block_fn=self.release_block,
-                    alloc_block_fn=self.alloc_block,
-                )
+        # Execute all of the COW ops enqueued during prefix_cache.fetch
+        all_cache_hit_blocks = set()
+        if self.prefix_cache is not None:
+            seq_ids_and_data = {
+                seq_id: self.active_requests[seq_id]
+                for seq_id in seq_ids_and_prompts
+            }
+            seq_ids_and_prefix_blocks = self.prefix_cache.fetch(
+                seq_ids_and_data,
+                free_block_fn=self.release_block,
+                alloc_block_fn=self.alloc_block,
+            )
+            for prefix_blocks in seq_ids_and_prefix_blocks.values():
                 all_cache_hit_blocks.update(prefix_blocks)
-                # Possibly trim the input prompt.
+
+            for seq_id in seq_ids_and_prompts:
+                data = seq_ids_and_data[seq_id]
                 seq_ids_and_prompts[seq_id] = data.prompt_tokens
 
         # Determine the number of pages required for each sequence.
         max_seq_length = 0
-        max_cache_length = 0
+        max_context_length = 0
         total_sequence_length = 0
         total_blocks_to_allocate = 0
         blocks_to_allocate_by_seq = {}
@@ -582,7 +588,9 @@ class PagedKVCacheManager(KVCacheManager):
 
             # Update the maximum lengths seen so far.
             max_seq_length = max(max_seq_length, len(prompt))
-            max_cache_length = max(max_cache_length, cache_length)
+            max_context_length = max(
+                max_context_length, cache_length + len(prompt)
+            )
 
             # Compute the total sequence length and the number of pages required to store it.
             total_sequence_length += data.seq_len
@@ -629,7 +637,7 @@ class PagedKVCacheManager(KVCacheManager):
         # Build a tensor of maximum lengths. Each step slices the first row to
         # advance to the values for the next row.
         max_lengths_host = build_max_lengths_tensor(
-            num_steps, max_seq_length, max_cache_length
+            num_steps, max_seq_length, max_context_length
         )
 
         lut_table_host = Tensor.from_numpy(lut_table_np)
@@ -740,6 +748,7 @@ class PagedKVCacheManager(KVCacheManager):
             self.release_block(block)
         del self.active_requests[seq_id]
 
+    @traced
     def _step(
         self,
         seq_ids_and_new_tokens: dict[int, np.ndarray],

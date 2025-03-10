@@ -29,7 +29,7 @@ from typing import (
 )
 
 import torch
-from max.driver import Device, Tensor
+from max.driver import Device, Tensor, load_devices
 from max.dtype import DType
 from max.engine import InferenceSession
 from max.pipelines.kv_cache import (
@@ -38,9 +38,9 @@ from max.pipelines.kv_cache import (
     infer_optimal_batch_size,
 )
 from max.profiler import Tracer, traced
-from transformers import AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer
 
-from .config import PipelineConfig
+from .config import KVCacheConfig, PipelineConfig, SupportedEncoding
 from .context import InputContext
 from .interfaces import (
     LogProbabilities,
@@ -146,28 +146,44 @@ class PipelineModel(ABC, Generic[T]):
     _MIN_DEFAULT_BATCH_SIZE = 1
 
     def __init__(
-        self, pipeline_config: PipelineConfig, session: InferenceSession
+        self,
+        pipeline_config: PipelineConfig,
+        session: InferenceSession,
+        huggingface_config: AutoConfig,
+        encoding: SupportedEncoding,
+        devices: list[Device],
+        kv_cache_config: KVCacheConfig,
     ) -> None:
         self.pipeline_config = pipeline_config
+        self.huggingface_config = huggingface_config
+        self.encoding = encoding
+        self.devices = devices
+        self.kv_cache_config = kv_cache_config
 
         if isinstance(self, KVCacheMixin):
             self.kv_manager = self.load_kv_manager(
-                session, pipeline_config._available_cache_memory
+                session, self.kv_cache_config._available_cache_memory
             )
+
+    @property
+    def dtype(self) -> DType:
+        return self.encoding.dtype
 
     @classmethod
     @abstractmethod
-    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+    def calculate_max_seq_len(
+        cls, pipeline_config: PipelineConfig, huggingface_config: AutoConfig
+    ) -> int:
         """Calculate the optimal max sequence length for the model.
         Models are expected to implement this method.
 
         Example:
             >>> class MistralModel(PipelineModel):
             ...     @classmethod
-            ...     def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+            ...     def calculate_max_seq_len(cls, pipeline_config: PipelineConfig, huggingface_config: AutoConfig) -> int:
             ...         try:
             ...             return upper_bounded_default(
-            ...                 upper_bound=pipeline_config.huggingface_config.max_seq_len,
+            ...                 upper_bound=huggingface_config.max_seq_len,
             ...                 default=pipeline_config.max_length,
             ...             )
             ...         except ValueError as e:
@@ -175,7 +191,7 @@ class PipelineModel(ABC, Generic[T]):
             ...                 "Unable to infer max_length for Mistral, the provided "
             ...                 f"max_length ({pipeline_config.max_length}) exceeds the "
             ...                 f"model's max_seq_len "
-            ...                 f"({pipeline_config.huggingface_config.max_seq_len})."
+            ...                 f"({huggingface_config.max_seq_len})."
             ...             )
             ...             raise ValueError(msg) from e
             ...
@@ -186,13 +202,19 @@ class PipelineModel(ABC, Generic[T]):
 
     @classmethod
     @abstractmethod
-    def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
+    def get_kv_params(
+        cls,
+        pipeline_config: PipelineConfig,
+        huggingface_config: AutoConfig,
+        n_devices: int,
+        kv_cache_config: KVCacheConfig,
+    ) -> KVCacheParams:
         """Returns the KV cache params for the pipeline model."""
         ...
 
     @classmethod
     @abstractmethod
-    def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
+    def get_num_layers(cls, huggingface_config: AutoConfig) -> int:
         """Returns the number of layers for the pipeline model."""
         ...
 
@@ -201,6 +223,9 @@ class PipelineModel(ABC, Generic[T]):
         cls,
         pipeline_config: PipelineConfig,
         available_cache_memory: int,
+        huggingface_config: AutoConfig,
+        devices: list[Device],
+        kv_cache_config: KVCacheConfig,
     ) -> int:
         """Returns the estimated optimal batch size to run the model
         given current memory constraints."""
@@ -208,23 +233,30 @@ class PipelineModel(ABC, Generic[T]):
             # we rely on the KVCache setup to know optimal batch size.
             # If we don't have that, default to BS=1.
             return 1
-        elif (
-            len(pipeline_config.devices) == 1
-            and pipeline_config.devices[0].is_host
-        ):
+        elif len(devices) == 1 and devices[0].is_host:
             # batching on CPU is generally not useful, so we hard-code a batch size of 1.
             return 1
 
         # TODO we should map HF configs to a unified MAX Config object
         # this would help avoid these excessive calls to class methods.
-        n_layers = cls.get_num_layers(pipeline_config)
-        kv_params = cls.get_kv_params(pipeline_config)
+        n_layers = cls.get_num_layers(
+            huggingface_config=huggingface_config,
+        )
+        kv_params = cls.get_kv_params(
+            pipeline_config,
+            huggingface_config=huggingface_config,
+            n_devices=len(devices),
+            kv_cache_config=kv_cache_config,
+        )
         inferred_batch_size = infer_optimal_batch_size(
             params=kv_params,
-            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
+            max_seq_len=cls.calculate_max_seq_len(
+                pipeline_config,
+                huggingface_config=huggingface_config,
+            ),
             num_layers=n_layers,
             available_cache_memory=available_cache_memory,
-            devices=pipeline_config.devices,
+            devices=devices,
         )
 
         # clamp the floor of the inferred batch size to 1 and the ceiling to 4096
@@ -349,6 +381,8 @@ class KVCacheMixin(Protocol):
         pipeline_config: PipelineConfig,
         available_cache_memory: int,
         devices: list[Device],
+        huggingface_config: AutoConfig,
+        kv_cache_config: KVCacheConfig,
     ) -> int:
         """Estimates the size of the kv cache in bytes."""
         ...
@@ -365,10 +399,12 @@ class TextGenerationPipeline(TokenGenerator[T]):
         eos_token_id: int,
     ) -> None:
         self._pipeline_config = pipeline_config
+        self._huggingface_config: Optional[AutoConfig] = None
+        self._devices = load_devices(pipeline_config.device_specs)
 
         # Expand eos tokens if more are provided in pipeline_config
-        if "eos_token_id" in pipeline_config.huggingface_config:
-            eos_tokens = pipeline_config.huggingface_config.eos_token_id
+        if "eos_token_id" in self.huggingface_config:
+            eos_tokens = self.huggingface_config.eos_token_id
             if isinstance(eos_tokens, int):
                 if eos_tokens != eos_token_id:
                     msg = f"eos_token_id provided in huggingface config ({eos_tokens}), does not match provided eos_token_id ({eos_token_id}), using provided eos_token_id"
@@ -390,23 +426,25 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
         # Create a grammar compiler if constrained decoding is enabled
         self.vocab_size = None
-        if pipeline_config.enable_structured_output:
-            tokenizer = AutoTokenizer.from_pretrained(
+        if pipeline_config.sampling_config.enable_structured_output:
+            self.tokenizer = AutoTokenizer.from_pretrained(
                 pipeline_config.model_path
             )
-            self.vocab_size = len(tokenizer)
+            self.vocab_size = len(self.tokenizer)
             tokenizer_info = xgr.TokenizerInfo.from_huggingface(
-                tokenizer,
+                self.tokenizer,
                 vocab_size=self.vocab_size,
             )
 
             self._grammar_compiler = xgr.GrammarCompiler(tokenizer_info)
 
         # Initialize Session.
-        session = InferenceSession(devices=self._pipeline_config.devices)
+        session = InferenceSession(devices=self._devices)
 
         # Enable profiling if enabled.
-        session.gpu_profiling(self._pipeline_config.gpu_profiling)
+        session.gpu_profiling(
+            self._pipeline_config.profiling_config.gpu_profiling
+        )
 
         # Use experimental kernels if enabled by env var `USE_EXPERIMENTAL_KERNELS`.
         session._use_experimental_kernels(
@@ -414,14 +452,32 @@ class TextGenerationPipeline(TokenGenerator[T]):
         )
 
         # Load model.
+        if not self._pipeline_config.quantization_encoding:
+            raise ValueError("quantization_encoding must not be None")
+
         self._pipeline_model = pipeline_model(
-            pipeline_config=self._pipeline_config, session=session
+            pipeline_config=self._pipeline_config,
+            session=session,
+            huggingface_config=self.huggingface_config,
+            encoding=self._pipeline_config.quantization_encoding,
+            devices=self._devices,
+            kv_cache_config=self._pipeline_config.kv_cache_config,
         )
 
         # Load sampler.
         self._sampler = session.load(
-            token_sampler(self._pipeline_config.sampling_params),
+            token_sampler(self._pipeline_config.sampling_config),
         )
+
+    @property
+    def huggingface_config(self) -> AutoConfig:
+        if not self._huggingface_config:
+            self._huggingface_config = AutoConfig.from_pretrained(
+                self._pipeline_config.model_path,
+                trust_remote_code=self._pipeline_config.trust_remote_code,
+            )
+
+        return self._huggingface_config
 
     def calculate_num_steps(
         self,
@@ -429,7 +485,8 @@ class TextGenerationPipeline(TokenGenerator[T]):
         context: T,
     ) -> int:
         max_seq_len = self._pipeline_model.calculate_max_seq_len(
-            self._pipeline_config
+            self._pipeline_config,
+            huggingface_config=self.huggingface_config,
         )
         # this is effectively: max_seq_len - (num_tokens_in_kv_cache + num_new_tokens) - num_new_tokens
         num_available_steps = max_seq_len - (
@@ -454,13 +511,14 @@ class TextGenerationPipeline(TokenGenerator[T]):
     ) -> tuple[ModelInputs, int, Optional[torch.Tensor]]:
         tracer: Tracer = Tracer("prepare_batch")
 
-        if self._pipeline_config.enable_structured_output:
+        if self._pipeline_config.sampling_config.enable_structured_output:
             assert self.vocab_size is not None
-            bitmask = torch.ones(
+            bitmask = torch.full(
                 xgr.get_bitmask_shape(
                     len(batch),
                     self.vocab_size,
                 ),
+                -1,
                 dtype=torch.int32,
             )
         else:
@@ -472,7 +530,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         for i, context in enumerate(batch):
             # Initialize a matcher if needed
             if context.json_schema and context.matcher is None:
-                if not self._pipeline_config.enable_structured_output:
+                if not self._pipeline_config.sampling_config.enable_structured_output:
                     msg = "json_schema provided but constrained decoding is not enabled."
                     raise ValueError(msg)
 
@@ -491,6 +549,17 @@ class TextGenerationPipeline(TokenGenerator[T]):
                     logger.warning(msg)
                     # I am removing the json_schema, so it doesn't try to load the grammar repeatedly.
                     context.json_schema = None  # type: ignore
+
+            if context.matcher:
+                if (
+                    jump_forward_string
+                    := context.matcher.find_jump_forward_string()
+                ):
+                    tokens = self.tokenizer.encode(
+                        jump_forward_string, add_special_tokens=False
+                    )
+                    for token in tokens:
+                        context.jump_ahead(token)
 
             # Claim cache rows for context.
             if not self._pipeline_model.kv_manager.contains(
@@ -511,7 +580,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
 
             # Update bitmask
             if (
-                self._pipeline_config.enable_structured_output
+                self._pipeline_config.sampling_config.enable_structured_output
                 and context.matcher
             ):
                 context.matcher.fill_next_token_bitmask(bitmask, index=i)
@@ -597,7 +666,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         generated_tokens = Tensor.zeros(
             (len(context_batch), 0),
             dtype=DType.int64,
-            device=self._pipeline_config.devices[0],
+            device=self._devices[0],
         )
 
         curr_step_inputs = model_inputs
@@ -623,9 +692,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
                 ).to(torch.bool)
                 bitmask = bitmask[:, 0 : self.vocab_size]
 
-                bitmask = Tensor.from_dlpack(bitmask).to(
-                    self._pipeline_config.devices[0]
-                )
+                bitmask = Tensor.from_dlpack(bitmask).to(self._devices[0])
 
             # Sample next token.
             tracer.next("sample_next_token")
@@ -710,49 +777,44 @@ class TextGenerationPipeline(TokenGenerator[T]):
                 # Convert to a Python scalar to improve serialization performance.
                 next_token = int(generated_tokens_host[batch_index, step])
 
-                # Write this token into our pre-allocated tokens array.
-                context.update(
-                    new_token=next_token,
-                )
-
-                max_length = upper_bounded_default(
-                    upper_bound=self._pipeline_model.calculate_max_seq_len(
-                        self._pipeline_config
-                    ),
-                    default=context.max_length,
-                )
-
-                # Set up TextResponse
+                # Get log probs if needed.
                 log_probs: Optional[LogProbabilities] = None
                 if compute_log_probabilities and (
                     log_probs_for_step := batch_log_probabilities[step]
                 ):
                     log_probs = log_probs_for_step[batch_index]
 
-                # Update status
-                # If its eos, dont add it to the token array.
-                if next_token in self._eos_token_id:
+                # Identify completion criteria.
+                is_eos = next_token in self._eos_token_id
+
+                # Write this token into our pre-allocated tokens array.
+                context.update(
+                    new_token=next_token,
+                    log_probabilities=log_probs,
+                    is_eos=is_eos,
+                )
+
+                max_length = upper_bounded_default(
+                    upper_bound=self._pipeline_model.calculate_max_seq_len(
+                        self._pipeline_config,
+                        huggingface_config=self.huggingface_config,
+                    ),
+                    default=context.max_length,
+                )
+
+                if is_eos:
                     status = TextGenerationStatus.END_OF_SEQUENCE
                     res[request_id].update_status(status)
                 elif context.current_length == max_length:
                     status = TextGenerationStatus.MAXIMUM_LENGTH
-                    res[request_id].append_token(
-                        TextResponse(next_token, log_probs)
-                    )
                     res[request_id].update_status(status)
-                # This practically, should not be hit, as once the context object
-                # reaches the max_length, we should break from this current loop.
-                # TODO: Explore cleaning up max length checks.
-                elif context.current_length > max_length:
-                    status = TextGenerationStatus.MAXIMUM_LENGTH
-                    res[request_id].update_status(status)
-                else:
-                    res[request_id].append_token(
-                        TextResponse(next_token, log_probs)
-                    )
 
                 if status.is_done:
                     break
+
+            # Walk outstanding completion tokens, and return to user.
+            for token, log_probs in context.outstanding_completion_tokens():
+                res[request_id].append_token(TextResponse(token, log_probs))
 
         return res
 

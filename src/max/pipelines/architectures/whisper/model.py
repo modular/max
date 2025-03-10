@@ -16,13 +16,16 @@ from __future__ import annotations
 import logging
 import time
 
-from max.driver import Tensor
+from max.driver import Device, Tensor
 from max.engine import InferenceSession, Model
 from max.pipelines import (
+    KVCacheConfig,
     ModelInputs,
     PipelineConfig,
     PipelineModel,
+    SupportedEncoding,
 )
+from transformers import AutoConfig
 
 from .graph import build_graph
 
@@ -50,9 +53,22 @@ class WhisperInputs(ModelInputs):
 
 class Whisper(PipelineModel):
     def __init__(
-        self, pipeline_config: PipelineConfig, session: InferenceSession
+        self,
+        pipeline_config: PipelineConfig,
+        session: InferenceSession,
+        huggingface_config: AutoConfig,
+        encoding: SupportedEncoding,
+        devices: list[Device],
+        kv_cache_config: KVCacheConfig,
     ) -> None:
-        super().__init__(pipeline_config, session)
+        super().__init__(
+            pipeline_config,
+            session,
+            huggingface_config,
+            encoding,
+            devices,
+            kv_cache_config,
+        )
         self.model = self.load_model(session)
 
     def load_model(
@@ -69,6 +85,7 @@ class Whisper(PipelineModel):
         graph = build_graph(
             self.pipeline_config,
             self.weights,  # type: ignore
+            self.huggingface_config,
         )
         model = session.load(
             graph, weights_registry=self.weights.allocated_weights
