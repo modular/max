@@ -41,6 +41,19 @@ from python import PythonObject
 
 from utils import IndexList, Variant, Writable, Writer, write_args
 from utils.write import _TotalWritableBytes, _WriteBufferHeap, write_buffered
+from collections.string._unicode import (
+    is_lowercase,
+    is_uppercase,
+    to_lowercase,
+    to_uppercase,
+)
+from collections.string.format import _CurlyEntryFormattable, _FormatCurlyEntry
+from collections.string.string_slice import (
+    StringSlice,
+    StaticString,
+    to_string_list,
+    _utf8_byte_type,
+)
 
 # ===----------------------------------------------------------------------=== #
 # ord
@@ -1034,20 +1047,19 @@ struct String(
         """
         self._iadd(other.as_bytes())
 
-    @deprecated("Use `str.codepoints()` or `str.codepoint_slices()` instead.")
     fn __iter__(self) -> CodepointSliceIter[__origin_of(self)]:
-        """Iterate over the string, returning immutable references.
+        """Iterate over the string unicode characters.
 
         Returns:
-            An iterator of references to the string elements.
+            An iterator of references to the string unicode characters.
         """
         return self.codepoint_slices()
 
     fn __reversed__(self) -> CodepointSliceIter[__origin_of(self), False]:
-        """Iterate backwards over the string, returning immutable references.
+        """Iterate backwards over the string unicode characters.
 
         Returns:
-            A reversed iterator of references to the string elements.
+            A reversed iterator of references to the string unicode characters.
         """
         return CodepointSliceIter[__origin_of(self), forward=False](self)
 
@@ -1305,10 +1317,8 @@ struct String(
         Notes:
             This does not include the trailing null terminator.
         """
-
-        # Does NOT include the NUL terminator.
         return Span[Byte, __origin_of(self)](
-            ptr=self._buffer.unsafe_ptr(), length=self.byte_length()
+            ptr=self.unsafe_ptr(), length=self.byte_length()
         )
 
     @always_inline
@@ -1412,44 +1422,85 @@ struct String(
         """
         return self.as_string_slice().isspace()
 
-    # TODO(MSTDL-590): String.split() should return `StringSlice`s.
-    fn split(self, sep: StringSlice, maxsplit: Int = -1) raises -> List[String]:
+    @always_inline
+    fn split(
+        self, sep: StringSlice, maxsplit: Int
+    ) -> List[StringSlice[__origin_of(self)]]:
         """Split the string by a separator.
 
         Args:
             sep: The string to split on.
             maxsplit: The maximum amount of items to split from String.
-                Defaults to unlimited.
 
         Returns:
             A List of Strings containing the input split by the separator.
 
-        Raises:
-            If the separator is empty.
+        Examples:
+
+        ```mojo
+        # Splitting with maxsplit
+        _ = "1,2,3".split(",", maxsplit=1) # ['1', '2,3']
+        # Splitting with starting or ending separators
+        _ = ",1,2,3,".split(",", maxsplit=1) # ['', '1,2,3,']
+        _ = "123".split("", maxsplit=1) # ['', '123']
+        ```
+        .
+        """
+        return self.as_string_slice().split(sep, maxsplit)
+
+    @always_inline
+    fn split(self, sep: StringSlice) -> List[StringSlice[__origin_of(self)]]:
+        """Split the string by a separator.
+
+        Args:
+            sep: The string to split on.
+
+        Returns:
+            A List of Strings containing the input split by the separator.
 
         Examples:
 
         ```mojo
         # Splitting a space
-        _ = String("hello world").split(" ") # ["hello", "world"]
+        _ = "hello world".split(" ") # ["hello", "world"]
         # Splitting adjacent separators
-        _ = String("hello,,world").split(",") # ["hello", "", "world"]
-        # Splitting with maxsplit
-        _ = String("1,2,3").split(",", 1) # ['1', '2,3']
+        _ = "hello,,world".split(",") # ["hello", "", "world"]
+        # Splitting with starting or ending separators
+        _ = ",1,2,3,".split(",") # ['', '1', '2', '3', '']
+        _ = "123".split("") # ['', '1', '2', '3', '']
         ```
         .
         """
-        return self.as_string_slice().split[sep.mut, sep.origin](
-            sep, maxsplit=maxsplit
-        )
+        return self.as_string_slice().split(sep)
 
-    fn split(self, sep: NoneType = None, maxsplit: Int = -1) -> List[String]:
+    @always_inline
+    fn split(self, *, maxsplit: Int) -> List[StringSlice[__origin_of(self)]]:
+        """Split the string by every Whitespace separator.
+
+        Args:
+            maxsplit: The maximum amount of items to split from String.
+
+        Returns:
+            A List of Strings containing the input split by the separator.
+
+        Examples:
+
+        ```mojo
+        # Splitting with maxsplit
+        _ = "1     2  3".split(maxsplit=1) # ['1', '2  3']
+        ```
+        .
+        """
+        return self.as_string_slice().split(maxsplit=maxsplit)
+
+    @always_inline
+    fn split(
+        self, sep: NoneType = None
+    ) -> List[StringSlice[__origin_of(self)]]:
         """Split the string by every Whitespace separator.
 
         Args:
             sep: None.
-            maxsplit: The maximum amount of items to split from String. Defaults
-                to unlimited.
 
         Returns:
             A List of Strings containing the input split by the separator.
@@ -1458,31 +1509,18 @@ struct String(
 
         ```mojo
         # Splitting an empty string or filled with whitespaces
-        _ = String("      ").split() # []
-        _ = String("").split() # []
-
+        _ = "      ".split() # []
+        _ = "".split() # []
         # Splitting a string with leading, trailing, and middle whitespaces
-        _ = String("      hello    world     ").split() # ["hello", "world"]
+        _ = "      hello    world     ".split() # ["hello", "world"]
         # Splitting adjacent universal newlines:
-        _ = String(
+        _ = (
             "hello \\t\\n\\v\\f\\r\\x1c\\x1d\\x1e\\x85\\u2028\\u2029world"
         ).split()  # ["hello", "world"]
         ```
         .
         """
-
-        # TODO(MSTDL-590): Avoid the need to loop to convert `StringSlice` to
-        #   `String` by making `String.split()` return `StringSlice`s.
-        var str_slices = self.as_string_slice()._split_whitespace(
-            maxsplit=maxsplit
-        )
-
-        var output = List[String](capacity=len(str_slices))
-
-        for str_slice in str_slices:
-            output.append(String(str_slice[]))
-
-        return output^
+        return self.as_string_slice().split()
 
     fn splitlines(self, keepends: Bool = False) -> List[String]:
         """Split the string at line boundaries. This corresponds to Python's
@@ -1496,7 +1534,7 @@ struct String(
         Returns:
             A List of Strings containing the input split by line boundaries.
         """
-        return _to_string_list(self.as_string_slice().splitlines(keepends))
+        return to_string_list(self.as_string_slice().splitlines(keepends))
 
     fn replace(self, old: StringSlice, new: StringSlice) -> String:
         """Return a copy of the string with all occurrences of substring `old`
