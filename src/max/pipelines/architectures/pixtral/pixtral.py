@@ -24,10 +24,12 @@ from max.driver import Device, Tensor
 from max.engine import InferenceSession, Model
 from max.graph.weights import SafetensorWeights
 from max.pipelines import (
+    KVCacheConfig,
     ModelInputs,
     ModelOutputs,
     PipelineConfig,
     PipelineModel,
+    SupportedEncoding,
     TextAndVisionContext,
     upper_bounded_default,
 )
@@ -38,6 +40,7 @@ from max.pipelines.kv_cache import (
     estimate_kv_cache_size,
     load_kv_manager,
 )
+from transformers import AutoConfig
 
 from .model.graph import _build_text_graph, _build_vision_graph
 from .vision_encoder.attention_utils import causal_attention_mask_2d_from_imgs
@@ -89,9 +92,22 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
     """The overall interface to the Pixtral model."""
 
     def __init__(
-        self, pipeline_config: PipelineConfig, session: InferenceSession
+        self,
+        pipeline_config: PipelineConfig,
+        session: InferenceSession,
+        huggingface_config: AutoConfig,
+        encoding: SupportedEncoding,
+        devices: list[Device],
+        kv_cache_config: KVCacheConfig,
     ) -> None:
-        super().__init__(pipeline_config, session)
+        super().__init__(
+            pipeline_config,
+            session,
+            huggingface_config,
+            encoding,
+            devices,
+            kv_cache_config,
+        )
         self.vision_model, self.language_model = self.load_model(session)
         # Note that in a multimodal model, the language model is the last model in the
         # pipeline. Unfortunately, self.model is still being used (and exposed)
@@ -115,10 +131,10 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
                 shape=[
                     0,
                     0,
-                    self.pipeline_config.huggingface_config.text_config.hidden_size,
+                    self.huggingface_config.text_config.hidden_size,
                 ],
-                dtype=self.pipeline_config.dtype,
-            ).to(self.pipeline_config.devices[0])
+                dtype=self.dtype,
+            ).to(self.devices[0])
         assert model_inputs.kv_cache_inputs is not None, (
             "Pixtral has KV cache inputs, but none were provided"
         )
@@ -144,16 +160,14 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
                 [0] + [ctx.active_length for ctx in context_batch],
                 dtype=np.uint32,
             )
-        ).to(self.pipeline_config.devices[0])
+        ).to(self.devices[0])
 
         # Input Ids: ["total_seq_len"], Int64
         # Create a ragged token vector of length: sum(len(t) for t in tokens).
         tokens = np.ascontiguousarray(
             np.concatenate([ctx.next_tokens for ctx in context_batch])
         )
-        input_ids = Tensor.from_numpy(tokens).to(
-            self.pipeline_config.devices[0]
-        )
+        input_ids = Tensor.from_numpy(tokens).to(self.devices[0])
 
         # TODO: change this to work with all contexts in the batch.
         if context_batch[
@@ -164,19 +178,17 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
             image = np.ascontiguousarray(
                 np.transpose(context_batch[0].pixel_values[0], (1, 2, 0))
             )
-            pixel_values = Tensor.from_numpy(image).to(
-                self.pipeline_config.devices[0]
-            )
+            pixel_values = Tensor.from_numpy(image).to(self.devices[0])
             # TODO(KERN-782): This should be -inf but softmax saturates with NaNs.
             fill_val = -10000.0
             attention_mask = causal_attention_mask_2d_from_imgs(
                 [image],
-                self.pipeline_config.huggingface_config.vision_config.patch_size,
+                self.huggingface_config.vision_config.patch_size,
                 1,
                 fill_val,
             )
             attention_mask = Tensor.from_numpy(attention_mask).to(
-                self.pipeline_config.devices[0]
+                self.devices[0]
             )
             return PixtralInputs(
                 input_ids=input_ids,
@@ -211,25 +223,34 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
         )
 
     @classmethod
-    def get_num_layers(cls, pipeline_config: PipelineConfig) -> int:
-        return pipeline_config.huggingface_config.text_config.num_hidden_layers
+    def get_num_layers(cls, huggingface_config: AutoConfig) -> int:
+        return huggingface_config.text_config.num_hidden_layers
 
     @classmethod
-    def get_kv_params(cls, pipeline_config: PipelineConfig) -> KVCacheParams:
+    def get_kv_params(
+        cls,
+        pipeline_config: PipelineConfig,
+        huggingface_config: AutoConfig,
+        n_devices: int,
+        kv_cache_config: KVCacheConfig,
+    ) -> KVCacheParams:
         return KVCacheParams(
-            page_size=pipeline_config.kv_cache_page_size,
+            page_size=kv_cache_config.kv_cache_page_size,
             dtype=pipeline_config.cache_dtype,
-            n_kv_heads=pipeline_config.huggingface_config.text_config.num_key_value_heads,
-            head_dim=pipeline_config.huggingface_config.text_config.head_dim,
-            cache_strategy=pipeline_config.cache_strategy,
-            enable_prefix_caching=pipeline_config.enable_prefix_caching,
+            n_kv_heads=huggingface_config.text_config.num_key_value_heads,
+            head_dim=huggingface_config.text_config.head_dim,
+            cache_strategy=kv_cache_config.cache_strategy,
+            enable_prefix_caching=kv_cache_config.enable_prefix_caching,
+            n_devices=n_devices,
         )
 
     @classmethod
-    def calculate_max_seq_len(cls, pipeline_config: PipelineConfig) -> int:
+    def calculate_max_seq_len(
+        cls, pipeline_config: PipelineConfig, huggingface_config: AutoConfig
+    ) -> int:
         try:
             return upper_bounded_default(
-                upper_bound=pipeline_config.huggingface_config.text_config.max_position_embeddings,
+                upper_bound=huggingface_config.text_config.max_position_embeddings,
                 default=pipeline_config.max_length,
             )
         except ValueError as e:
@@ -237,7 +258,7 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
                 "Unable to infer max_length for Pixtral, the provided "
                 f"max_length ({pipeline_config.max_length}) exceeds the "
                 f"model's max_position_embeddings "
-                f"({pipeline_config.huggingface_config.text_config.max_position_embeddings})."
+                f"({huggingface_config.text_config.max_position_embeddings})."
             )
             raise ValueError(msg) from e
 
@@ -247,13 +268,22 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
         available_cache_memory: int,
     ) -> KVCacheManager:
         return load_kv_manager(
-            params=self.get_kv_params(self.pipeline_config),
+            params=self.get_kv_params(
+                self.pipeline_config,
+                huggingface_config=self.huggingface_config,
+                n_devices=len(self.devices),
+                kv_cache_config=self.kv_cache_config,
+            ),
             max_batch_size=self.pipeline_config.max_batch_size,
-            max_seq_len=self.calculate_max_seq_len(self.pipeline_config),
-            num_layers=self.get_num_layers(self.pipeline_config),
-            devices=self.pipeline_config.devices,
+            max_seq_len=self.calculate_max_seq_len(
+                self.pipeline_config, huggingface_config=self.huggingface_config
+            ),
+            num_layers=self.get_num_layers(
+                huggingface_config=self.huggingface_config
+            ),
+            devices=self.devices,
             available_cache_memory=available_cache_memory,
-            page_size=self.pipeline_config.kv_cache_page_size,
+            page_size=self.kv_cache_config.kv_cache_page_size,
             session=session,
         )
 
@@ -263,13 +293,24 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
         pipeline_config: PipelineConfig,
         available_cache_memory: int,
         devices: list[Device],
+        huggingface_config: AutoConfig,
+        kv_cache_config: KVCacheConfig,
     ) -> int:
         """Estimates the size of the kv cache in bytes."""
         return estimate_kv_cache_size(
-            params=cls.get_kv_params(pipeline_config),
+            params=cls.get_kv_params(
+                pipeline_config,
+                huggingface_config=huggingface_config,
+                n_devices=len(devices),
+                kv_cache_config=kv_cache_config,
+            ),
             max_batch_size=pipeline_config.max_batch_size,
-            max_seq_len=cls.calculate_max_seq_len(pipeline_config),
-            num_layers=cls.get_num_layers(pipeline_config),
+            max_seq_len=cls.calculate_max_seq_len(
+                pipeline_config, huggingface_config=huggingface_config
+            ),
+            num_layers=cls.get_num_layers(
+                huggingface_config=huggingface_config
+            ),
             available_cache_memory=available_cache_memory,
             devices=devices,
         )
@@ -286,7 +327,7 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
         )
         self._input_row_offsets_prealloc = Tensor.from_numpy(
             np.arange(self.pipeline_config.max_batch_size + 1, dtype=np.uint32)
-        ).to(self.pipeline_config.devices[0])
+        ).to(self.devices[0])
 
         weights = self.pipeline_config.load_weights()
 
@@ -342,6 +383,8 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
                 build = lambda: _build_vision_graph(
                     pipeline_config=self.pipeline_config,
                     weights=self._weights,
+                    huggingface_config=self.huggingface_config,
+                    dtype=self.dtype,
                 )
                 vision_model_future = executor.submit(
                     build_and_compile_model, build, "vision", export_path
@@ -351,10 +394,18 @@ class PixtralModel(PipelineModel[TextAndVisionContext]):
                     pipeline_config=self.pipeline_config,
                     weights=self._weights,
                     max_seq_len=self.calculate_max_seq_len(
-                        self.pipeline_config
+                        self.pipeline_config,
+                        huggingface_config=self.huggingface_config,
                     ),
-                    kv_params=self.get_kv_params(self.pipeline_config),
+                    kv_params=self.get_kv_params(
+                        self.pipeline_config,
+                        huggingface_config=self.huggingface_config,
+                        n_devices=len(self.devices),
+                        kv_cache_config=self.kv_cache_config,
+                    ),
                     kv_manager=self.kv_manager,
+                    huggingface_config=self.huggingface_config,
+                    dtype=self.dtype,
                 )
                 text_model_future = executor.submit(
                     build_and_compile_model, build, "text", export_path

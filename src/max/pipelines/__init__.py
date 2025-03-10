@@ -17,10 +17,13 @@ from typing import Callable as _Callable
 from typing import Union as _Union
 
 from .config import (
+    KVCacheConfig,
+    MAXModelConfig,
     PipelineConfig,
     PipelineEngine,
+    ProfilingConfig,
     RopeType,
-    SamplingParams,
+    SamplingConfig,
     SupportedEncoding,
     WeightsFormat,
 )
@@ -64,10 +67,13 @@ PipelinesFactory = _Callable[[], _Union[TokenGenerator, EmbeddingsGenerator]]
 __all__ = [
     "HuggingFaceFile",
     "PipelineConfig",
+    "ProfilingConfig",
+    "KVCacheConfig",
+    "MAXModelConfig",
     "PipelineEngine",
     "PipelineTask",
     "PIPELINE_REGISTRY",
-    "SamplingParams",
+    "SamplingConfig",
     "SupportedArchitecture",
     "SupportedEncoding",
     "TokenGenerator",

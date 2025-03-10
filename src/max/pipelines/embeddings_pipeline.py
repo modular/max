@@ -17,8 +17,10 @@ from __future__ import annotations
 
 from typing import Any, Type, TypeVar
 
+from max.driver import load_devices
 from max.engine import InferenceSession
 from max.profiler import Tracer, traced
+from transformers import AutoConfig
 
 from .config import PipelineConfig
 from .context import InputContext
@@ -39,11 +41,26 @@ class EmbeddingsPipeline(EmbeddingsGenerator[T]):
     ) -> None:
         self._pipeline_config = pipeline_config
         # Initialize Session.
-        session = InferenceSession(devices=self._pipeline_config.devices)
+        devices = load_devices(self._pipeline_config.device_specs)
+        session = InferenceSession(devices=devices)
 
         # Load model.
+        huggingface_config = AutoConfig.from_pretrained(
+            self._pipeline_config.model_path,
+            trust_remote_code=self._pipeline_config.trust_remote_code,
+            revision=self._pipeline_config.huggingface_revision,
+        )
+
+        if not self._pipeline_config.quantization_encoding:
+            raise ValueError("quantization_encoding must not be None")
+
         self._pipeline_model = pipeline_model(
-            pipeline_config=self._pipeline_config, session=session
+            pipeline_config=self._pipeline_config,
+            session=session,
+            huggingface_config=huggingface_config,
+            encoding=self._pipeline_config.quantization_encoding,
+            devices=devices,
+            kv_cache_config=self._pipeline_config.kv_cache_config,
         )
 
     @traced

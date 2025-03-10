@@ -17,6 +17,7 @@ from max.graph import Graph, ops
 from max.graph.weights import SafetensorWeights
 from max.pipelines import PipelineConfig
 from max.pipelines.nn import Conv2D, Linear, RMSNorm
+from transformers import AutoConfig
 
 from .attention import Attention
 from .rotary_embedding_2d import RotaryEmbedding2D
@@ -41,14 +42,14 @@ def _patch_conv2d(
     """
     # Loaded torch weights shape = torch.Size([1024, 3, 16, 16]).
     # Conv2D expects (height, width, in_channels, out_channels) = [16, 16, 3, 1024].
-    weights = ops.permute(  # type: ignore
+    filter_weights = ops.permute(
         weights.weight.allocate(
             dtype, [out_channels, in_channels, patch_size, patch_size], None
         ),
         [2, 3, 1, 0],
     )
     return Conv2D(
-        weights,  # type: ignore
+        filter_weights,
         stride=(patch_size, patch_size),
     )
 
@@ -99,39 +100,41 @@ def _rms_norm(dims: int, eps: float, weights: SafetensorWeights) -> RMSNorm:
 def _encoder_attention(
     pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
+    huggingface_config: AutoConfig,
+    dtype: DType,
 ) -> Attention:
     # TODO: Do we need to transpose weights? Not obvious from shapes. Both dims are the same.
-    hidden_dim = pipeline_config.huggingface_config.vision_config.hidden_size
+    hidden_dim = huggingface_config.vision_config.hidden_size
     wq = _linear(
-        pipeline_config.dtype,
+        dtype,
         hidden_dim,
         hidden_dim,
         weights.attention.q_proj,
     )
     wk = _linear(
-        pipeline_config.dtype,
+        dtype,
         hidden_dim,
         hidden_dim,
         weights.attention.k_proj,
     )
     wv = _linear(
-        pipeline_config.dtype,
+        dtype,
         hidden_dim,
         hidden_dim,
         weights.attention.v_proj,
     )
     wo = _linear(
-        pipeline_config.dtype,
+        dtype,
         hidden_dim,
         hidden_dim,
         weights.attention.o_proj,
     )
 
     return Attention(
-        n_heads=pipeline_config.huggingface_config.vision_config.num_attention_heads,
+        n_heads=huggingface_config.vision_config.num_attention_heads,
         dim=hidden_dim,
-        head_dim=pipeline_config.huggingface_config.vision_config.head_dim,
-        dropout=pipeline_config.huggingface_config.vision_config.attention_dropout,
+        head_dim=huggingface_config.vision_config.head_dim,
+        dropout=huggingface_config.vision_config.attention_dropout,
         wq=wq,
         wk=wk,
         wv=wv,
@@ -143,39 +146,42 @@ def _transformer(
     graph: Graph,
     pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
+    huggingface_config: AutoConfig,
+    dtype: DType,
 ):
     with graph:
         layers = [
             TransformerBlock(
                 attention=_encoder_attention(
-                    pipeline_config, weights.layers[i]
+                    pipeline_config,
+                    weights.layers[i],
+                    huggingface_config,
+                    dtype,
                 ),
                 mlp=_feed_forward(
-                    pipeline_config.dtype,
-                    pipeline_config.huggingface_config.vision_config.hidden_size,
-                    pipeline_config.huggingface_config.vision_config.intermediate_size,
+                    dtype,
+                    huggingface_config.vision_config.hidden_size,
+                    huggingface_config.vision_config.intermediate_size,
                     weights.layers[i],
                 ),
                 attention_norm=_rms_norm(
-                    pipeline_config.huggingface_config.vision_config.hidden_size,
+                    huggingface_config.vision_config.hidden_size,
                     1e-5,
                     weights.layers[i].attention_norm,
                 ),
                 mlp_norm=_rms_norm(
-                    pipeline_config.huggingface_config.vision_config.hidden_size,
+                    huggingface_config.vision_config.hidden_size,
                     1e-5,
                     weights.layers[i].ffn_norm,
                 ),
             )
-            for i in range(
-                pipeline_config.huggingface_config.vision_config.num_hidden_layers
-            )
+            for i in range(huggingface_config.vision_config.num_hidden_layers)
         ]
 
         return Transformer(
-            n_heads=pipeline_config.huggingface_config.vision_config.num_attention_heads,
+            n_heads=huggingface_config.vision_config.num_attention_heads,
             layers=layers,
-            dtype=pipeline_config.dtype,
+            dtype=dtype,
         )
 
 
@@ -183,28 +189,34 @@ def _vision_encoder(
     graph: Graph,
     pipeline_config: PipelineConfig,
     weights: SafetensorWeights,
+    huggingface_config: AutoConfig,
+    dtype: DType,
 ) -> VisionEncoder:
     patch_conv = _patch_conv2d(
-        pipeline_config.dtype,
-        pipeline_config.huggingface_config.vision_config.num_channels,
-        pipeline_config.huggingface_config.vision_config.patch_size,
-        pipeline_config.huggingface_config.vision_config.hidden_size,
+        dtype,
+        huggingface_config.vision_config.num_channels,
+        huggingface_config.vision_config.patch_size,
+        huggingface_config.vision_config.hidden_size,
         weights.vision_tower.patch_conv,
     )
     ln_pre = _rms_norm(
-        pipeline_config.huggingface_config.vision_config.hidden_size,
+        huggingface_config.vision_config.hidden_size,
         1e-5,
         weights.vision_tower.ln_pre,
     )
     patch_rope = RotaryEmbedding2D(
-        dim=pipeline_config.huggingface_config.vision_config.hidden_size,
-        n_heads=pipeline_config.huggingface_config.vision_config.num_attention_heads,
-        theta=pipeline_config.huggingface_config.vision_config.rope_theta,
-        max_patches_per_side=pipeline_config.huggingface_config.vision_config.image_size
-        // pipeline_config.huggingface_config.vision_config.patch_size,
+        dim=huggingface_config.vision_config.hidden_size,
+        n_heads=huggingface_config.vision_config.num_attention_heads,
+        theta=huggingface_config.vision_config.rope_theta,
+        max_patches_per_side=huggingface_config.vision_config.image_size
+        // huggingface_config.vision_config.patch_size,
     )
     encoder_transformer = _transformer(
-        graph, pipeline_config, weights.vision_tower.transformer
+        graph,
+        pipeline_config,
+        weights.vision_tower.transformer,
+        huggingface_config,
+        dtype,
     )
 
     return VisionEncoder(
@@ -212,7 +224,7 @@ def _vision_encoder(
         layer_norm=ln_pre,
         patch_positional_embedding=patch_rope,
         transformer=encoder_transformer,
-        dtype=pipeline_config.dtype,
-        patch_size=pipeline_config.huggingface_config.vision_config.patch_size,
-        max_image_size=pipeline_config.huggingface_config.vision_config.image_size,
+        dtype=dtype,
+        patch_size=huggingface_config.vision_config.patch_size,
+        max_image_size=huggingface_config.vision_config.image_size,
     )

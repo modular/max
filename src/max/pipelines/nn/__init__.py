@@ -25,14 +25,19 @@ from .attention import (
     GPTQAttentionWithRope,
     NaiveAttentionWithRope,
 )
-from .comm import Signals
+from .comm import Allreduce, Signals
 from .conv import Conv1D, Conv2D, Conv3D
 from .embedding import Embedding, EmbeddingV2, VocabParallelEmbedding
 from .kernels import MHAMaskVariant
 from .layer import Layer, LayerV2
 from .linear import MLP, MLPV2, DistributedMLP, GPTQLinearV2, Linear, LinearV2
 from .norm import DistributedRMSNorm, LayerNorm, LayerNormV2, RMSNorm, RMSNormV2
-from .rotary_embedding import OptimizedRotaryEmbedding, RotaryEmbedding
+from .rotary_embedding import (
+    Llama3RopeScalingParams,
+    Llama3RotaryEmbedding,
+    OptimizedRotaryEmbedding,
+    RotaryEmbedding,
+)
 from .sequential import Sequential
 from .transformer import (
     DistributedTransformer,
@@ -44,6 +49,7 @@ from .transformer import (
 )
 
 __all__ = [
+    "Allreduce",
     "Attention",
     "AttentionImpl",
     "AttentionImplQKV",
