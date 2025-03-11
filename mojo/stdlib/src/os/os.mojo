@@ -22,7 +22,7 @@ from os import listdir
 from collections import InlineArray, List
 from collections.string import StringSlice
 from sys import external_call, is_gpu, os_is_linux, os_is_windows
-from sys.ffi import OpaquePointer, c_char
+from sys.ffi import OpaquePointer, c_char, c_str_ptr
 
 from memory import UnsafePointer
 
@@ -108,9 +108,7 @@ struct _DirHandle:
         if not isdir(path):
             raise "the directory '" + path + "' does not exist"
 
-        self._handle = external_call["opendir", OpaquePointer](
-            path.unsafe_cstr_ptr()
-        )
+        self._handle = external_call["opendir", OpaquePointer](c_str_ptr(path))
 
         if not self._handle:
             raise "unable to open the directory '" + path + "'"

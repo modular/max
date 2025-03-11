@@ -28,7 +28,7 @@ from sys import (
 )
 from sys._amdgpu import printf_append_args, printf_append_string_n, printf_begin
 from sys._libc import dup, fclose, fdopen, fflush
-from sys.ffi import OpaquePointer, c_char
+from sys.ffi import OpaquePointer, c_char, c_str_ptr
 from sys.intrinsics import _type_is_eq
 
 from builtin.dtype import _get_dtype_printf_format
@@ -55,7 +55,7 @@ struct _fdopen[mode: StringLiteral = "a"]:
             stream_id: The stream id
         """
 
-        self.handle = fdopen(dup(stream_id.value), mode.unsafe_cstr_ptr())
+        self.handle = fdopen(dup(stream_id.value), c_str_ptr(mode))
 
     fn __enter__(self) -> Self:
         """Open the file handle for use within a context manager"""
@@ -183,7 +183,7 @@ fn _printf[
     @parameter
     if is_nvidia_gpu():
         _ = external_call["vprintf", Int32](
-            fmt.unsafe_cstr_ptr(), Pointer.address_of(loaded_pack)
+            c_str_ptr(fmt), Pointer.address_of(loaded_pack)
         )
     elif is_amd_gpu():
         # This is adapted from Triton's third party method for lowering
@@ -266,7 +266,7 @@ fn _printf[
                     `) -> !pop.scalar<si32>`,
                 ],
                 _type=Int32,
-            ](fd, fmt.unsafe_cstr_ptr(), loaded_pack)
+            ](fd, c_str_ptr(fmt), loaded_pack)
 
 
 # ===----------------------------------------------------------------------=== #
@@ -310,7 +310,7 @@ fn _snprintf[
                 `) -> !pop.scalar<si32>`,
             ],
             _type=Int32,
-        ](str, size, fmt.unsafe_cstr_ptr(), loaded_pack)
+        ](str, size, c_str_ptr(fmt), loaded_pack)
     )
 
 

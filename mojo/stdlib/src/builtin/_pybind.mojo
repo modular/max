@@ -13,6 +13,7 @@
 
 from collections import Optional
 from sys import alignof, sizeof
+from sys.ffi import c_str_ptr
 
 import python._cpython as cp
 from memory import UnsafePointer, stack_allocation
@@ -51,10 +52,7 @@ fn fail_initialization(owned err: Error) -> PythonObject:
     cpython = get_cpython()
     error_type = cpython.get_error_global("PyExc_Exception")
 
-    cpython.PyErr_SetString(
-        error_type,
-        err.unsafe_cstr_ptr(),
-    )
+    cpython.PyErr_SetString(error_type, c_str_ptr(err))
     _ = err^
     return PythonObject(PyObjectPtr())
 

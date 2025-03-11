@@ -33,6 +33,7 @@ from sys.ffi import (
     c_size_t,
     c_ssize_t,
     c_uint,
+    c_str_ptr,
 )
 
 from memory import UnsafePointer
@@ -371,10 +372,7 @@ struct PyMethodDef:
         #   type, similar to `get_linkage_name()`?
 
         return PyMethodDef(
-            func_name.unsafe_cstr_ptr(),
-            func,
-            METH_VARARGS,
-            docstring.unsafe_cstr_ptr(),
+            c_str_ptr(func_name), func, METH_VARARGS, c_str_ptr(docstring)
         )
 
 
@@ -652,7 +650,7 @@ struct PyModuleDef(Stringable, Representable, Writable):
     @implicit
     fn __init__(out self, name: String):
         self.base = PyModuleDef_Base()
-        self.name = name.unsafe_cstr_ptr()
+        self.name = c_str_ptr(name)
         self.docstring = UnsafePointer[c_char]()
         # means that the module does not support sub-interpreters
         self.size = -1
@@ -1729,9 +1727,7 @@ struct CPython:
         https://docs.python.org/3/c-api/unicode.html#c.PyUnicode_DecodeUTF8).
         """
         var r = self.lib.call["PyUnicode_DecodeUTF8", PyObjectPtr](
-            strslice.unsafe_ptr().bitcast[Int8](),
-            strslice.byte_length(),
-            "strict".unsafe_cstr_ptr(),
+            c_str_ptr(strslice), strslice.byte_length(), c_str_ptr("strict")
         )
 
         self.log(
