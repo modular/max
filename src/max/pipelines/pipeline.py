@@ -32,6 +32,7 @@ import torch
 from max.driver import Device, Tensor, load_devices
 from max.dtype import DType
 from max.engine import InferenceSession
+from max.graph.weights import Weights
 from max.pipelines.kv_cache import (
     KVCacheInputs,
     KVCacheInputsSequence,
@@ -153,12 +154,14 @@ class PipelineModel(ABC, Generic[T]):
         encoding: SupportedEncoding,
         devices: list[Device],
         kv_cache_config: KVCacheConfig,
+        weights: Weights,
     ) -> None:
         self.pipeline_config = pipeline_config
         self.huggingface_config = huggingface_config
         self.encoding = encoding
         self.devices = devices
         self.kv_cache_config = kv_cache_config
+        self.weights = weights
 
         if isinstance(self, KVCacheMixin):
             self.kv_manager = self.load_kv_manager(
@@ -204,10 +207,10 @@ class PipelineModel(ABC, Generic[T]):
     @abstractmethod
     def get_kv_params(
         cls,
-        pipeline_config: PipelineConfig,
         huggingface_config: AutoConfig,
         n_devices: int,
         kv_cache_config: KVCacheConfig,
+        cache_dtype: DType,
     ) -> KVCacheParams:
         """Returns the KV cache params for the pipeline model."""
         ...
@@ -226,6 +229,7 @@ class PipelineModel(ABC, Generic[T]):
         huggingface_config: AutoConfig,
         devices: list[Device],
         kv_cache_config: KVCacheConfig,
+        cache_dtype: DType,
     ) -> int:
         """Returns the estimated optimal batch size to run the model
         given current memory constraints."""
@@ -242,11 +246,12 @@ class PipelineModel(ABC, Generic[T]):
         n_layers = cls.get_num_layers(
             huggingface_config=huggingface_config,
         )
+
         kv_params = cls.get_kv_params(
-            pipeline_config,
             huggingface_config=huggingface_config,
             n_devices=len(devices),
             kv_cache_config=kv_cache_config,
+            cache_dtype=cache_dtype,
         )
         inferred_batch_size = infer_optimal_batch_size(
             params=kv_params,
@@ -273,7 +278,7 @@ class PipelineModel(ABC, Generic[T]):
         # TODO move this logic to the PipelineModel instead of PipelineConfig class.
         # Better yet, make this more accurate by loading and measuring memory consumption
         # after we load the model
-        return pipeline_config.weights_size()
+        return pipeline_config.model_config.weights_size()
 
     @abstractmethod
     def execute(
@@ -383,6 +388,7 @@ class KVCacheMixin(Protocol):
         devices: list[Device],
         huggingface_config: AutoConfig,
         kv_cache_config: KVCacheConfig,
+        cache_dtype: DType,
     ) -> int:
         """Estimates the size of the kv cache in bytes."""
         ...
@@ -400,7 +406,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
     ) -> None:
         self._pipeline_config = pipeline_config
         self._huggingface_config: Optional[AutoConfig] = None
-        self._devices = load_devices(pipeline_config.device_specs)
+        self._devices = load_devices(pipeline_config.model_config.device_specs)
 
         # Expand eos tokens if more are provided in pipeline_config
         if "eos_token_id" in self.huggingface_config:
@@ -428,7 +434,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
         self.vocab_size = None
         if pipeline_config.sampling_config.enable_structured_output:
             self.tokenizer = AutoTokenizer.from_pretrained(
-                pipeline_config.model_path
+                pipeline_config.model_config.model_path
             )
             self.vocab_size = len(self.tokenizer)
             tokenizer_info = xgr.TokenizerInfo.from_huggingface(
@@ -452,16 +458,18 @@ class TextGenerationPipeline(TokenGenerator[T]):
         )
 
         # Load model.
-        if not self._pipeline_config.quantization_encoding:
+        if not self._pipeline_config.model_config.quantization_encoding:
             raise ValueError("quantization_encoding must not be None")
 
+        weights = self._pipeline_config.load_weights()
         self._pipeline_model = pipeline_model(
             pipeline_config=self._pipeline_config,
             session=session,
             huggingface_config=self.huggingface_config,
-            encoding=self._pipeline_config.quantization_encoding,
+            encoding=self._pipeline_config.model_config.quantization_encoding,
             devices=self._devices,
             kv_cache_config=self._pipeline_config.kv_cache_config,
+            weights=weights,
         )
 
         # Load sampler.
@@ -473,8 +481,8 @@ class TextGenerationPipeline(TokenGenerator[T]):
     def huggingface_config(self) -> AutoConfig:
         if not self._huggingface_config:
             self._huggingface_config = AutoConfig.from_pretrained(
-                self._pipeline_config.model_path,
-                trust_remote_code=self._pipeline_config.trust_remote_code,
+                self._pipeline_config.model_config.model_path,
+                trust_remote_code=self._pipeline_config.model_config.trust_remote_code,
             )
 
         return self._huggingface_config
@@ -721,7 +729,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
                 except NotImplementedError:
                     logger.warning(
                         "Unable to compute log probabilities for"
-                        f" {self._pipeline_config.model_path}"
+                        f" {self._pipeline_config.model_config.model_path}"
                     )
                     batch_log_probabilities.append(None)
             # Check if we're on our last iteration. If so, skip preparing the next batch
