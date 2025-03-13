@@ -15,25 +15,24 @@
 from gpu.host import Dim
 from gpu.id import block_dim, block_idx, thread_idx
 from math import ceildiv
+from layout import LayoutTensor, Layout
 from max.driver import (
+    Accelerator,
     Device,
-    DynamicTensor,
     Tensor,
-    accelerator_device,
-    cpu_device,
+    accelerator,
+    cpu,
 )
-from max.driver.accelerator import compile
 from sys import has_nvidia_gpu_accelerator
 
 alias channel_dtype = DType.uint8
 alias internal_float_dtype = DType.float32
 alias tensor_rank = 3
-alias TensorType = DynamicTensor[type=channel_dtype, rank=tensor_rank].Type
 
 
 def print_image[h: Int, w: Int](t: Tensor[channel_dtype, 3]):
     """A helper function to print out the grayscale channel intensities."""
-    out = t.unsafe_slice()
+    out = t.to_layout_tensor()
     for row in range(h):
         for col in range(w):
             var v = out[row, col, 0]
@@ -45,11 +44,14 @@ def print_image[h: Int, w: Int](t: Tensor[channel_dtype, 3]):
         print("")
 
 
-fn color_to_grayscale_conversion(
+fn color_to_grayscale_conversion[
+    image_layout: Layout,
+    out_layout: Layout,
+](
     width: Int,
     height: Int,
-    image: TensorType,
-    out: TensorType,
+    image: LayoutTensor[channel_dtype, image_layout, MutableAnyOrigin],
+    out: LayoutTensor[channel_dtype, out_layout, MutableAnyOrigin],
 ):
     """Converting each RGB pixel to grayscale, parallelized across the output tensor on the GPU.
     """
@@ -70,8 +72,8 @@ def main():
     if has_nvidia_gpu_accelerator():
         # Attempt to connect to a compatible GPU. If one is not found, this will
         # error out and exit.
-        gpu_device = accelerator_device()
-        host_device = cpu_device()
+        gpu_device = accelerator()
+        host_device = cpu()
 
         alias IMAGE_WIDTH = 5
         alias IMAGE_HEIGHT = 10
@@ -97,8 +99,15 @@ def main():
             (IMAGE_HEIGHT, IMAGE_WIDTH, 1), gpu_device
         )
 
+        rgb_layout_tensor = rgb_tensor.to_layout_tensor()
+        gray_layout_tensor = gray_tensor.to_layout_tensor()
+
         # Compile the function to run across a grid on the GPU.
-        gpu_function = compile[color_to_grayscale_conversion](gpu_device)
+        gpu_function = Accelerator.compile[
+            color_to_grayscale_conversion[
+                rgb_layout_tensor.layout, gray_layout_tensor.layout
+            ]
+        ](gpu_device)
 
         # The grid is divided up into blocks, making sure there's an extra
         # full block for any remainder. This hasn't been tuned for any specific
@@ -114,8 +123,8 @@ def main():
             gpu_device,
             IMAGE_WIDTH,
             IMAGE_HEIGHT,
-            rgb_tensor.unsafe_slice(),
-            gray_tensor.unsafe_slice(),
+            rgb_layout_tensor,
+            gray_layout_tensor,
             grid_dim=Dim(num_col_blocks, num_row_blocks),
             block_dim=Dim(BLOCK_SIZE, BLOCK_SIZE),
         )
