@@ -16,17 +16,16 @@ from __future__ import annotations
 import logging
 import time
 import warnings
-from typing import List, Sequence, Union, cast
+from typing import List, Optional, Sequence, Union, cast
 
 import numpy as np
 from max.driver import CPU, Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
 from max.graph import DeviceRef, Graph, TensorType, TensorValue
-from max.graph.weights import Weights
+from max.graph.weights import Weights, WeightsAdapter
 from max.pipelines import (
     KVCacheConfig,
-    LogProbabilities,
     ModelInputs,
     ModelOutputs,
     PipelineConfig,
@@ -36,6 +35,7 @@ from max.pipelines import (
     upper_bounded_default,
 )
 from max.pipelines.dataprocessing import batch_padded_tokens_and_mask
+from max.pipelines.interfaces import LogProbabilities
 from max.pipelines.kv_cache import (
     KVCacheInputs,
     KVCacheManager,
@@ -43,7 +43,9 @@ from max.pipelines.kv_cache import (
     estimate_kv_cache_size,
     load_kv_manager,
 )
-from max.pipelines.nn.compute_log_probabilities import compute_log_probabilities
+from max.pipelines.log_probabilities import (
+    compute_log_probabilities,
+)
 from transformers import AutoConfig
 
 from .graph import transformer
@@ -88,6 +90,7 @@ class Qwen2Model(PipelineModel[TextContext]):
         devices: list[Device],
         kv_cache_config: KVCacheConfig,
         weights: Weights,
+        adapter: Optional[WeightsAdapter] = None,
     ) -> None:
         super().__init__(
             pipeline_config,
@@ -97,6 +100,7 @@ class Qwen2Model(PipelineModel[TextContext]):
             devices,
             kv_cache_config,
             weights,
+            adapter,
         )
         self.model = self.load_model(session)
 

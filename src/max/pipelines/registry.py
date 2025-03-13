@@ -103,14 +103,14 @@ class SupportedArchitecture:
     ):
         """Initializes a model architecture supported by MAX pipelines.
 
-        New architectures should be registered into the `PipelineRegistry`.
+        New architectures should be registered into the :obj:`PipelineRegistry`.
 
         args:
             name: Architecture name.
-            example_repo_ids: HuggingFace repo_id which runs this architecture.
+            example_repo_ids: Hugging Face `repo_id` which runs this architecture.
             default_encoding: Default encoding for the model.
             supported_encodings: Alternate encodings supported.
-            pipeline_model: PipelineModel class that defines the model graph
+            pipeline_model: :obj:`PipelineModel` class that defines the model graph
                 and execution.
             task: Which pipeline task should the model run with.
             tokenizer: Tokenizer used to preprocess model inputs.
@@ -389,9 +389,6 @@ class PipelineRegistry:
 
         model_config.finalize_encoding_config()
 
-        # Pass weight adapters to the PipelineConfig.
-        pipeline_config._weight_adapters = arch.weight_adapters
-
         # We should now have a valid quantization_encoding, and possibly a weight_path.
         # If no weight_path is provided, we should grab the default.
         if not model_config.weight_path:
@@ -436,7 +433,7 @@ class PipelineRegistry:
             model_config.quantization_encoding, []
         )
         if (
-            pipeline_config.kv_cache_config.cache_strategy
+            model_config.kv_cache_config.cache_strategy
             == KVCacheStrategy.MODEL_DEFAULT
             and supported_cache_strategies
         ):
@@ -444,18 +441,18 @@ class PipelineRegistry:
             msg = f"default cache_strategy of '{default_strategy}' enabled"
             logger.debug(msg)
 
-            pipeline_config.kv_cache_config.cache_strategy = default_strategy
+            model_config.kv_cache_config.cache_strategy = default_strategy
         elif (
             supported_cache_strategies
-            and pipeline_config.kv_cache_config.cache_strategy
+            and model_config.kv_cache_config.cache_strategy
             not in supported_cache_strategies
         ):
             supported_strategy = supported_cache_strategies[0]
 
-            msg = f"cache_strategy = '{pipeline_config.kv_cache_config.cache_strategy}' not supported for '{model_config.quantization_encoding}', using '{supported_strategy}' cache strategy."
+            msg = f"cache_strategy = '{model_config.kv_cache_config.cache_strategy}' not supported for '{model_config.quantization_encoding}', using '{supported_strategy}' cache strategy."
             logger.warning(msg)
 
-            pipeline_config.kv_cache_config.cache_strategy = supported_strategy
+            model_config.kv_cache_config.cache_strategy = supported_strategy
 
         # Assume at this point, an architecture,
         # a model_path and weight_paths are available.
@@ -518,8 +515,7 @@ class PipelineRegistry:
 
         total_size = model_weights_size
         available_kv_cache_memory = int(
-            free_memory
-            * pipeline_config.kv_cache_config.device_memory_utilization
+            free_memory * model_config.kv_cache_config.device_memory_utilization
             - model_weights_size
         )
         available_kv_cache_memory = max(0, available_kv_cache_memory)
@@ -534,7 +530,7 @@ class PipelineRegistry:
                 huggingface_config=huggingface_config,
             )
 
-        if not pipeline_config.model_config.quantization_encoding:
+        if not model_config.quantization_encoding:
             msg = "quantization_encoding must be provided in pipeline_config"
             raise ValueError(msg)
 
@@ -545,8 +541,8 @@ class PipelineRegistry:
                 available_kv_cache_memory,
                 huggingface_config=huggingface_config,
                 devices=devices,
-                kv_cache_config=pipeline_config.kv_cache_config,
-                cache_dtype=pipeline_config.model_config.quantization_encoding.cache_dtype,
+                kv_cache_config=model_config.kv_cache_config,
+                cache_dtype=model_config.quantization_encoding.cache_dtype,
             )
 
         actual_kv_cache_size = self._calculate_kv_cache_size(
@@ -555,11 +551,11 @@ class PipelineRegistry:
             available_kv_cache_memory,
             huggingface_config,
             devices=devices,
-            kv_cache_config=pipeline_config.kv_cache_config,
-            cache_dtype=pipeline_config.model_config.quantization_encoding.cache_dtype,
+            kv_cache_config=model_config.kv_cache_config,
+            cache_dtype=model_config.quantization_encoding.cache_dtype,
         )
 
-        pipeline_config.kv_cache_config._available_cache_memory = (
+        model_config.kv_cache_config._available_cache_memory = (
             actual_kv_cache_size
         )
 
@@ -587,7 +583,7 @@ class PipelineRegistry:
                     f"Truncated model's default max_length from {original_max_length} to {inferred_max_length} to fit in memory."
                 )
                 pipeline_config.max_length = inferred_max_length
-                if not pipeline_config.model_config.quantization_encoding:
+                if not model_config.quantization_encoding:
                     msg = "quantization_encoding must be provided in PipelineConfig"
                     raise ValueError(msg)
 
@@ -597,8 +593,8 @@ class PipelineRegistry:
                     available_kv_cache_memory,
                     huggingface_config,
                     devices=devices,
-                    kv_cache_config=pipeline_config.kv_cache_config,
-                    cache_dtype=pipeline_config.model_config.quantization_encoding.cache_dtype,
+                    kv_cache_config=model_config.kv_cache_config,
+                    cache_dtype=model_config.quantization_encoding.cache_dtype,
                 )
                 total_size = model_weights_size + actual_kv_cache_size
 
@@ -762,7 +758,8 @@ class PipelineRegistry:
         upper = pipeline_config.max_length
         inferred_max_length = upper
 
-        if not pipeline_config.model_config.quantization_encoding:
+        model_config = pipeline_config.model_config
+        if not model_config.quantization_encoding:
             msg = "quantization_encoding must be provided in pipeline_config"
             raise ValueError(msg)
 
@@ -777,8 +774,8 @@ class PipelineRegistry:
                     available_kv_cache_memory,
                     huggingface_config,
                     devices=devices,
-                    kv_cache_config=pipeline_config.kv_cache_config,
-                    cache_dtype=pipeline_config.model_config.quantization_encoding.cache_dtype,
+                    kv_cache_config=model_config.kv_cache_config,
+                    cache_dtype=model_config.quantization_encoding.cache_dtype,
                 )
 
             kv_cache_size = self._calculate_kv_cache_size(
@@ -787,8 +784,8 @@ class PipelineRegistry:
                 available_kv_cache_memory,
                 huggingface_config,
                 devices=devices,
-                kv_cache_config=pipeline_config.kv_cache_config,
-                cache_dtype=pipeline_config.model_config.quantization_encoding.cache_dtype,
+                kv_cache_config=model_config.kv_cache_config,
+                cache_dtype=model_config.quantization_encoding.cache_dtype,
             )
 
             if lower > upper:
@@ -834,12 +831,13 @@ class PipelineRegistry:
         inferred_max_batch_size = cast(int, pipeline_config.max_batch_size)
         lower = 1
         upper = cast(int, pipeline_config.max_batch_size)
+        model_config = pipeline_config.model_config
 
         while not found_valid_max_batch_size:
             inferred_max_batch_size = (lower + upper) // 2
             pipeline_config.max_batch_size = inferred_max_batch_size
 
-            if not pipeline_config.model_config.quantization_encoding:
+            if not model_config.quantization_encoding:
                 msg = (
                     "quantization_encoding must be provided in pipeline_config"
                 )
@@ -851,8 +849,8 @@ class PipelineRegistry:
                 available_kv_cache_memory,
                 huggingface_config,
                 devices=devices,
-                kv_cache_config=pipeline_config.kv_cache_config,
-                cache_dtype=pipeline_config.model_config.quantization_encoding.cache_dtype,
+                kv_cache_config=model_config.kv_cache_config,
+                cache_dtype=model_config.quantization_encoding.cache_dtype,
             )
 
             if lower > upper:
@@ -1096,7 +1094,7 @@ class PipelineRegistry:
             model_path:             {pipeline_config.model_config.model_path}{weights_repo_str}
             huggingface_revision:   {pipeline_config.model_config.huggingface_revision}
             quantization_encoding:  {pipeline_config.model_config.quantization_encoding}
-            cache_strategy:         {pipeline_config.kv_cache_config.cache_strategy}
+            cache_strategy:         {pipeline_config.model_config.kv_cache_config.cache_strategy}
             weight_path:            [
         {weight_path}
                                     ]
@@ -1110,7 +1108,7 @@ class PipelineRegistry:
         if pipeline_config.max_batch_size is None:
             pipeline_config.max_batch_size = 1
         # HF pipelines always use custom continuous cache
-        pipeline_config.kv_cache_config.cache_strategy = (
+        pipeline_config.model_config.kv_cache_config.cache_strategy = (
             KVCacheStrategy.CONTINUOUS
         )
         return pipeline_config
@@ -1198,6 +1196,7 @@ class PipelineRegistry:
                 pipeline_config=pipeline_config,
                 pipeline_model=arch.pipeline_model,
                 eos_token_id=tokenizer.eos,
+                weight_adapters=arch.weight_adapters,
             )
         else:
             pipeline_config = self._set_hf_pipeline_defaults(pipeline_config)

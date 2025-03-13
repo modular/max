@@ -11,11 +11,10 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
-"""Standardized config for Pipeline Inference."""
+"""Standardized configuration for Pipeline Inference."""
 
 from __future__ import annotations
 
-import datetime
 import glob
 import json
 import logging
@@ -34,7 +33,6 @@ import huggingface_hub
 import torch
 from huggingface_hub import constants as hf_hub_constants
 from huggingface_hub import errors as hf_hub_errors
-from huggingface_hub.utils import tqdm as hf_tqdm
 from max.driver import (
     DeviceSpec,
     devices_exist,
@@ -44,16 +42,10 @@ from max.dtype import DType
 from max.engine import GPUProfilingMode
 from max.graph.quantization import QuantizationConfig, QuantizationEncoding
 from max.graph.weights import (
-    GGUFWeights,
-    SafetensorWeights,
-    Weights,
-    WeightsAdapter,
     WeightsFormat,
-    weights_format,
 )
 from max.pipelines.kv_cache import KVCacheStrategy
 from requests.exceptions import ConnectionError as RequestsConnectionError
-from tqdm.contrib.concurrent import thread_map
 from transformers import AutoConfig
 
 logger = logging.getLogger("max.pipelines")
@@ -526,17 +518,16 @@ class HuggingFaceRepo:
 class MAXConfig:
     """Abstract base class for all MAX configs.
 
-    There are some invariants that MAXConfig classes should follow:
+    There are some invariants that :obj:`MAXConfig` classes should follow:
     - All config classes should be dataclasses.
-    - All config classes should have a help() method that returns a dictionary of config
+    - All config classes should have a :obj:`help()` method that returns a dictionary of config
     options and their descriptions.
     - All config classes dataclass fields should have default values, and hence
-    can be trivially initialized via `cls()`.
-    - All config classes should be frozen (except KVCacheConfig for now), to
+    can be trivially initialized via :obj:`cls()`.
+    - All config classes should be frozen (except :obj:`KVCacheConfig` for now), to
     avoid accidental modification of config objects.
     - All config classes must have mutually exclusive dataclass fields among
     themselves.
-
     """
 
     @abstractmethod
@@ -544,6 +535,46 @@ class MAXConfig:
         """Documentation for this config class. Return a dictionary of config
         options and their descriptions."""
         ...
+
+
+# frozen is False (for now) because of _available_cache_memory being set by
+# internal code.
+@dataclass(frozen=False)
+class KVCacheConfig(MAXConfig):
+    cache_strategy: KVCacheStrategy = KVCacheStrategy.MODEL_DEFAULT
+    """The cache strategy to use. This defaults to :obj:`model_default`, which will set the cache
+    strategy based on the default strategy for the architecture requested.
+
+    You can also force the engine to use a specific caching strategy: :obj:`naive` | :obj:`continuous` | :obj:`paged`.
+    """
+
+    kv_cache_page_size: int = 128
+    """The number of tokens in a single page in the paged KVCache."""
+
+    enable_prefix_caching: bool = False
+    """Whether to enable prefix caching for the paged attention KVCache."""
+
+    device_memory_utilization: float = 0.9
+    """The fraction of available device memory that the process should consume.
+
+    This is used to inform the size of the KVCache workspace. The calculation is:
+
+    .. math::
+
+        kv\\_cache\\_workspace = (total\\_free\\_memory \\times device\\_memory\\_utilization) - model\\_weights\\_size
+    """
+
+    _available_cache_memory: Optional[int] = None
+    """The amount of available cache memory in bytes. This should only be set by internal code."""
+
+    @staticmethod
+    def help() -> dict[str, str]:
+        return {
+            "cache_strategy": "Force a specific cache strategy: 'naive' or 'continuous'. If not provided, the optimal caching strategy for the model requested will be selected.",
+            "kv_cache_page_size": "The number of tokens in a single page in the paged KVCache. Default is set to 512.",
+            "enable_prefix_caching": "Whether to enable prefix caching for the paged attention KVCache. This defaults to false.",
+            "device_memory_utilization": "The fraction of available device memory that the process should consume. This is used to inform the size of the KVCache workspace: kv_cache_workspace = (total_free_memory * device_memory_utilization) - model_weights_size. Default is set to 0.9.",
+        }
 
 
 @dataclass
@@ -557,10 +588,10 @@ class MAXModelConfig(MAXConfig):
     # it be Optional to check for None and then littering the codebase with
     # asserts just to keep mypy happy.
     model_path: str = ""
-    """repo_id of a Hugging Face model repository to use."""
+    """:obj:`repo_id` of a Hugging Face model repository to use."""
 
     huggingface_repo_id: str = ""
-    """DEPRECATED: repo_id of a Hugging Face model repository to use. Use `model_path` instead."""
+    """DEPRECATED: :obj:`repo_id` of a Hugging Face model repository to use. Use :obj:`model_path` instead."""
 
     weight_path: list[Path] = field(default_factory=list)
     """Optional path or url of the model weights to use."""
@@ -580,7 +611,7 @@ class MAXModelConfig(MAXConfig):
     device_specs: list[DeviceSpec] = field(
         default_factory=scan_available_devices
     )
-    """Devices to run inference upon. This option is not documented in help() as it shouldn't be used directly via the CLI entrypoint."""
+    """Devices to run inference upon. This option is not documented in :obj:`help()` as it shouldn't be used directly via the CLI entrypoint."""
 
     force_download: bool = False
     """Whether to force download a given file if it's already present in the local cache."""
@@ -593,6 +624,9 @@ class MAXModelConfig(MAXConfig):
     _quant_config: Optional[QuantizationConfig] = None
     """Optional config for specifying quantization parameters. This should only be set by internal code."""
 
+    _kv_cache_config: KVCacheConfig = field(default_factory=KVCacheConfig)
+    """The KVCache config."""
+
     # TODO(zheng): This can't just be a __post_init__ method, because we need to
     # it also sets and updates other fields which may not be determined /
     # initialized in the default factory.
@@ -600,8 +634,7 @@ class MAXModelConfig(MAXConfig):
     # instantiate these MAXConfigs with probably DAG depedency flows in our
     # larger config refactor.
     def validate(self):
-        """
-        Validate the config.
+        """Validates the config.
 
         This method is called after the model config is initialized, to ensure that all
         config fields have been initialized to a valid state. It will also set
@@ -620,6 +653,27 @@ class MAXModelConfig(MAXConfig):
                 "--huggingface-repo-id is deprecated, use `--model-path` instead. This setting will stop working in a future release."
             )
             self.model_path = self.huggingface_repo_id
+
+        # Replit model_paths are kinda broken due to transformers
+        # version mismatch. We manually update trust_remote_code to True
+        # because the modularai version does not have the custom Python code needed
+        # Without this, we get:
+        #     ValueError: `attn_type` has to be either `multihead_attention` or
+        #     `multiquery_attention`. Received: grouped_query_attention
+        # Another reason why we override this flag here is because at PipelineConfig
+        # instantiation below, we'll call AutoConfig.from_pretrained, which will
+        # trigger the error above if not set to True.
+        if "replit" in self.model_path.lower():
+            self.trust_remote_code = True
+
+        if (
+            "llama" not in self.model_path.lower()
+            and len(self.device_specs) > 1
+            and self.device_specs[0].device_type == "gpu"
+        ):
+            raise ValueError(
+                "Multiple GPU inference is currently not supported for non-Llama models."
+            )
 
         # Validate that if weight_paths are passed as strings, they are converted to Path.
         if isinstance(self.weight_path, tuple):
@@ -685,8 +739,12 @@ class MAXModelConfig(MAXConfig):
             self.model_path = self._weights_repo_id
 
     @property
+    def kv_cache_config(self) -> KVCacheConfig:
+        return self._kv_cache_config
+
+    @property
     def graph_quantization_encoding(self) -> Optional[QuantizationEncoding]:
-        """Converts the CLI encoding to a MAX graph quantization encoding.
+        """Converts the CLI encoding to a MAX Graph quantization encoding.
 
         Returns:
             The graph quantization encoding corresponding to the CLI encoding.
@@ -723,15 +781,6 @@ class MAXModelConfig(MAXConfig):
                 sym=hf_quant_config["sym"],
             )
 
-    @property
-    def cache_dtype(self) -> DType:
-        if self.quantization_encoding is None:
-            raise ValueError(
-                "quantization_encoding must be provided to infer cache dtype."
-            )
-
-        return self.quantization_encoding.cache_dtype
-
     def weights_size(self) -> int:
         size = 0
         hf_repo = HuggingFaceRepo(
@@ -757,92 +806,6 @@ class MAXModelConfig(MAXConfig):
 
         return size
 
-    def download_weights(self) -> None:
-        # Try to load locally.
-        if all([os.path.exists(file_path) for file_path in self.weight_path]):
-            logger.info("All files exist locally, skipping download.")
-            return
-
-        start_time = datetime.datetime.now()
-        weights_repo_id = (
-            self._weights_repo_id if self._weights_repo_id else self.model_path
-        )
-        logger.info(f"Starting download of model: {weights_repo_id}")
-        # max_workers=8 setting copied from default for
-        # huggingface_hub.snapshot_download.
-        self.weight_path = list(
-            thread_map(
-                lambda filename: Path(
-                    huggingface_hub.hf_hub_download(
-                        weights_repo_id,
-                        str(filename),
-                        revision=self.huggingface_revision,
-                        force_download=self.force_download,
-                    )
-                ),
-                self.weight_path,
-                max_workers=8,
-                tqdm_class=hf_tqdm,
-            )
-        )
-
-        logger.info(
-            f"Finished download of model: {weights_repo_id} in {(datetime.datetime.now() - start_time).total_seconds()} seconds."
-        )
-
-    # TODO(zheng): Remove this backward compatibility method once PipelineModels
-    # no longer depend on PipelineConfig (and can call
-    # ModelConfig.load_weights() on its own).
-    def load_weights(self) -> Weights:
-        self.download_weights()
-
-        _weights_format = weights_format(
-            self.weight_path,
-        )
-
-        if _weights_format == WeightsFormat.gguf:
-            if len(self.weight_path) > 1:
-                raise ValueError("loading multiple gguf files is not supported")
-            return GGUFWeights(self.weight_path[0])
-
-        elif _weights_format == WeightsFormat.safetensors:
-            return SafetensorWeights(self.weight_path)
-
-        else:
-            raise ValueError(
-                f"loading weights format '{_weights_format}' not supported"
-            )
-
-    @property
-    def weights_format(self) -> WeightsFormat:
-        """Identify which format our weights are expected in."""
-
-        if not self.weight_path:
-            raise ValueError(
-                "no weight_path provided cannot infer weights format."
-            )
-
-        # Get all weight paths.
-        if all(
-            [weight_path.suffix == ".gguf" for weight_path in self.weight_path]
-        ):
-            return WeightsFormat.gguf
-        elif all(
-            [
-                weight_path.suffix == ".safetensors"
-                for weight_path in self.weight_path
-            ]
-        ):
-            return WeightsFormat.safetensors
-        elif all(
-            [weight_path.suffix == ".bin" for weight_path in self.weight_path]
-        ):
-            return WeightsFormat.pytorch
-        else:
-            raise ValueError(
-                f"weights type cannot be inferred from {self.weight_path}"
-            )
-
     def huggingface_weights_repo(self) -> HuggingFaceRepo:
         return HuggingFaceRepo(
             (
@@ -855,7 +818,7 @@ class MAXModelConfig(MAXConfig):
 
     @staticmethod
     def help() -> dict[str, str]:
-        return {
+        max_model_help = {
             "model_path": "Specify the repository ID of a Hugging Face model repository to use. This is used to load both Tokenizers, architectures and model weights.",
             "huggingface_repo_id": "DEPRECATED: Use `model_path` instead.",
             "weight_path": "Provide an optional local path or path relative to the root of a Hugging Face repo to the model weights you want to use. This allows you to specify custom weights instead of using defaults. You may pass multiple, ie. `--weight-path=model-00001-of-00002.safetensors --weight-path=model-00002-of-00002.safetensors`",
@@ -864,6 +827,15 @@ class MAXModelConfig(MAXConfig):
             "trust_remote_code": "Indicate whether to allow custom modelling files from Hugging Face repositories. Set this to true with caution, as it may introduce security risks.",
             "force_download": "Specify whether to forcefully download a file even if it already exists in local cache. Set this to true if you want to ensure you have the latest version.",
         }
+
+        config_help = KVCacheConfig.help()
+        for key in config_help:
+            if key in max_model_help:
+                raise ValueError(
+                    f"Duplicate help key '{key}' found in {KVCacheConfig.__name__}"
+                )
+        max_model_help.update(config_help)
+        return max_model_help
 
 
 @dataclass
@@ -888,43 +860,6 @@ class SamplingConfig(MAXConfig):
         }
 
 
-# frozen is False (for now) because of _available_cache_memory being set by
-# internal code.
-@dataclass(frozen=False)
-class KVCacheConfig(MAXConfig):
-    cache_strategy: KVCacheStrategy = KVCacheStrategy.MODEL_DEFAULT
-    """The cache strategy to use. This defaults to `model_default`, which will set the cache
-    strategy based on the default strategy for the architecture requested.
-
-    You can also force the engine to use a specific caching strategy: `naive` | `continuous` | `paged`.
-    """
-
-    kv_cache_page_size: int = 128
-    """The number of tokens in a single page in the paged KVCache."""
-
-    enable_prefix_caching: bool = False
-    """Whether to enable prefix caching for the paged attention KVCache."""
-
-    device_memory_utilization: float = 0.9
-    """The fraction of available device memory that the process should consume.
-
-    This is used to inform the size of the KVCache workspace:
-        kv_cache_workspace = (total_free_memory * device_memory_utilization) - model_weights_size
-    """
-
-    _available_cache_memory: Optional[int] = None
-    """The amount of available cache memory in bytes. This should only be set by internal code."""
-
-    @staticmethod
-    def help() -> dict[str, str]:
-        return {
-            "cache_strategy": "Force a specific cache strategy: 'naive' or 'continuous'. If not provided, the optimal caching strategy for the model requested will be selected.",
-            "kv_cache_page_size": "The number of tokens in a single page in the paged KVCache. Default is set to 512.",
-            "enable_prefix_caching": "Whether to enable prefix caching for the paged attention KVCache. This defaults to false.",
-            "device_memory_utilization": "The fraction of available device memory that the process should consume. This is used to inform the size of the KVCache workspace: kv_cache_workspace = (total_free_memory * device_memory_utilization) - model_weights_size. Default is set to 0.9.",
-        }
-
-
 @dataclass
 class ProfilingConfig(MAXConfig):
     gpu_profiling: GPUProfilingMode = GPUProfilingMode.OFF
@@ -934,12 +869,13 @@ class ProfilingConfig(MAXConfig):
         gpu_profiling_env = os.environ.get("MODULAR_ENABLE_PROFILING", "off")
 
         if self.gpu_profiling == GPUProfilingMode.OFF:
-            if gpu_profiling_env not in GPUProfilingMode:
+            try:
+                self.gpu_profiling = GPUProfilingMode(gpu_profiling_env)
+            except ValueError:
+                valid_values = [mode.value for mode in GPUProfilingMode]
                 raise ValueError(
-                    "gpu_profiling must be one of: "
-                    + ", ".join(GPUProfilingMode)
+                    "gpu_profiling must be one of: " + ", ".join(valid_values)
                 )
-            self.gpu_profiling = GPUProfilingMode(gpu_profiling_env)
 
     @staticmethod
     def help() -> dict[str, str]:
@@ -1013,11 +949,6 @@ class PipelineConfig(MAXConfig):
     pool_embeddings: bool = True
     """Whether to pool embedding outputs."""
 
-    _weight_adapters: dict[WeightsFormat, WeightsAdapter] = field(
-        default_factory=dict
-    )
-    """Weight adapter for the provided `weight_path`."""
-
     max_cache_batch_size: Optional[int] = None
     """DEPRECATED: The maximum cache batch size to use for the model. Use max_batch_size instead."""
 
@@ -1030,9 +961,6 @@ class PipelineConfig(MAXConfig):
 
     _model_config: MAXModelConfig = field(default_factory=MAXModelConfig)
     """The model config."""
-
-    _kv_cache_config: KVCacheConfig = field(default_factory=KVCacheConfig)
-    """The KVCache config."""
 
     _sampling_config: SamplingConfig = field(default_factory=SamplingConfig)
     """The sampling config."""
@@ -1065,7 +993,6 @@ class PipelineConfig(MAXConfig):
             # instead of hardcoding the config names.
             for config_name in [
                 "_sampling_config",
-                "_kv_cache_config",
                 "_profiling_config",
                 # TODO(zheng): Remove this once backward compatibility is no
                 # longer needed for MAXModelConfig.
@@ -1073,13 +1000,35 @@ class PipelineConfig(MAXConfig):
             ]:
                 config_class = get_type_hints(self.__class__)[config_name]
                 matched_kwargs = {}
+                kv_cache_kwargs = {}
+
                 for key, value in unmatched_kwargs.items():
                     if key in config_class.__dataclass_fields__:
                         matched_kwargs[key] = value
+                    # Check if this is a KVCache config param
+                    elif (
+                        config_name == "_model_config"
+                        and key in KVCacheConfig.__dataclass_fields__
+                    ):
+                        kv_cache_kwargs[key] = value
+
                 if matched_kwargs:
-                    setattr(self, config_name, config_class(**matched_kwargs))
+                    if config_name == "_model_config" and kv_cache_kwargs:
+                        # Create new model config with updated KVCache config
+                        model_config = config_class(**matched_kwargs)
+                        model_config._kv_cache_config = KVCacheConfig(
+                            **kv_cache_kwargs
+                        )
+                        setattr(self, config_name, model_config)
+                    else:
+                        setattr(
+                            self, config_name, config_class(**matched_kwargs)
+                        )
+
                     # Remove matched kwargs
                     for key in matched_kwargs:
+                        del unmatched_kwargs[key]
+                    for key in kv_cache_kwargs:
                         del unmatched_kwargs[key]
 
         if unmatched_kwargs:
@@ -1151,14 +1100,6 @@ class PipelineConfig(MAXConfig):
         """
         return self._model_config.graph_quantization_encoding
 
-    def finalize_encoding_config(self):
-        """Depending on the encoding picked, we get some more parameters from the hf config"""
-        self._model_config.finalize_encoding_config()
-
-    def load_weights(self) -> Weights:
-        """Load the weights for the model."""
-        return self._model_config.load_weights()
-
     @staticmethod
     def help() -> dict[str, str]:
         pipeline_help = {
@@ -1183,7 +1124,7 @@ class PipelineConfig(MAXConfig):
         # Add help text for all MAX config classes
         # TODO(zheng): Make this more efficient by using MaxConfig instance
         # instead of hardcoding the config names.
-        for config_class in [SamplingConfig, KVCacheConfig, ProfilingConfig]:
+        for config_class in [SamplingConfig, ProfilingConfig]:
             config_help = config_class.help()  # type: ignore
             for key in config_help:
                 if key in pipeline_help:
@@ -1200,10 +1141,6 @@ class PipelineConfig(MAXConfig):
     @property
     def sampling_config(self) -> SamplingConfig:
         return self._sampling_config
-
-    @property
-    def kv_cache_config(self) -> KVCacheConfig:
-        return self._kv_cache_config
 
     @property
     def profiling_config(self) -> ProfilingConfig:

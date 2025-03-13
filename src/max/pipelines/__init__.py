@@ -28,7 +28,7 @@ from .config import (
 )
 from .context import InputContext, TextAndVisionContext, TextContext
 from .embeddings_pipeline import EmbeddingsPipeline
-from .hf_utils import HuggingFaceFile
+from .hf_utils import HuggingFaceFile, download_weight_files
 from .interfaces import (
     EmbeddingsGenerator,
     EmbeddingsResponse,
@@ -44,6 +44,7 @@ from .interfaces import (
     TokenGeneratorRequestTool,
     TokenGeneratorResponseFormat,
 )
+from .log_probabilities import compute_log_probabilities
 from .pipeline import (
     ModelInputs,
     ModelOutputs,
@@ -64,6 +65,7 @@ PipelinesFactory = _Callable[[], _Union[TokenGenerator, EmbeddingsGenerator]]
 
 
 __all__ = [
+    "LogProbabilities",
     "HuggingFaceFile",
     "PipelineConfig",
     "ProfilingConfig",
@@ -97,10 +99,10 @@ __all__ = [
     "ModelInputs",
     "ModelOutputs",
     "TextResponse",
-    "LogProbabilities",
     "EmbeddingsGenerator",
     "EmbeddingsPipeline",
     "EmbeddingsResponse",
     "SpeculativeDecodingTextGenerationPipeline",
     "upper_bounded_default",
+    "download_weight_files",
 ]

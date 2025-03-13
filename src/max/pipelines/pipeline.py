@@ -11,7 +11,7 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 # mypy: disable-error-code="import-not-found"
-"""HF Token Generation Pipeline"""
+"""Hugging Face Token Generation Pipeline."""
 
 from __future__ import annotations
 
@@ -32,7 +32,13 @@ import torch
 from max.driver import Device, Tensor, load_devices
 from max.dtype import DType
 from max.engine import InferenceSession
-from max.graph.weights import Weights
+from max.graph.weights import (
+    Weights,
+    WeightsAdapter,
+    WeightsFormat,
+    load_weights,
+    weights_format,
+)
 from max.pipelines.kv_cache import (
     KVCacheInputs,
     KVCacheInputsSequence,
@@ -43,6 +49,7 @@ from transformers import AutoConfig, AutoTokenizer
 
 from .config import KVCacheConfig, PipelineConfig, SupportedEncoding
 from .context import InputContext
+from .hf_utils import download_weight_files
 from .interfaces import (
     LogProbabilities,
     TextGenerationResponse,
@@ -155,6 +162,7 @@ class PipelineModel(ABC, Generic[T]):
         devices: list[Device],
         kv_cache_config: KVCacheConfig,
         weights: Weights,
+        adapter: Optional[WeightsAdapter] = None,
     ) -> None:
         self.pipeline_config = pipeline_config
         self.huggingface_config = huggingface_config
@@ -162,6 +170,7 @@ class PipelineModel(ABC, Generic[T]):
         self.devices = devices
         self.kv_cache_config = kv_cache_config
         self.weights = weights
+        self.adapter = adapter
 
         if isinstance(self, KVCacheMixin):
             self.kv_manager = self.load_kv_manager(
@@ -403,10 +412,12 @@ class TextGenerationPipeline(TokenGenerator[T]):
         pipeline_model: Type[PipelineModel],
         # TODO: This should be removed.
         eos_token_id: int,
+        weight_adapters: dict[WeightsFormat, WeightsAdapter],
     ) -> None:
         self._pipeline_config = pipeline_config
         self._huggingface_config: Optional[AutoConfig] = None
         self._devices = load_devices(pipeline_config.model_config.device_specs)
+        self._weight_adapters = weight_adapters
 
         # Expand eos tokens if more are provided in pipeline_config
         if "eos_token_id" in self.huggingface_config:
@@ -461,15 +472,36 @@ class TextGenerationPipeline(TokenGenerator[T]):
         if not self._pipeline_config.model_config.quantization_encoding:
             raise ValueError("quantization_encoding must not be None")
 
-        weights = self._pipeline_config.load_weights()
+        # Retrieve the weight id, if different than the model_path
+        weight_model_id = (
+            self._pipeline_config.model_config._weights_repo_id
+            if self._pipeline_config.model_config._weights_repo_id
+            else self._pipeline_config.model_config.model_path
+        )
+
+        # Download weight files if not existent.
+        weight_paths = download_weight_files(
+            huggingface_model_id=weight_model_id,
+            filenames=[
+                str(x) for x in self._pipeline_config.model_config.weight_path
+            ],
+            revision=self._pipeline_config.model_config.huggingface_revision,
+            force_download=self._pipeline_config.model_config.force_download,
+        )
+
+        # Load weights
+        weights = load_weights(weight_paths)
+        _weight_format = weights_format(weight_paths)
+
         self._pipeline_model = pipeline_model(
             pipeline_config=self._pipeline_config,
             session=session,
             huggingface_config=self.huggingface_config,
             encoding=self._pipeline_config.model_config.quantization_encoding,
             devices=self._devices,
-            kv_cache_config=self._pipeline_config.kv_cache_config,
+            kv_cache_config=self._pipeline_config.model_config.kv_cache_config,
             weights=weights,
+            adapter=self._weight_adapters.get(_weight_format, None),
         )
 
         # Load sampler.

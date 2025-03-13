@@ -17,16 +17,15 @@ import logging
 import time
 import warnings
 from collections.abc import Sequence
-from typing import cast
+from typing import Optional, cast
 
 import numpy as np
 from max.driver import Device, DeviceSpec, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
-from max.graph.weights import GGUFWeights, Weights
+from max.graph.weights import GGUFWeights, Weights, WeightsAdapter
 from max.pipelines import (
     KVCacheConfig,
-    LogProbabilities,
     ModelInputs,
     ModelOutputs,
     PipelineConfig,
@@ -35,6 +34,7 @@ from max.pipelines import (
     TextContext,
     upper_bounded_default,
 )
+from max.pipelines.interfaces import LogProbabilities
 from max.pipelines.kv_cache import (
     KVCacheInputs,
     KVCacheManager,
@@ -42,7 +42,7 @@ from max.pipelines.kv_cache import (
     estimate_kv_cache_size,
     load_kv_manager,
 )
-from max.pipelines.nn.compute_log_probabilities import compute_log_probabilities
+from max.pipelines.log_probabilities import compute_log_probabilities
 from transformers import AutoConfig
 
 from .graph import _build_graph
@@ -82,6 +82,7 @@ class ReplitModel(PipelineModel[TextContext]):
         devices: list[Device],
         kv_cache_config: KVCacheConfig,
         weights: Weights,
+        adapter: Optional[WeightsAdapter] = None,
     ) -> None:
         if pipeline_config.model_config.device_specs[0] == DeviceSpec.cpu():
             msg = "Replit currently only supported on gpu."
@@ -95,6 +96,7 @@ class ReplitModel(PipelineModel[TextContext]):
             devices,
             kv_cache_config,
             weights,
+            adapter,
         )
         self.model = self.load_model(session)
 

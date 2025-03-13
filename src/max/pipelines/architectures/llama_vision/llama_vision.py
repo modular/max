@@ -25,7 +25,9 @@ from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
 from max.graph import Dim, Graph, Shape, TensorType, TensorValue, ops
-from max.graph.weights import Weights
+from max.graph.weights import Weights, WeightsAdapter
+from max.nn import Linear
+from max.nn.layer import Layer
 from max.pipelines import (
     KVCacheConfig,
     ModelInputs,
@@ -50,8 +52,6 @@ from max.pipelines.kv_cache import (
     load_kv_manager,
 )
 from max.pipelines.kv_cache._utils import build_max_lengths_tensor
-from max.pipelines.nn import Linear
-from max.pipelines.nn.layer import Layer
 from transformers import AutoConfig
 
 from .language_model import CausalLanguageModel, instantiate_language_model
@@ -685,6 +685,7 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
         devices: list[Device],
         kv_cache_config: KVCacheConfig,
         weights: Weights,
+        adapter: Optional[WeightsAdapter] = None,
     ) -> None:
         # Set convenience attributes for the text and vision configs.
         self.vision_config = huggingface_config.vision_config
@@ -702,6 +703,7 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
             devices,
             kv_cache_config,
             weights,
+            adapter,
         )
         self.vision_model, self.language_model = self.load_model(session)
         # Note that in a multimodal model, the language model is the last model in the
