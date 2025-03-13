@@ -576,7 +576,7 @@ you, утра, боль, хорошие, пришёл, открой, брось,
 fn gen_word_pairs[words: String = words_en]() -> List[String]:
     var result = List[String]()
     try:
-        var list = words.split(", ")
+        var list = words.split(",")
         for w in list:
             var w1 = String(w[].strip())
             for w in list:

@@ -26,6 +26,8 @@ https://github.com/simdutf/SimdUnicode/blob/main/src/UTF8.cs
 """
 
 from base64._b64encode import _sub_with_saturation
+from collections.string.string_slice import _utf8_byte_type
+from sys import is_compile_time, simdwidthof
 from sys.intrinsics import llvm_intrinsic
 
 from memory import Span, UnsafePointer
@@ -124,32 +126,7 @@ fn validate_chunk[
     return must23_as_80 ^ sc
 
 
-fn _is_valid_utf8(span: Span[Byte]) -> Bool:
-    """Verify that the bytes are valid UTF-8.
-
-    Args:
-        span: The Span of bytes.
-
-    Returns:
-        Whether the data is valid UTF-8.
-
-    #### UTF-8 coding format
-    [Table 3-7 page 94](http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf).
-    Well-Formed UTF-8 Byte Sequences
-
-    Code Points        | First Byte | Second Byte | Third Byte | Fourth Byte |
-    :----------        | :--------- | :---------- | :--------- | :---------- |
-    U+0000..U+007F     | 00..7F     |             |            |             |
-    U+0080..U+07FF     | C2..DF     | 80..BF      |            |             |
-    U+0800..U+0FFF     | E0         | ***A0***..BF| 80..BF     |             |
-    U+1000..U+CFFF     | E1..EC     | 80..BF      | 80..BF     |             |
-    U+D000..U+D7FF     | ED         | 80..***9F***| 80..BF     |             |
-    U+E000..U+FFFF     | EE..EF     | 80..BF      | 80..BF     |             |
-    U+10000..U+3FFFF   | F0         | ***90***..BF| 80..BF     | 80..BF      |
-    U+40000..U+FFFFF   | F1..F3     | 80..BF      | 80..BF     | 80..BF      |
-    U+100000..U+10FFFF | F4         | 80..***8F***| 80..BF     | 80..BF      |
-    """
-
+fn _is_valid_utf8_runtime(span: Span[Byte]) -> Bool:
     ptr = span.unsafe_ptr()
     length = len(span)
     alias simd_size = sys.simdbytewidth()
@@ -176,3 +153,148 @@ fn _is_valid_utf8(span: Span[Byte]) -> Bool:
         has_error = validate_chunk(SIMD[DType.uint8, simd_size](), previous)
 
     return all(has_error == 0)
+
+
+fn _validate_utf8_simd_slice[
+    width: Int, remainder: Bool = False
+](ptr: UnsafePointer[UInt8], length: Int, mut iter_len: UInt) -> Bool:
+    """Internal method to validate utf8, use _is_valid_utf8_comptime.
+
+    Parameters:
+        width: The width of the SIMD vector to build for validation.
+        remainder: Whether it is computing the remainder that doesn't fit in the
+            SIMD vector.
+
+    Args:
+        ptr: Pointer to the data.
+        length: The length of the items in the pointer.
+        iter_len: The amount of items to still iterate through.
+
+    Returns:
+        Whether the slice is valid.
+    """
+    var idx = length - iter_len
+    while iter_len > 0 and (iter_len >= width or remainder):
+        var d: SIMD[DType.uint8, width]  # use a vector of the specified width
+
+        @parameter
+        if not remainder:
+            d = ptr.offset(idx).load[width=width]()
+        else:
+            d = SIMD[DType.uint8, width](0)
+            for i in range(iter_len):
+                d[i] = ptr[idx + i]
+
+        var is_ascii = d < 0b1000_0000
+        if is_ascii.reduce_and():  # skip all ASCII bytes
+
+            @parameter
+            if not remainder:
+                idx += width
+                iter_len -= width
+                continue
+            else:
+                iter_len = 0
+                return True
+        elif is_ascii[0]:
+            for i in range(1, width):
+                if is_ascii[i]:
+                    continue
+                idx += i
+                iter_len -= i
+                break
+            continue
+
+        var byte_types = _utf8_byte_type(d).slice[4]()
+        var first_byte_type = byte_types[0]
+
+        # byte_type has to match against the amount of continuation bytes
+        alias Vec = SIMD[DType.uint8, 4]
+        # FIXME(#4144): these should be compile time constants
+        var n4_byte_types = Vec(4, 1, 1, 1)
+        var n3_byte_types = Vec(3, 1, 1, 0)
+        var n3_mask = Vec(0b111, 0b111, 0b111, 0)
+        var n2_byte_types = Vec(2, 1, 0, 0)
+        var n2_mask = Vec(0b111, 0b111, 0, 0)
+        var valid_n4 = (byte_types == n4_byte_types).reduce_and()
+        var valid_n3 = ((byte_types & n3_mask) == n3_byte_types).reduce_and()
+        var valid_n2 = ((byte_types & n2_mask) == n2_byte_types).reduce_and()
+        if not (valid_n4 or valid_n3 or valid_n2):
+            return False
+
+        # special unicode ranges
+        var b0 = d[0]
+        var b1 = d[1]
+        if first_byte_type == 2 and b0 < UInt8(0b1100_0010):
+            return False
+        elif b0 == 0xE0 and not (UInt8(0xA0) <= b1 <= UInt8(0xBF)):
+            return False
+        elif b0 == 0xED and not (UInt8(0x80) <= b1 <= UInt8(0x9F)):
+            return False
+        elif b0 == 0xF0 and not (UInt8(0x90) <= b1 <= UInt8(0xBF)):
+            return False
+        elif b0 == 0xF4 and not (UInt8(0x80) <= b1 <= UInt8(0x8F)):
+            return False
+
+        # amount of bytes evaluated
+        idx += Int(first_byte_type)
+        iter_len -= Int(first_byte_type)
+
+        @parameter
+        if remainder:
+            break
+    return True
+
+
+fn _is_valid_utf8_comptime(span: Span[Byte]) -> Bool:
+    var ptr = span.unsafe_ptr()
+    var length = len(span)
+    var iter_len = UInt(length)
+    if iter_len >= 64 and simdwidthof[DType.uint8]() >= 64:
+        if not _validate_utf8_simd_slice[64](ptr, length, iter_len):
+            return False
+    if iter_len >= 32 and simdwidthof[DType.uint8]() >= 32:
+        if not _validate_utf8_simd_slice[32](ptr, length, iter_len):
+            return False
+    if iter_len >= 16 and simdwidthof[DType.uint8]() >= 16:
+        if not _validate_utf8_simd_slice[16](ptr, length, iter_len):
+            return False
+    if iter_len >= 8:
+        if not _validate_utf8_simd_slice[8](ptr, length, iter_len):
+            return False
+    if iter_len >= 4:
+        if not _validate_utf8_simd_slice[4](ptr, length, iter_len):
+            return False
+    return _validate_utf8_simd_slice[4, True](ptr, length, iter_len)
+
+
+@always_inline("nodebug")
+fn _is_valid_utf8(span: Span[Byte]) -> Bool:
+    """Verify that the bytes are valid UTF-8.
+
+    Args:
+        span: The Span of bytes.
+
+    Returns:
+        Whether the data is valid UTF-8.
+
+    #### UTF-8 coding format
+    [Table 3-7 page 94](http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf).
+    Well-Formed UTF-8 Byte Sequences
+
+    Code Points        | First Byte | Second Byte | Third Byte | Fourth Byte |
+    :----------        | :--------- | :---------- | :--------- | :---------- |
+    U+0000..U+007F     | 00..7F     |             |            |             |
+    U+0080..U+07FF     | C2..DF     | 80..BF      |            |             |
+    U+0800..U+0FFF     | E0         | ***A0***..BF| 80..BF     |             |
+    U+1000..U+CFFF     | E1..EC     | 80..BF      | 80..BF     |             |
+    U+D000..U+D7FF     | ED         | 80..***9F***| 80..BF     |             |
+    U+E000..U+FFFF     | EE..EF     | 80..BF      | 80..BF     |             |
+    U+10000..U+3FFFF   | F0         | ***90***..BF| 80..BF     | 80..BF      |
+    U+40000..U+FFFFF   | F1..F3     | 80..BF      | 80..BF     | 80..BF      |
+    U+100000..U+10FFFF | F4         | 80..***8F***| 80..BF     | 80..BF      |
+    """
+    if is_compile_time():
+        return _is_valid_utf8_comptime(span)
+    else:
+        return _is_valid_utf8_runtime(span)

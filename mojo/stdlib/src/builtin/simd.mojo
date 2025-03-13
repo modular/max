@@ -67,6 +67,7 @@ from sys import (
     prefetch,
     simdwidthof,
     sizeof,
+    is_compile_time,
 )
 from sys._assembly import inlined_assembly
 from sys.info import _current_arch, _is_sm_9x
@@ -2237,17 +2238,22 @@ struct SIMD[type: DType, size: Int](
         ]()
 
         @parameter
-        if output_width == 1:
-            return self[offset]
-
-        @parameter
-        if offset % simdwidthof[type]():
+        fn slice_body() -> SIMD[type, output_width]:
             var tmp = SIMD[type, output_width]()
 
             @parameter
             for i in range(output_width):
                 tmp[i] = self[i + offset]
             return tmp
+
+        @parameter
+        if output_width == 1:
+            return self[offset]
+        elif offset % simdwidthof[type]():
+            return slice_body()
+
+        if is_compile_time():
+            return slice_body()
 
         return llvm_intrinsic[
             "llvm.vector.extract",
@@ -2622,23 +2628,21 @@ struct SIMD[type: DType, size: Int](
             "The element type of the vector must be integer or boolean.",
         ]()
 
+        @always_inline
+        @parameter
+        fn and_reduce_body[
+            type: DType, width: Int
+        ](v1: SIMD[type, width], v2: SIMD[type, width]) -> SIMD[type, width]:
+            return v1 & v2
+
         @parameter
         if size_out > 1:
-
-            @always_inline
-            @parameter
-            fn and_reduce_body[
-                type: DType, width: Int
-            ](v1: SIMD[type, width], v2: SIMD[type, width]) -> SIMD[
-                type, width
-            ]:
-                return v1 & v2
-
             return self.reduce[and_reduce_body, size_out]()
-
-        @parameter
-        if size == 1:
+        elif size == 1:
             return rebind[SIMD[type, size_out]](self)
+
+        if is_compile_time():
+            return self.reduce[and_reduce_body, size_out]()
 
         return llvm_intrinsic[
             "llvm.vector.reduce.and",
