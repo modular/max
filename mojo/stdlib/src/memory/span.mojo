@@ -24,7 +24,8 @@ from collections import InlineArray
 from sys.info import simdwidthof
 
 from memory import Pointer, UnsafePointer
-from memory.unsafe_pointer import _default_alignment
+from memory.unsafe_pointer import _default_alignment, sizeof
+from utils import StringSlice
 
 
 trait AsBytes:
@@ -441,8 +442,7 @@ struct Span[
         return not self == rhs
 
     fn fill[origin: MutableOrigin, //](self: Span[T, origin], value: T):
-        """
-        Fill the memory that a span references with a given value.
+        """Fill the memory that a span references with a given value.
 
         Parameters:
             origin: The inferred mutable origin of the data within the Span.
@@ -461,8 +461,7 @@ struct Span[
         address_space=address_space,
         alignment=alignment,
     ]:
-        """
-        Return an immutable version of this span.
+        """Return an immutable version of this span.
 
         Returns:
             A span covering the same elements, but without mutability.
@@ -473,3 +472,82 @@ struct Span[
             address_space=address_space,
             alignment=alignment,
         ](ptr=self._data, length=self._len)
+
+    fn count[D: DType, //](self: Span[Scalar[D]], sub: Span[Scalar[D]]) -> UInt:
+        """Return the number of non-overlapping occurrences of subsequence.
+
+        Parameters:
+            D: The DType.
+
+        Args:
+            sub: The subsequence.
+
+        Returns:
+            The number of non-overlapping occurrences of subsequence.
+        """
+
+        if len(sub) == 1:
+
+            @parameter
+            fn equal_fn[w: Int](v: SIMD[D, w]) -> SIMD[DType.bool, w]:
+                return v == SIMD[D, w](sub.unsafe_ptr()[0])
+
+            return self.count[func=equal_fn]()
+
+        # HACK(#3548): this is a hack until we have Span.find(). All count
+        # implementations should delegate to Span.count() eventually.
+        return String(
+            StringSlice[origin](
+                ptr=self.unsafe_ptr().bitcast[Byte](),
+                length=len(self) * sizeof[Scalar[D]](),
+            )
+        ).count(
+            String(
+                StringSlice[origin](
+                    ptr=sub.unsafe_ptr().bitcast[Byte](),
+                    length=len(sub) * sizeof[Scalar[D]](),
+                )
+            )
+        )
+
+    # FIXME(#2535): parametrize capturing once function effects can be parametrized
+    fn count[
+        D: DType, //,
+        func: fn[w: Int] (SIMD[D, w]) capturing -> SIMD[DType.bool, w],
+    ](self: Span[Scalar[D]]) -> UInt:
+        """Count the amount of times the function returns `True`.
+
+        Parameters:
+            D: The DType.
+            func: The function to evaluate.
+
+        Returns:
+            The amount of times the function returns `True`.
+        """
+
+        alias widths = (256, 128, 64, 32, 16, 8)
+        var ptr = self.unsafe_ptr()
+        var length = len(self)
+        var amnt = UInt(0)
+        var processed = 0
+
+        @parameter
+        for i in range(len(widths)):
+            alias w = widths[i]
+
+            @parameter
+            if simdwidthof[D]() >= w:
+                for _ in range((length - processed) // w):
+                    var vec = (ptr + processed).load[width=w]()
+
+                    @parameter
+                    if w >= 256:
+                        amnt += Int(func(vec).cast[DType.uint16]().reduce_add())
+                    else:
+                        amnt += Int(func(vec).cast[DType.uint8]().reduce_add())
+                    processed += w
+
+        for i in range(length - processed):
+            amnt += Int(func(ptr[processed + i]))
+
+        return amnt
