@@ -990,6 +990,10 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     ]:
         """Split the string by a separator.
 
+        Parameters:
+            sep_mut: Mutability of the `sep` string slice.
+            sep_origin: Origin of the `sep` string slice.
+
         Args:
             sep: The string to split on.
             maxsplit: The maximum amount of items to split from String.
@@ -1715,8 +1719,14 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         return True
 
     @always_inline
-    fn split(self, sep: StringSlice, maxsplit: Int) raises -> List[Self]:
+    fn split[
+        sep_mut: Bool, sep_origin: Origin[sep_mut]
+    ](self, sep: StringSlice[sep_origin], maxsplit: Int) raises -> List[Self]:
         """Split the string by a separator.
+
+        Parameters:
+            sep_mut: Mutability of the `sep` string slice.
+            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -1736,11 +1746,17 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         """
         # TODO(#3528): add this example
         # _ = "123".split("", maxsplit=1) # ['', '123']
-        return self._split(sep, maxsplit)
+        return self._split[sep_mut, sep_origin](sep, maxsplit)
 
     @always_inline
-    fn split(self, sep: StringSlice) raises -> List[Self]:
+    fn split[
+        sep_mut: Bool, sep_origin: Origin[sep_mut]
+    ](self, sep: StringSlice[sep_origin]) raises -> List[Self]:
         """Split the string by a separator.
+
+        Parameters:
+            sep_mut: Mutability of the `sep` string slice.
+            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -1761,7 +1777,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         """
         # TODO(#3528): add this example
         # _ = "123".split("") # ['', '1', '2', '3', '']
-        return self._split(sep, -1)
+        return self._split[sep_mut, sep_origin](sep, -1)
 
     @always_inline
     fn split(self, *, maxsplit: Int) -> List[Self]:
