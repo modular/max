@@ -25,6 +25,7 @@ from sys import (
     has_avx512f,
     is_amd_gpu,
     is_nvidia_gpu,
+    is_gpu,
     llvm_intrinsic,
     simdwidthof,
     sizeof,
@@ -130,7 +131,11 @@ fn ceildiv[T: CeilDivableRaising, //](numerator: T, denominator: T) raises -> T:
 # NOTE: this overload is needed because IntLiteral promotes to a runtime type
 # before overload resolution.
 @always_inline("builtin")
-fn ceildiv(numerator: IntLiteral, denominator: IntLiteral) -> IntLiteral:
+fn ceildiv(
+    numerator: IntLiteral,
+    denominator: IntLiteral,
+    out result: __type_of(numerator.__ceildiv__(denominator)),
+):
     """Return the rounded-up result of dividing numerator by denominator.
 
     Args:
@@ -140,7 +145,7 @@ fn ceildiv(numerator: IntLiteral, denominator: IntLiteral) -> IntLiteral:
     Returns:
         The ceiling of dividing numerator by denominator.
     """
-    return numerator.__ceildiv__(denominator)
+    result = __type_of(result)()
 
 
 # ===----------------------------------------------------------------------=== #
@@ -402,6 +407,23 @@ fn exp2[
             ](x)
 
     @parameter
+    if is_amd_gpu() and type in (DType.float16, DType.float32):
+        alias asm = "llvm.amdgcn.exp2." + (
+            "f16" if type is DType.float16 else "f32"
+        )
+        var res = SIMD[type, simd_width]()
+
+        @parameter
+        for i in range(simd_width):
+            res[i] = llvm_intrinsic[
+                asm,
+                Scalar[type],
+                has_side_effect=False,
+            ](x[i])
+
+        return res
+
+    @parameter
     if type not in (DType.float32, DType.float64):
         return exp2(x.cast[DType.float32]()).cast[type]()
 
@@ -575,7 +597,7 @@ fn exp[
     alias neg_ln2 = -0.69314718055966295651160180568695068359375
 
     @parameter
-    if is_nvidia_gpu():
+    if is_gpu():
 
         @parameter
         if type in (DType.float16, DType.float32):
@@ -977,8 +999,8 @@ fn isclose[
     a: SIMD[type, simd_width],
     b: SIMD[type, simd_width],
     *,
-    atol: Scalar[type] = 1e-08,
-    rtol: Scalar[type] = 1e-05,
+    atol: Float64 = 1e-08,
+    rtol: Float64 = 1e-05,
     equal_nan: Bool = False,
 ) -> SIMD[DType.bool, simd_width]:
     """Checks if the two input values are numerically within a tolerance.
@@ -1024,7 +1046,9 @@ fn isclose[
             & isfinite(b)
             & (
                 abs(a - b)
-                <= max(__type_of(a)(atol), rtol * max(abs(a), abs(b)))
+                <= max(
+                    __type_of(a)(atol), __type_of(a)(rtol) * max(abs(a), abs(b))
+                )
             )
         )
 

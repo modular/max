@@ -128,6 +128,15 @@ struct UnsafePointer[
         """
         self.address = value
 
+    @always_inline("nodebug")
+    fn __init__(out self, *, ref [origin, address_space._value.value]to: type):
+        """Constructs a Pointer from a reference to a value.
+
+        Args:
+            to: The value to construct a pointer to.
+        """
+        self = Self(__mlir_op.`lit.ref.to_pointer`(__get_mvalue_as_litref(to)))
+
     @always_inline
     @implicit
     fn __init__(
@@ -625,7 +634,7 @@ struct UnsafePointer[
         *,
         alignment: Int = _default_alignment[type](),
         volatile: Bool = False,
-    ](self: UnsafePointer[Scalar[type], **_], offset: I, val: Scalar[type],):
+    ](self: UnsafePointer[Scalar[type], **_], offset: I, val: Scalar[type]):
         """Stores a single element value at the given offset.
 
         Constraints:

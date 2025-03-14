@@ -15,20 +15,19 @@ from collections.string import StringSlice
 from complex import ComplexSIMD
 from gpu.host import Dim
 from gpu.id import thread_idx, block_dim, block_idx
+from layout import LayoutTensor, Layout
 from math import ceildiv
-from max.driver import DynamicTensor, Tensor, accelerator_device, cpu_device
-from max.driver.accelerator import compile
+from max.driver import Accelerator, Tensor, accelerator, cpu
 from sys import has_nvidia_gpu_accelerator
 
 alias float_dtype = DType.float32
 alias int_dtype = DType.int32
-alias TensorType = DynamicTensor[type=int_dtype, rank=2].Type
 
 
 def draw_mandelbrot[h: Int, w: Int](t: Tensor[int_dtype, 2], max: Int):
     """A helper function to visualize the Mandelbrot set in ASCII art."""
     alias sr = StringSlice("....,c8M@jawrpogOQEPGJ")
-    out = t.unsafe_slice()
+    out = t.to_layout_tensor()
     for row in range(h):
         for col in range(w):
             var v = out[row, col]
@@ -41,13 +40,15 @@ def draw_mandelbrot[h: Int, w: Int](t: Tensor[int_dtype, 2], max: Int):
         print("")
 
 
-fn mandelbrot(
+fn mandelbrot[
+    layout: Layout
+](
     min_x: Scalar[float_dtype],
     min_y: Scalar[float_dtype],
     scale_x: Scalar[float_dtype],
     scale_y: Scalar[float_dtype],
     max_iterations: Scalar[int_dtype],
-    out: TensorType,
+    out: LayoutTensor[int_dtype, layout, MutableAnyOrigin],
 ):
     """The per-element calculation of iterations to escape in the Mandelbrot set.
     """
@@ -81,11 +82,8 @@ def main():
     if has_nvidia_gpu_accelerator():
         # Attempt to connect to a compatible GPU. If one is not found, this will
         # error out and exit.
-        gpu_device = accelerator_device()
-        host_device = cpu_device()
-
-        # Compile the function to run across a grid on the GPU.
-        gpu_function = compile[mandelbrot](gpu_device)
+        gpu_device = accelerator()
+        host_device = cpu()
 
         # Set the resolution of the Mandelbrot set grid that will be calculated.
         alias GRID_WIDTH = 60
@@ -110,6 +108,13 @@ def main():
         # Allocate a tensor on the target device to hold the resulting set.
         out_tensor = Tensor[int_dtype, 2]((GRID_HEIGHT, GRID_WIDTH), gpu_device)
 
+        out_layout_tensor = out_tensor.to_layout_tensor()
+
+        # Compile the function to run across a grid on the GPU.
+        gpu_function = Accelerator.compile[
+            mandelbrot[out_layout_tensor.layout]
+        ](gpu_device)
+
         # Launch the compiled function on the GPU. The target device is specified
         # first, followed by all function arguments. The last two named parameters
         # are the dimensions of the grid in blocks, and the block dimensions.
@@ -120,7 +125,7 @@ def main():
             SCALE_X,
             SCALE_Y,
             MAX_ITERATIONS,
-            out_tensor.unsafe_slice(),
+            out_layout_tensor,
             grid_dim=Dim(num_col_blocks, num_row_blocks),
             block_dim=Dim(BLOCK_SIZE, BLOCK_SIZE),
         )
