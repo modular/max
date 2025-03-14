@@ -950,21 +950,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     # Methods
     # ===------------------------------------------------------------------===#
 
-    fn split[
-        sep_mut: Bool,
-        sep_origin: Origin[sep_mut], //,
-    ](
-        self,
-        sep: StringSlice[sep_origin],
-        maxsplit: Int = -1,
-    ) raises -> List[
-        String
-    ]:
+    fn _split(self, sep: StringSlice, maxsplit: Int = -1) raises -> List[Self]:
         """Split the string by a separator.
-
-        Parameters:
-            sep_mut: Mutability of the `sep` string slice.
-            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -976,20 +963,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
 
         Raises:
             If the separator is empty.
-
-        Examples:
-
-        ```mojo
-        # Splitting a space
-        _ = StringSlice("hello world").split(" ") # ["hello", "world"]
-        # Splitting adjacent separators
-        _ = StringSlice("hello,,world").split(",") # ["hello", "", "world"]
-        # Splitting with maxsplit
-        _ = StringSlice("1,2,3").split(",", 1) # ['1', '2,3']
-        ```
-        .
         """
-        var output = List[String]()
+        var output = List[Self]()
 
         var str_byte_len = self.byte_length() - 1
         var lhs = 0
@@ -999,59 +974,27 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         if sep_len == 0:
             raise Error("Separator cannot be empty.")
         if str_byte_len < 0:
-            output.append(String(""))
+            output.append(rebind[Self]("".as_string_slice()))
 
         while lhs <= str_byte_len:
             rhs = self.find(sep, lhs)
             if rhs == -1:
-                output.append(String(self[lhs:]))
+                output.append(self[lhs:])
                 break
 
             if maxsplit > -1:
                 if items == maxsplit:
-                    output.append(String(self[lhs:]))
+                    output.append(self[lhs:])
                     break
                 items += 1
 
-            output.append(String(self[lhs:rhs]))
+            output.append(self[lhs:rhs])
             lhs = rhs + sep_len
 
         if self.endswith(sep) and (len(output) <= maxsplit or maxsplit == -1):
-            output.append(String(""))
+            output.append(rebind[Self]("".as_string_slice()))
 
         return output^
-
-    fn split(
-        self, sep: NoneType = None, maxsplit: Int = -1
-    ) -> List[StringSlice[origin]]:
-        """Split the string by every Whitespace separator.
-
-        Args:
-            sep: None.
-            maxsplit: The maximum amount of items to split from String. Defaults
-                to unlimited.
-
-        Returns:
-            A List of Strings containing the input split by the separator.
-
-        Examples:
-
-        ```mojo
-        # Splitting an empty string or filled with whitespaces
-        _ = StringSlice("      ").split() # []
-        _ = StringSlice("").split() # []
-
-        # Splitting a string with leading, trailing, and middle whitespaces
-        _ = StringSlice("      hello    world     ").split() # ["hello", "world"]
-        # Splitting adjacent universal newlines:
-        _ = StringSlice(
-            "hello \\t\\n\\v\\f\\r\\x1c\\x1d\\x1e\\x85\\u2028\\u2029world"
-        ).split()  # ["hello", "world"]
-        ```
-        .
-        """
-
-        return self._split_whitespace()
 
     fn _split_whitespace(self, maxsplit: Int = -1) -> List[StringSlice[origin]]:
         fn num_bytes(b: UInt8) -> Int:
@@ -1734,6 +1677,100 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
 
         return True
 
+    @always_inline
+    fn split(self, sep: StringSlice, maxsplit: Int) raises -> List[Self]:
+        """Split the string by a separator.
+
+        Args:
+            sep: The string to split on.
+            maxsplit: The maximum amount of items to split from String.
+
+        Returns:
+            A List of Strings containing the input split by the separator.
+
+        Examples:
+        ```mojo
+        # Splitting with maxsplit
+        _ = "1,2,3".split(",", maxsplit=1) # ['1', '2,3']
+        # Splitting with starting or ending separators
+        _ = ",1,2,3,".split(",", maxsplit=1) # ['', '1,2,3,']
+        ```
+        .
+        """
+        # TODO(#3528): add this example
+        # _ = "123".split("", maxsplit=1) # ['', '123']
+        return self._split(sep, maxsplit)
+
+    @always_inline
+    fn split(self, sep: StringSlice) raises -> List[Self]:
+        """Split the string by a separator.
+
+        Args:
+            sep: The string to split on.
+
+        Returns:
+            A List of Strings containing the input split by the separator.
+
+        Examples:
+        ```mojo
+        # Splitting a space
+        _ = "hello world".split(" ") # ["hello", "world"]
+        # Splitting adjacent separators
+        _ = "hello,,world".split(",") # ["hello", "", "world"]
+        # Splitting with starting or ending separators
+        _ = ",1,2,3,".split(",") # ['', '1', '2', '3', '']
+        ```
+        .
+        """
+        # TODO(#3528): add this example
+        # _ = "123".split("") # ['', '1', '2', '3', '']
+        return self._split(sep, -1)
+
+    @always_inline
+    fn split(self, *, maxsplit: Int) -> List[Self]:
+        """Split the string by every Whitespace separator.
+
+        Args:
+            maxsplit: The maximum amount of items to split from String.
+
+        Returns:
+            A List of Strings containing the input split by the separator.
+
+        Examples:
+        ```mojo
+        # Splitting with maxsplit
+        _ = "1     2  3".split(maxsplit=1) # ['1', '2  3']
+        ```
+        .
+        """
+        return self._split_whitespace(maxsplit)
+
+    @always_inline
+    fn split(self, sep: NoneType = None) -> List[Self]:
+        """Split the string by every Whitespace separator.
+
+        Args:
+            sep: None.
+
+        Returns:
+            A List of Strings containing the input split by the separator.
+
+        Examples:
+        ```mojo
+        # Splitting an empty string or filled with whitespaces
+        _ = "      ".split() # []
+        _ = "".split() # []
+        # Splitting a string with leading, trailing, and middle whitespaces
+        _ = "      hello    world     ".split() # ["hello", "world"]
+        # Splitting adjacent universal newlines:
+        _ = (
+            "hello \\t\\n\\r\\f\\v\\x1c\\x1d\\x1e\\x85\\u2028\\u2029world"
+        ).split()  # ["hello", "world"]
+        ```
+        .
+        """
+        return self._split_whitespace(-1)
+
     fn isnewline[single_character: Bool = False](self) -> Bool:
         """Determines whether every character in the given StringSlice is a
         python newline character. This corresponds to Python's
@@ -2000,12 +2037,12 @@ fn _to_string_list[
         memcpy(p, og_ptr, og_len)
         p[og_len] = 0  # null terminator
         buf = String._buffer_type(ptr=p, length=f_len, capacity=f_len)
-        (out_ptr + i).init_pointee_move(String(buf^))
+        (out_ptr + i).init_pointee_move(String(buffer=buf^))
     return List[String](ptr=out_ptr, length=i_len, capacity=i_len)
 
 
 @always_inline
-fn _to_string_list[
+fn to_string_list[
     O: ImmutableOrigin, //
 ](items: List[StringSlice[O]]) -> List[String]:
     """Create a list of Strings **copying** the existing data.
@@ -2030,7 +2067,7 @@ fn _to_string_list[
 
 
 @always_inline
-fn _to_string_list[
+fn to_string_list[
     O: ImmutableOrigin, //
 ](items: List[Span[Byte, O]]) -> List[String]:
     """Create a list of Strings **copying** the existing data.
