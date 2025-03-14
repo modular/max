@@ -688,8 +688,14 @@ struct StringLiteral(
         return String(elems, sep=self)
 
     @always_inline
-    fn split(self, sep: StringSlice, maxsplit: Int) raises -> List[String]:
+    fn split[
+        sep_mut: Bool, sep_origin: Origin[sep_mut], //
+    ](self, sep: StringSlice[sep_origin], maxsplit: Int) raises -> List[String]:
         """Split the string by a separator.
+
+        Parameters:
+            sep_mut: Mutability of the `sep` string slice.
+            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -709,11 +715,19 @@ struct StringLiteral(
         """
         # TODO(#3528): add this example
         # _ = "123".split("", maxsplit=1) # ['', '123']
-        return _to_string_list(self.as_string_slice().split(sep, maxsplit))
+        return _to_string_list(
+            self.as_string_slice().split[sep_mut, sep_origin](sep, maxsplit)
+        )
 
     @always_inline
-    fn split(self, sep: StringSlice) raises -> List[String]:
+    fn split[
+        sep_mut: Bool, sep_origin: Origin[sep_mut], //
+    ](self, sep: StringSlice[sep_origin]) raises -> List[String]:
         """Split the string by a separator.
+
+        Parameters:
+            sep_mut: Mutability of the `sep` string slice.
+            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -734,7 +748,9 @@ struct StringLiteral(
         """
         # TODO(#3528): add this example
         # _ = "123".split("") # ['', '1', '2', '3', '']
-        return _to_string_list(self.as_string_slice().split(sep, -1))
+        return _to_string_list(
+            self.as_string_slice().split[sep_mut, sep_origin](sep, -1)
+        )
 
     @always_inline
     fn split(self, *, maxsplit: Int) -> List[String]:
