@@ -15,7 +15,7 @@
 # the -t flag. Remember to replace it again before pushing any code.
 
 from collections import Dict, Optional
-from collections.string import String
+from collections.string import String, StringSlice
 from collections.string._utf8_validation import _is_valid_utf8
 from os import abort
 from pathlib import _dir_of_current_file
@@ -110,7 +110,7 @@ fn bench_string_split[
     @always_inline
     @parameter
     fn call_fn() raises:
-        var res: List[String]
+        var res: List[StringSlice[__origin_of(items)]]
 
         @parameter
         if sequence:
