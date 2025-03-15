@@ -34,6 +34,18 @@ def test_add():
     assert_equal("five", StringLiteral.__add__("five", ""))
     assert_equal("six", StringLiteral.__add__("", "six"))
     assert_equal("fivesix", StringLiteral.__add__("five", "six"))
+    alias static_concat_0 = "mo" + "jo"
+    alias static_concat_1 = "mo" + String("jo")
+    alias static_concat_2 = "mo" + "jo".as_string_slice()
+    assert_equal(static_concat_0, "mojo")
+    assert_equal(static_concat_1, "mojo")
+    assert_equal(static_concat_2, "mojo")
+    var dynamic_concat_0 = "mo" + "jo"
+    var dynamic_concat_1 = "mo" + String("jo")
+    var dynamic_concat_2 = "mo" + "jo".as_string_slice()
+    assert_equal(dynamic_concat_0, "mojo")
+    assert_equal(dynamic_concat_1, "mojo")
+    assert_equal(dynamic_concat_2, "mojo")
 
 
 def test_mul():
