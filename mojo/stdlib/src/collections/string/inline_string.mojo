@@ -131,7 +131,7 @@ struct InlineString(Sized, Stringable, CollectionElement, CollectionElementNew):
 
             # Begin by heap allocating enough space to store the combined
             # string.
-            var buffer = List[UInt8](capacity=total_len)
+            var buffer = List[UInt8](capacity=total_len + 1)  # null terminator
             # Copy the bytes from the current small string layout
             var span_self = Span[Byte, __origin_of(self)](
                 ptr=self._storage[_FixedString[Self.SMALL_CAP]].unsafe_ptr(),
