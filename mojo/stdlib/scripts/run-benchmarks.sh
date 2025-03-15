@@ -31,5 +31,18 @@ if [[ $# -gt 0 ]]; then
   BENCHMARK_PATH=$1
 fi
 
+# HACK: this is an absolutely horrible hack, please fix this
+if [[ -z "${_START_MODULAR_INCLUDED+x}" ]]; then
+  # save the original stdlib
+  mv -f ${REPO_ROOT}/.magic/envs/default/lib/mojo/stdlib.mojopkg ${BUILD_DIR}/og_stdlib.mojopkg
+  # copy the newly built stdlib
+  cp -f ${BUILD_DIR}/stdlib.mojopkg ${REPO_ROOT}/.magic/envs/default/lib/mojo/stdlib.mojopkg
+fi
+
 # Run the benchmarks sequentially
 lit --succinct --show-all --workers 1 ${BENCHMARK_PATH}
+
+if [[ -z "${_START_MODULAR_INCLUDED+x}" ]]; then
+  # return the original stdlib
+  mv -f ${BUILD_DIR}/og_stdlib.mojopkg ${REPO_ROOT}/.magic/envs/default/lib/mojo/stdlib.mojopkg
+fi

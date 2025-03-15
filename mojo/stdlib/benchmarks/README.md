@@ -17,19 +17,9 @@ internally.
 
 ## How to run the benchmarks
 
-If you want to just compile and run all of the benchmarks as-is,
-there is a script provided [here](../../stdlib/scripts/run-benchmarks.sh).
-This script builds the open source `stdlib.mojopkg` and then executes
-all of the benchmarks sequentially. The script also allows specifying a
-subdirectory or a file to run.
-
-Running e.g. `magic run mojo run stdlib/benchmarks/collections/bench_dict.mojo`
-makes the linker use the existing branch that the compiler is on. If you wish to
-test changes you are making on the current branch, remove the `-t` flag on top
-of the benchmark file (`# RUN: %mojo-no-debug %s -t`) then run:
-`magic run stdlib/scripts/run-benchmarks.sh
-stdlib/benchmarks/collections/bench_dict.mojo`.
-Remember to replace the `-t` flag again before pushing any code.
+Running e.g. `magic run benchmarks ./stdlib/benchmarks/collections` runs every
+file in the directory sequentially using the build based on the current branch.
+It can also run one file when specified.
 
 ## How to write effective benchmarks
 
