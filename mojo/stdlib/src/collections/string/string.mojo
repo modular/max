@@ -986,9 +986,9 @@ struct String(
         elif rhs_len == 0:
             return String(S(ptr=lhs.unsafe_ptr(), length=lhs_len))
         var buffer = Self._buffer_type(capacity=lhs_len + rhs_len + 1)
-        buffer.extend(lhs)
-        buffer.extend(rhs)
-        buffer.append(0)
+        buffer.extend[unsafe_no_checks=True](lhs)
+        buffer.extend[unsafe_no_checks=True](rhs)
+        buffer.append[unsafe_no_checks=True](0)
         return String(buffer=buffer^)
 
     @always_inline
