@@ -22,6 +22,7 @@ from testing import (
     assert_raises,
     assert_true,
 )
+from collections.string.string_slice import StringSlice, to_string_list
 from builtin.string_literal import (
     _base64_encode,
     _base64_decode,
@@ -464,7 +465,8 @@ def test_split():
 
 
 def test_splitlines():
-    alias L = List[String]
+    alias L = List[StringSlice[StaticConstantOrigin]]
+
     # Test with no line breaks
     assert_equal("hello world".splitlines(), L("hello world"))
 
@@ -499,6 +501,22 @@ def test_splitlines():
         s3.splitlines(keepends=True),
         L("hello\x1c", "world\x1d", "mojo\x1e", "language\x1e"),
     )
+
+    # test \x85 \u2028 \u2029
+    var next_line = String(buffer=List[UInt8](0xC2, 0x85, 0))
+    """TODO: \\x85"""
+    var unicode_line_sep = String(buffer=List[UInt8](0xE2, 0x80, 0xA8, 0))
+    """TODO: \\u2028"""
+    var unicode_paragraph_sep = String(buffer=List[UInt8](0xE2, 0x80, 0xA9, 0))
+    """TODO: \\u2029"""
+
+    for i in List(next_line, unicode_line_sep, unicode_paragraph_sep):
+        u = i[]
+        item = String("").join("hello", u, "world", u, "mojo", u, "language", u)
+        s = StringSlice(item)
+        assert_equal(s.splitlines(), hello_mojo)
+        items = List("hello" + u, "world" + u, "mojo" + u, "language" + u)
+        assert_equal(to_string_list(s.splitlines(keepends=True)), items)
 
 
 def test_float_conversion():
