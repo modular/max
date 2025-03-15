@@ -1972,7 +1972,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var fillbyte = fillchar.as_bytes()[0]
         var buffer = List[Byte](capacity=width + 1)
         buffer.resize(width, fillbyte)
-        buffer.append(0)
+        buffer.append[unsafe_no_checks=True](0)
         memcpy(buffer.unsafe_ptr().offset(start), self.unsafe_ptr(), len(self))
         var result = String(buffer=buffer)
         return result^

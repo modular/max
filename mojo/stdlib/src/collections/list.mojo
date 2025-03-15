@@ -21,7 +21,7 @@ from collections import List
 
 
 from os import abort
-from sys import sizeof
+from sys import sizeof, is_compile_time
 from sys.intrinsics import _type_is_eq
 
 from memory import Pointer, Span, UnsafePointer, memcpy
