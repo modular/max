@@ -1650,9 +1650,9 @@ struct String(
         res.reserve(val.byte_length() * self.byte_length() + 1)
         for i in range(self.byte_length()):
             for j in range(val.byte_length()):
-                res.append[unsafe_no_checks=True](val_ptr[j])
-            res.append[unsafe_no_checks=True](self_ptr[i])
-        res.append[unsafe_no_checks=True](0)
+                res.append(val_ptr[j])
+            res.append(self_ptr[i])
+        res.append(0)
         return String(res^)
 
     fn lower(self) -> String:
