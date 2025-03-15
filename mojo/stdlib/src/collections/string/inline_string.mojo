@@ -137,10 +137,10 @@ struct InlineString(Sized, Stringable, CollectionElement, CollectionElementNew):
                 ptr=self._storage[_FixedString[Self.SMALL_CAP]].unsafe_ptr(),
                 length=len(self),
             )
-            buffer.extend[unsafe_no_checks=True](span_self)
+            buffer.extend(span_self)
             # Copy the bytes from the additional string.
-            buffer.extend[unsafe_no_checks=True](str_slice.as_bytes())
-            buffer.append[unsafe_no_checks=True](0)  # Add the NUL byte
+            buffer.extend(str_slice.as_bytes())
+            buffer.append(0)  # Add the NUL byte
             self._storage = Self.Layout(String(buffer=buffer^))
 
     fn __add__(self, other: StringSlice) -> Self:
