@@ -493,7 +493,7 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         self.data = new_data
         self.capacity = new_capacity
 
-    fn append[unsafe_no_checks: Bool = False](mut self, owned value: T):
+    fn append[*, unsafe_no_checks: Bool = False](mut self, owned value: T):
         """Appends a value to this list.
 
         Parameters:
@@ -563,7 +563,7 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
             self.extend(orig)
 
     fn extend[
-        unsafe_no_checks: Bool = False
+        *, unsafe_no_checks: Bool = False
     ](mut self, owned other: List[T, *_]):
         """Extends this list by consuming the elements of `other`.
 
@@ -614,7 +614,7 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         self._len = final_size
 
     fn extend[
-        D: DType, //, unsafe_no_checks: Bool = False
+        D: DType, //, *, unsafe_no_checks: Bool = False
     ](mut self: List[Scalar[D], *_, **_], value: SIMD[D, _]):
         """Extends this list with the elements of a vector.
 
@@ -636,7 +636,7 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         self._len += value.size
 
     fn extend[
-        D: DType, //, unsafe_no_checks: Bool = False
+        D: DType, //, *, unsafe_no_checks: Bool = False
     ](mut self: List[Scalar[D], *_, **_], value: SIMD[D, _], *, count: Int):
         """Extends this list with `count` number of elements from a vector.
 
@@ -662,7 +662,7 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         self._len += count
 
     fn extend[
-        D: DType, //, unsafe_no_checks: Bool = False
+        D: DType, //, *, unsafe_no_checks: Bool = False
     ](mut self: List[Scalar[D], *_, **_], value: Span[Scalar[D]]):
         """Extends this list with the elements of a `Span`.
 
@@ -683,12 +683,12 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         memcpy(self._unsafe_next_uninit_ptr(), value.unsafe_ptr(), len(value))
         self._len += len(value)
 
-    fn pop[realloc: Bool = True](mut self, i: Int) -> T:
+    fn pop[*, realloc: Bool = True](mut self, i: Int) -> T:
         """Pops a value from the list at the given index.
 
         Parameters:
             realloc: Whether to reallocate the buffer when
-                `len(self) * 4 < self.capacity`.
+                `len(self) * 4 < self.capacity and self.capacity > 1`.
 
         Args:
             i: The index of the value to pop.
@@ -713,12 +713,12 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
                 self._realloc(self.capacity // 2)
         return ret_val^
 
-    fn pop[realloc: Bool = True](mut self) -> T:
+    fn pop[*, realloc: Bool = True](mut self) -> T:
         """Pops the last value from the list.
 
         Parameters:
             realloc: Whether to reallocate the buffer when
-                `len(self) * 4 < self.capacity`.
+                `len(self) * 4 < self.capacity and self.capacity > 1`.
 
         Returns:
             The popped value.
