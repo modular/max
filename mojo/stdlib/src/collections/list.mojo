@@ -21,7 +21,7 @@ from collections import List
 
 
 from os import abort
-from sys import sizeof, is_compile_time
+from sys import sizeof
 from sys.intrinsics import _type_is_eq
 
 from memory import Pointer, Span, UnsafePointer, memcpy
@@ -493,7 +493,24 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         self.data = new_data
         self.capacity = new_capacity
 
-    fn append[*, unsafe_no_checks: Bool = False](mut self, owned value: T):
+    # FIXME(#4157): remove overload and set unsafe_no_checks default to false
+    fn append(mut self, owned value: T):
+        """Appends a value to this list.
+
+        Args:
+            value: The value to append.
+
+        Notes:
+            If there is no capacity left, resizes to twice the current capacity.
+            Except for 0 capacity where it sets 1.
+        """
+
+        if self._len >= self.capacity:
+            self._realloc(self.capacity * 2 | Int(self.capacity == 0))
+        self._unsafe_next_uninit_ptr().init_pointee_move(value^)
+        self._len += 1
+
+    fn append[*, unsafe_no_checks: Bool](mut self, owned value: T):
         """Appends a value to this list.
 
         Parameters:
