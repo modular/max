@@ -889,8 +889,8 @@ struct String(
         var buffer = Self._buffer_type(capacity=len(r) + 1)
         var ptr = self.unsafe_ptr()
         for i in r:
-            buffer.append(ptr[i])
-        buffer.append(0)
+            buffer.append[unsafe_no_checks=True](ptr[i])
+        buffer.append[unsafe_no_checks=True](0)
         return String(buffer=buffer^)
 
     @always_inline
@@ -986,9 +986,9 @@ struct String(
         elif rhs_len == 0:
             return String(S(ptr=lhs.unsafe_ptr(), length=lhs_len))
         var buffer = Self._buffer_type(capacity=lhs_len + rhs_len + 1)
-        buffer.extend(lhs)
-        buffer.extend(rhs)
-        buffer.append(0)
+        buffer.extend[unsafe_no_checks=True](lhs)
+        buffer.extend[unsafe_no_checks=True](rhs)
+        buffer.append[unsafe_no_checks=True](0)
         return String(buffer=buffer^)
 
     @always_inline
@@ -1021,9 +1021,9 @@ struct String(
             return
         self._buffer.reserve(self.byte_length() + o_len + 1)
         if len(self._buffer) > 0:
-            _ = self._buffer.pop()
-        self._buffer.extend(other)
-        self._buffer.append(0)
+            _ = self._buffer.pop[realloc=False]()
+        self._buffer.extend[unsafe_no_checks=True](other)
+        self._buffer.append[unsafe_no_checks=True](0)
 
     @always_inline
     fn __iadd__(mut self, other: StringSlice):

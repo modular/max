@@ -1972,7 +1972,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var fillbyte = fillchar.as_bytes()[0]
         var buffer = List[Byte](capacity=width + 1)
         buffer.resize(width, fillbyte)
-        buffer.append(0)
+        buffer.append[unsafe_no_checks=True](0)
         memcpy(buffer.unsafe_ptr().offset(start), self.unsafe_ptr(), len(self))
         var result = String(buffer=buffer)
         return result^
@@ -1988,20 +1988,17 @@ fn _to_string_list[
     len_fn: fn (T) -> Int,
     unsafe_ptr_fn: fn (T) -> UnsafePointer[Byte],
 ](items: List[T]) -> List[String]:
-    i_len = len(items)
-    i_ptr = items.unsafe_ptr()
-    out_ptr = UnsafePointer[String].alloc(i_len)
+    var strings = List[String](capacity=len(items))
 
-    for i in range(i_len):
-        og_len = len_fn(i_ptr[i])
-        f_len = og_len + 1  # null terminator
-        p = UnsafePointer[Byte].alloc(f_len)
-        og_ptr = unsafe_ptr_fn(i_ptr[i])
-        memcpy(p, og_ptr, og_len)
-        p[og_len] = 0  # null terminator
-        buf = String._buffer_type(ptr=p, length=f_len, capacity=f_len)
-        (out_ptr + i).init_pointee_move(String(buf^))
-    return List[String](ptr=out_ptr, length=i_len, capacity=i_len)
+    for item in items:
+        var og_len = len_fn(item[])
+        var buf = List[Byte](capacity=og_len + 1)  # null terminator
+        var og_ptr = unsafe_ptr_fn(item[])
+        alias S = Span[Byte, ImmutableAnyOrigin]
+        buf.extend[unsafe_no_checks=True](S(ptr=og_ptr, length=og_len))
+        buf.append[unsafe_no_checks=True](0)  # null terminator
+        strings.append[unsafe_no_checks=True](String(buffer=buf^))
+    return strings^
 
 
 @always_inline

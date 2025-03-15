@@ -493,6 +493,7 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         self.data = new_data
         self.capacity = new_capacity
 
+    # FIXME(#4157): remove overload and set unsafe_no_checks default to false
     fn append(mut self, owned value: T):
         """Appends a value to this list.
 
@@ -503,8 +504,30 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
             If there is no capacity left, resizes to twice the current capacity.
             Except for 0 capacity where it sets 1.
         """
+
         if self._len >= self.capacity:
             self._realloc(self.capacity * 2 | Int(self.capacity == 0))
+        self._unsafe_next_uninit_ptr().init_pointee_move(value^)
+        self._len += 1
+
+    fn append[*, unsafe_no_checks: Bool](mut self, owned value: T):
+        """Appends a value to this list.
+
+        Parameters:
+            unsafe_no_checks: Unsafely assume the buffer is large enough.
+
+        Args:
+            value: The value to append.
+
+        Notes:
+            If there is no capacity left, resizes to twice the current capacity.
+            Except for 0 capacity where it sets 1.
+        """
+
+        @parameter
+        if not unsafe_no_checks:
+            if self._len >= self.capacity:
+                self._realloc(self.capacity * 2 | Int(self.capacity == 0))
         self._unsafe_next_uninit_ptr().init_pointee_move(value^)
         self._len += 1
 
@@ -556,8 +579,13 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         for i in range(x - 1):
             self.extend(orig)
 
-    fn extend(mut self, owned other: List[T, *_]):
+    fn extend[
+        *, unsafe_no_checks: Bool = False
+    ](mut self, owned other: List[T, *_]):
         """Extends this list by consuming the elements of `other`.
+
+        Parameters:
+            unsafe_no_checks: Unsafely assume the buffer is large enough.
 
         Args:
             other: List whose elements will be added in order at the end of this list.
@@ -566,7 +594,9 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         var final_size = len(self) + len(other)
         var other_original_size = len(other)
 
-        self.reserve(final_size)
+        @parameter
+        if not unsafe_no_checks:
+            self.reserve(final_size)
 
         # Defensively mark `other` as logically being empty, as we will be doing
         # consuming moves out of `other`, and so we want to avoid leaving `other`
@@ -601,12 +631,13 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         self._len = final_size
 
     fn extend[
-        D: DType, //
+        D: DType, //, *, unsafe_no_checks: Bool = False
     ](mut self: List[Scalar[D], *_, **_], value: SIMD[D, _]):
         """Extends this list with the elements of a vector.
 
         Parameters:
             D: The DType.
+            unsafe_no_checks: Unsafely assume the buffer is large enough.
 
         Args:
             value: The value to append.
@@ -614,17 +645,21 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         Notes:
             If there is no capacity left, resizes to `len(self) + value.size`.
         """
-        self.reserve(self._len + value.size)
+
+        @parameter
+        if not unsafe_no_checks:
+            self.reserve(self._len + value.size)
         self._unsafe_next_uninit_ptr().store(value)
         self._len += value.size
 
     fn extend[
-        D: DType, //
+        D: DType, //, *, unsafe_no_checks: Bool = False
     ](mut self: List[Scalar[D], *_, **_], value: SIMD[D, _], *, count: Int):
         """Extends this list with `count` number of elements from a vector.
 
         Parameters:
             D: The DType.
+            unsafe_no_checks: Unsafely assume the buffer is large enough.
 
         Args:
             value: The value to append.
@@ -635,18 +670,22 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
             If there is no capacity left, resizes to `len(self) + count`.
         """
         debug_assert(count <= value.size, "count must be <= value.size")
-        self.reserve(self._len + count)
+
+        @parameter
+        if not unsafe_no_checks:
+            self.reserve(self._len + count)
         var v_ptr = UnsafePointer.address_of(value).bitcast[Scalar[D]]()
         memcpy(self._unsafe_next_uninit_ptr(), v_ptr, count)
         self._len += count
 
     fn extend[
-        D: DType, //
+        D: DType, //, *, unsafe_no_checks: Bool = False
     ](mut self: List[Scalar[D], *_, **_], value: Span[Scalar[D]]):
         """Extends this list with the elements of a `Span`.
 
         Parameters:
             D: The DType.
+            unsafe_no_checks: Unsafely assume the buffer is large enough.
 
         Args:
             value: The value to append.
@@ -654,12 +693,19 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         Notes:
             If there is no capacity left, resizes to `len(self) + len(value)`.
         """
-        self.reserve(self._len + len(value))
+
+        @parameter
+        if not unsafe_no_checks:
+            self.reserve(self._len + len(value))
         memcpy(self._unsafe_next_uninit_ptr(), value.unsafe_ptr(), len(value))
         self._len += len(value)
 
-    fn pop(mut self, i: Int = -1) -> T:
+    fn pop[*, realloc: Bool = True](mut self, i: Int) -> T:
         """Pops a value from the list at the given index.
+
+        Parameters:
+            realloc: Whether to reallocate the buffer when
+                `len(self) * 4 < self.capacity and self.capacity > 1`.
 
         Args:
             i: The index of the value to pop.
@@ -677,8 +723,30 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         for j in range(normalized_idx + 1, self._len):
             (self.data + j).move_pointee_into(self.data + j - 1)
         self._len -= 1
-        if self._len * 4 < self.capacity:
-            if self.capacity > 1:
+
+        @parameter
+        if realloc:
+            if self._len * 4 < self.capacity and self.capacity > 1:
+                self._realloc(self.capacity // 2)
+        return ret_val^
+
+    fn pop[*, realloc: Bool = True](mut self) -> T:
+        """Pops the last value from the list.
+
+        Parameters:
+            realloc: Whether to reallocate the buffer when
+                `len(self) * 4 < self.capacity and self.capacity > 1`.
+
+        Returns:
+            The popped value.
+        """
+
+        var ret_val = (self.data + (self._len - 1)).take_pointee()
+        self._len -= 1
+
+        @parameter
+        if realloc:
+            if self._len * 4 < self.capacity and self.capacity > 1:
                 self._realloc(self.capacity // 2)
         return ret_val^
 
