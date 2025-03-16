@@ -76,9 +76,15 @@ fn b64encode(input_bytes: Span[Byte, _], mut result: List[Byte, _]):
     """Performs base64 encoding on the input string.
 
     Args:
-        input_bytes: The input string buffer. Assumed to be null-terminated.
+        input_bytes: The input string buffer.
         result: The buffer in which to store the values.
+
+    Notes:
+        This method reserves the buffer size necessary. `result` can be a 0
+        capacity buffer.
     """
+    # 4 character bytes for each 3 bytes (or less) block + null terminator
+    result.reserve(Int(4 * ((len(input_bytes) + 3 - 1) / 3)) + 1)
     _b64encode_with_buffers(input_bytes, result)
 
 
@@ -87,7 +93,7 @@ fn b64encode(input_string: StringSlice) -> String:
     """Performs base64 encoding on the input string.
 
     Args:
-        input_string: The input string buffer. Assumed to be null-terminated.
+        input_string: The input string buffer.
 
     Returns:
         The ASCII base64 encoded string.
@@ -99,17 +105,15 @@ fn b64encode(input_bytes: Span[Byte, _]) -> String:
     """Performs base64 encoding on the input string.
 
     Args:
-        input_bytes: The input string buffer. Assumed to be null-terminated.
+        input_bytes: The input string buffer.
 
     Returns:
         The ASCII base64 encoded string.
     """
-    # +1 for the null terminator and +1 to be sure
-    var result = List[UInt8, True](capacity=Int(len(input_bytes) * (4 / 3)) + 2)
+    var result = List[UInt8, True]()
     b64encode(input_bytes, result)
-    # null-terminate the result
-    result.append(0)
-    return String(result^)
+    result.append[unsafe_no_checks=True](0)  # null-terminate the result
+    return String(buffer=result^)
 
 
 # ===-----------------------------------------------------------------------===#

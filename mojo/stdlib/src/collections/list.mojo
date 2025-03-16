@@ -681,8 +681,8 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         if not unsafe_no_checks:
             self.reserve(self._len + count)
         else:
-            alias msg = "capacity must be >= len(self) + len(value)"
-            debug_assert(self.capacity >= self._len + len(value), msg)
+            alias msg = "capacity must be >= len(self) + count"
+            debug_assert(self.capacity >= self._len + count, msg)
         var v_ptr = UnsafePointer.address_of(value).bitcast[Scalar[D]]()
         memcpy(self._unsafe_next_uninit_ptr(), v_ptr, count)
         self._len += count
