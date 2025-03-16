@@ -597,6 +597,9 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         @parameter
         if not unsafe_no_checks:
             self.reserve(final_size)
+        else:
+            alias msg = "capacity must be >= len(self) + len(other)"
+            debug_assert(self.capacity >= self._len + len(other), msg)
 
         # Defensively mark `other` as logically being empty, as we will be doing
         # consuming moves out of `other`, and so we want to avoid leaving `other`
@@ -649,6 +652,9 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         @parameter
         if not unsafe_no_checks:
             self.reserve(self._len + value.size)
+        else:
+            alias msg = "capacity must be >= len(self) + len(value)"
+            debug_assert(self.capacity >= self._len + len(value), msg)
         self._unsafe_next_uninit_ptr().store(value)
         self._len += value.size
 
@@ -674,6 +680,9 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         @parameter
         if not unsafe_no_checks:
             self.reserve(self._len + count)
+        else:
+            alias msg = "capacity must be >= len(self) + len(value)"
+            debug_assert(self.capacity >= self._len + len(value), msg)
         var v_ptr = UnsafePointer.address_of(value).bitcast[Scalar[D]]()
         memcpy(self._unsafe_next_uninit_ptr(), v_ptr, count)
         self._len += count
@@ -697,6 +706,9 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         @parameter
         if not unsafe_no_checks:
             self.reserve(self._len + len(value))
+        else:
+            alias msg = "capacity must be >= len(self) + len(value)"
+            debug_assert(self.capacity >= self._len + len(value), msg)
         memcpy(self._unsafe_next_uninit_ptr(), value.unsafe_ptr(), len(value))
         self._len += len(value)
 
