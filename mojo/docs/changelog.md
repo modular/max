@@ -24,9 +24,35 @@ what we publish.
   including ones that return floating point values.  This allows functions
   like `round` to be constant folded when used in a comptime context.
 
+- References to aliases in struct types with unbound (or partially) bound
+  parameters sets are now allowed as long as the referenced alias doesn't
+  depend on any unbound parameters:
+
+  ```mojo
+  struct StructWithParam[a: Int, b: Int]:
+    alias a1 = 42
+    alias a2 = a+1
+
+  fn test():
+    _ = StructWithParams.a1 # ok
+    _ = StructWithParams[1].a2 # ok
+    _ = StructWithParams.a2 # error, 'a' is unbound.
+  ```
+
 ### Standard library changes
 
+- The design of the `IntLiteral` and `FloatLiteral` types has been changed to
+  maintain their compile-time-only value as a parameter instead of a stored
+  field. This correctly models that infinite precision literals are not
+  representable at runtime, and eliminates a number of bugs hit in corner cases.
+  This is made possible by enhanced dependent type support in the compiler.
+
 - The `Buffer` struct has been removed in favor of `Span` and `NDBuffer`.
+
+- The `InlineArray(unsafe_uninitialized=True)` constructor is now spelled `InlineArray(uninitialized=True)`.
+
+- `Optional`, `Span`, and `InlineArray` have been added to the prelude.  You
+   now no longer need to explicitly import these types to use them in your program.
 
 - A new `IntervalTree` data structure has been added to the standard library.
   This is a tree data structure that allows for efficient range queries.
@@ -126,6 +152,41 @@ what we publish.
   an issue with the any origin parameter extending the lifetime of unrelated
   local variables for this common method.
 
+- The `SIMD` type now exposes 128-bit and 256-bit element types, with
+  `DType.uint128`, `DType.int128`, `DType.uint256`, and `DType.int256`. Note
+  that this exposes capabilities (and limitations) of LLVM, which may not always
+  provide high performance for these types and may have missing operations like
+  divide, remainder, etc.
+
+- Several more packages are now documented.
+  - `compile` package
+  - `gpu` package
+  - `layout` package is underway, beginning with core types, functions, and traits.
+  - `logger` package
+
+- A new `sys.is_compile_time` function is added. This enables one to query
+whether code is being executed at compile time or not. For example:
+
+```mojo
+from sys import is_compile_time
+
+fn check_compile_time() -> String:
+   if is_compile_time():
+      return "compile time"
+   else:
+      return "runtime"
+
+def main():
+    alias var0 = check_compile_time()
+    var var1 = check_compile_time()
+    print("var0 is evaluated at ", var0, " , while var1 is evaluated at ", var1)
+```
+
+will print `var0 is evaluated at compile time, while var1 is evaluated at runtime`.
+
+- The `StringLiteral.get[value]()` method, which converts a compile-time value
+  of `Stringable` type has been renamed to `get_string_literal[value]()`.
+
 ### GPU changes
 
 - You can now skip compiling a GPU kernel first and then enqueueing it:
@@ -194,7 +255,28 @@ ctx.enqueue_function(compiled_func, grid_dim=1, block_dim=1)
 - `List.bytecount()` has been renamed to `List.byte_length()` for consistency
   with the String-like APIs.
 
+- Large bigwidth integers are introduced. Specifically, the Int128, UInt128,
+  Int256, and UInt256 are now supported.
+
 ### Tooling changes
+
+- Mojo doc gen is now able to display function / struct parameter references
+  inside nested parametric types using names instead of indices. For example,
+  instead of
+
+  ```mojo
+
+  sort[type: CollectionElement, //, cmp_fn: fn($1|0, $1|0) capturing -> Bool](span: Span[type, origin])
+
+  ```
+
+    it now displays
+
+  ```mojo
+
+  sort[type: CollectionElement, //, cmp_fn: fn(type, type) capturing -> Bool](span: Span[type, origin])
+
+  ```
 
 #### Mojo Compiler
 
@@ -251,4 +333,19 @@ ctx.enqueue_function(compiled_func, grid_dim=1, block_dim=1)
   end_result.extend(extra_data) # [4, 5, 8, 10]
   ```
 
+- Use of legacy argument conventions like `inout` and the use of `as` in named
+  results now produces an error message instead of a warning.
+
+- The `InlinedFixedVector` collection has been removed.  Instead, use
+  `InlineArray` when the upper bound is known at compile time.  If the upper
+  bound is not known until runtime, use `List` with the `capacity` constructor
+  to minimize allocations.
+
+- The `InlineList` type has been removed.  Replace uses with `List` and the
+  capacity constructor, or an `InlineArray`.
+
 ### 🛠️ Fixed
+
+- [#3976](https://github.com/modular/max/issues/3976) The `variance` argument
+  in `random.randn_float64` and `random.randn` has been renamed to
+  `standard_deviation` so that values are drawn from the correct distribution.
