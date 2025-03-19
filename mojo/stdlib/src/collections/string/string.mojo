@@ -1461,9 +1461,7 @@ struct String(
         """
         # TODO(#3528): add this example
         # _ = "123".split("") # ['', '1', '2', '3', '']
-        return _to_string_list(
-            self.as_string_slice().split[sep_mut, sep_origin](sep, -1)
-        )
+        return _to_string_list(self.as_string_slice().split(sep, -1))
 
     @always_inline
     fn split(ref self, *, maxsplit: Int) -> List[String]:
