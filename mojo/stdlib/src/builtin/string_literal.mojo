@@ -588,11 +588,7 @@ struct StringLiteral(
         return String(elems, sep=self)
 
     @always_inline
-    fn split[
-        sep_mut: Bool, sep_origin: Origin[sep_mut], //
-    ](ref self, sep: StringSlice[sep_origin], maxsplit: Int) raises -> List[
-        String
-    ]:
+    fn split(self, sep: StringSlice, maxsplit: Int) raises -> List[String]:
         """Split the string by a separator.
 
         Args:
@@ -613,14 +609,10 @@ struct StringLiteral(
         """
         # TODO(#3528): add this example
         # _ = "123".split("", maxsplit=1) # ['', '123']
-        return _to_string_list(
-            self.as_string_slice().split[sep_mut, sep_origin](sep, maxsplit)
-        )
+        return _to_string_list(self.as_string_slice().split(sep, maxsplit))
 
     @always_inline
-    fn split[
-        sep_mut: Bool, sep_origin: Origin[sep_mut], //
-    ](ref self, sep: StringSlice[sep_origin]) raises -> List[String]:
+    fn split(self, sep: StringSlice) raises -> List[String]:
         """Split the string by a separator.
 
         Args:
@@ -642,12 +634,10 @@ struct StringLiteral(
         """
         # TODO(#3528): add this example
         # _ = "123".split("") # ['', '1', '2', '3', '']
-        return _to_string_list(
-            self.as_string_slice().split[sep_mut, sep_origin](sep, -1)
-        )
+        return _to_string_list(self.as_string_slice().split(sep, -1))
 
     @always_inline
-    fn split(ref self, *, maxsplit: Int) -> List[String]:
+    fn split(self, *, maxsplit: Int) -> List[String]:
         """Split the string by every Whitespace separator.
 
         Args:
@@ -666,7 +656,7 @@ struct StringLiteral(
         return _to_string_list(self.as_string_slice().split(maxsplit=maxsplit))
 
     @always_inline
-    fn split(ref self, sep: NoneType = None) -> List[String]:
+    fn split(self, sep: NoneType = None) -> List[String]:
         """Split the string by every Whitespace separator.
 
         Args:
