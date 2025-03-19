@@ -983,16 +983,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     # Methods
     # ===------------------------------------------------------------------===#
 
-    fn _split[
-        sep_mut: Bool, sep_origin: Origin[sep_mut]
-    ](self, sep: StringSlice[sep_origin], maxsplit: Int = -1) raises -> List[
-        Self
-    ]:
+    fn _split(self, sep: StringSlice, maxsplit: Int = -1) raises -> List[Self]:
         """Split the string by a separator.
-
-        Parameters:
-            sep_mut: Mutability of the `sep` string slice.
-            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -1037,12 +1029,12 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
 
         return output^
 
-    fn _split_whitespace(self, maxsplit: Int = -1) -> List[StringSlice[origin]]:
+    fn _split_whitespace(self, maxsplit: Int = -1) -> List[Self]:
         fn num_bytes(b: UInt8) -> Int:
             var flipped = ~b
             return Int(count_leading_zeros(flipped) + (flipped >> 7))
 
-        var output = List[StringSlice[origin]]()
+        var output = List[Self]()
         var str_byte_len = self.byte_length() - 1
         var lhs = 0
         var rhs = 0
@@ -1081,9 +1073,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
                 output.append(self[lhs:rhs])
                 lhs = rhs
             except e:
-                return abort[List[StringSlice[origin]]](
-                    "unexpected exception during split()"
-                )
+                return abort[List[Self]]("unexpected exception during split()")
 
         return output
 
@@ -1719,14 +1709,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         return True
 
     @always_inline
-    fn split[
-        sep_mut: Bool, sep_origin: Origin[sep_mut]
-    ](self, sep: StringSlice[sep_origin], maxsplit: Int) raises -> List[Self]:
+    fn split(self, sep: StringSlice, maxsplit: Int) raises -> List[Self]:
         """Split the string by a separator.
-
-        Parameters:
-            sep_mut: Mutability of the `sep` string slice.
-            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -1746,17 +1730,11 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         """
         # TODO(#3528): add this example
         # _ = "123".split("", maxsplit=1) # ['', '123']
-        return self._split[sep_mut, sep_origin](sep, maxsplit)
+        return self._split(sep, maxsplit)
 
     @always_inline
-    fn split[
-        sep_mut: Bool, sep_origin: Origin[sep_mut]
-    ](self, sep: StringSlice[sep_origin]) raises -> List[Self]:
+    fn split(self, sep: StringSlice) raises -> List[Self]:
         """Split the string by a separator.
-
-        Parameters:
-            sep_mut: Mutability of the `sep` string slice.
-            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -1777,7 +1755,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         """
         # TODO(#3528): add this example
         # _ = "123".split("") # ['', '1', '2', '3', '']
-        return self._split[sep_mut, sep_origin](sep, -1)
+        return self._split(sep, -1)
 
     @always_inline
     fn split(self, *, maxsplit: Int) -> List[Self]:
@@ -1857,16 +1835,11 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
                 offset += b_len
             return length != 0
 
-    fn splitlines[
-        O: ImmutableOrigin, //
-    ](self: StringSlice[O], keepends: Bool = False) -> List[StringSlice[O]]:
+    fn splitlines(self, keepends: Bool = False) -> List[Self]:
         """Split the string at line boundaries. This corresponds to Python's
         [universal newlines:](
         https://docs.python.org/3/library/stdtypes.html#str.splitlines)
         `"\\r\\n"` and `"\\t\\n\\v\\f\\r\\x1c\\x1d\\x1e\\x85\\u2028\\u2029"`.
-
-        Parameters:
-            O: The immutable origin.
 
         Args:
             keepends: If True, line breaks are kept in the resulting strings.
@@ -1879,7 +1852,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         alias `\r` = UInt8(ord("\r"))
         alias `\n` = UInt8(ord("\n"))
 
-        output = List[StringSlice[O]](capacity=128)  # guessing
+        output = List[Self](capacity=128)  # guessing
         var ptr = self.unsafe_ptr()
         var length = self.byte_length()
         var offset = 0
@@ -1909,7 +1882,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
                 eol_start += char_len
 
             var str_len = eol_start - offset + Int(keepends) * eol_length
-            var s = StringSlice[O](ptr=ptr + offset, length=str_len)
+            var s = Self(ptr=ptr + offset, length=str_len)
             output.append(s)
             offset = eol_start + eol_length
 
@@ -2093,9 +2066,7 @@ fn _to_string_list[
 
 
 @always_inline
-fn _to_string_list[
-    O: ImmutableOrigin, //
-](items: List[StringSlice[O]]) -> List[String]:
+fn _to_string_list[O: Origin, //](items: List[StringSlice[O]]) -> List[String]:
     """Create a list of Strings **copying** the existing data.
 
     Parameters:
@@ -2118,9 +2089,7 @@ fn _to_string_list[
 
 
 @always_inline
-fn _to_string_list[
-    O: ImmutableOrigin, //
-](items: List[Span[Byte, O]]) -> List[String]:
+fn _to_string_list[O: Origin, //](items: List[Span[Byte, O]]) -> List[String]:
     """Create a list of Strings **copying** the existing data.
 
     Parameters:

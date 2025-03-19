@@ -1408,14 +1408,8 @@ struct String(
     # TODO(MSTDL-590): String.split() should return `StringSlice`s.
     # FIX: #3528
     @always_inline
-    fn split[
-        sep_mut: Bool, sep_origin: Origin[sep_mut], //
-    ](self, sep: StringSlice[sep_origin], maxsplit: Int) raises -> List[String]:
+    fn split(ref self, sep: StringSlice, maxsplit: Int) raises -> List[String]:
         """Split the string by a separator.
-
-        Parameters:
-            sep_mut: Mutability of the `sep` string slice.
-            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -1438,14 +1432,8 @@ struct String(
         return _to_string_list(self.as_string_slice().split(sep, maxsplit))
 
     @always_inline
-    fn split[
-        sep_mut: Bool, sep_origin: Origin[sep_mut], //
-    ](self, sep: StringSlice[sep_origin]) raises -> List[String]:
+    fn split(ref self, sep: StringSlice) raises -> List[String]:
         """Split the string by a separator.
-
-        Parameters:
-            sep_mut: Mutability of the `sep` string slice.
-            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -1471,7 +1459,7 @@ struct String(
         )
 
     @always_inline
-    fn split(self, *, maxsplit: Int) -> List[String]:
+    fn split(ref self, *, maxsplit: Int) -> List[String]:
         """Split the string by every Whitespace separator.
 
         Args:
@@ -1490,7 +1478,7 @@ struct String(
         return _to_string_list(self.as_string_slice().split(maxsplit=maxsplit))
 
     @always_inline
-    fn split(self, sep: NoneType = None) -> List[String]:
+    fn split(ref self, sep: NoneType = None) -> List[String]:
         """Split the string by every Whitespace separator.
 
         Args:
@@ -1515,7 +1503,7 @@ struct String(
         """
         return _to_string_list(self.as_string_slice().split(sep))
 
-    fn splitlines(self, keepends: Bool = False) -> List[String]:
+    fn splitlines(ref self, keepends: Bool = False) -> List[String]:
         """Split the string at line boundaries. This corresponds to Python's
         [universal newlines:](
             https://docs.python.org/3/library/stdtypes.html#str.splitlines)
