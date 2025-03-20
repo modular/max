@@ -41,7 +41,8 @@ fn _ascii_to_value[validate: Bool = False](char: StringSlice) raises -> Int:
         char: A single character string.
 
     Returns:
-        The integer value of the character for base64 decoding, or -1 if invalid.
+        The integer value of the character for base64 decoding, or -1 if
+        invalid.
     """
     var char_val = ord(char)
 
@@ -80,7 +81,7 @@ fn b64encode(input_bytes: Span[Byte, _], mut result: List[Byte, _]):
         result: The buffer in which to store the values.
 
     Notes:
-        This method reserves the buffer size necessary. `result` can be a 0
+        This method reserves the necessary buffer capacity. `result` can be a 0
         capacity buffer.
     """
     # 4 character bytes for each 3 bytes (or less) block + null terminator
@@ -163,9 +164,8 @@ fn b64decode[validate: Bool = False](str: StringSlice) raises -> String:
 
         p.append(((c & 0x03) << 6) | d)
 
-    p.append(0)
-
-    return String(p^)
+    p.append(0)  # null-terminate the result
+    return String(buffer=p^)
 
 
 # ===-----------------------------------------------------------------------===#
@@ -200,8 +200,7 @@ fn b16encode(str: StringSlice) -> String:
         out.append(b16chars[Int(hi)])
         out.append(b16chars[Int(lo)])
 
-    out.append(0)
-
+    out.append(0)  # null-terminate the result
     return String(buffer=out^)
 
 
@@ -246,5 +245,5 @@ fn b16decode(str: StringSlice) -> String:
         var lo = str[i + 1]
         p.append(decode(hi) << 4 | decode(lo))
 
-    p.append(0)
+    p.append(0)  # null-terminate the result
     return String(buffer=p^)
