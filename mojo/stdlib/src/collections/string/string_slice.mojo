@@ -1670,11 +1670,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             string.
         """
         # FIXME(#3526): this should return unicode codepoint offsets
-        return (
-            self.as_bytes()
-            .get_immutable()
-            .find(substr.as_bytes().get_immutable(), start)
-        )
+        return self.as_bytes().find(substr.as_bytes(), start)
 
     fn rfind(self, substr: StringSlice, start: Int = 0) -> Int:
         """Finds the offset in bytes of the last occurrence of `substr` starting at
@@ -1690,11 +1686,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             string.
         """
         # FIXME(#3526): this should return unicode codepoint offsets
-        return (
-            self.as_bytes()
-            .get_immutable()
-            .rfind(substr.as_bytes().get_immutable(), start)
-        )
+        return self.as_bytes().rfind(substr.as_bytes(), start)
 
     fn isspace(self) -> Bool:
         """Determines whether every character in the given StringSlice is a
@@ -2171,40 +2163,3 @@ fn _utf8_byte_type(b: SIMD[DType.uint8, _], /) -> __type_of(b):
         - 4 -> start of 4 byte long sequence.
     """
     return count_leading_zeros(~b)
-
-
-@always_inline
-fn _memrchr[
-    type: DType
-](
-    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
-) -> UnsafePointer[Scalar[type]]:
-    if not len:
-        return UnsafePointer[Scalar[type]]()
-    for i in reversed(range(len)):
-        if source[i] == char:
-            return source + i
-    return UnsafePointer[Scalar[type]]()
-
-
-@always_inline
-fn _memrmem[
-    type: DType
-](
-    haystack: UnsafePointer[Scalar[type]],
-    haystack_len: Int,
-    needle: UnsafePointer[Scalar[type]],
-    needle_len: Int,
-) -> UnsafePointer[Scalar[type]]:
-    if not needle_len:
-        return haystack
-    if needle_len > haystack_len:
-        return UnsafePointer[Scalar[type]]()
-    if needle_len == 1:
-        return _memrchr[type](haystack, needle[0], haystack_len)
-    for i in reversed(range(haystack_len - needle_len + 1)):
-        if haystack[i] != needle[0]:
-            continue
-        if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
-            return haystack + i
-    return UnsafePointer[Scalar[type]]()

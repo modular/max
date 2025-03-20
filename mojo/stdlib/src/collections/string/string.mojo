@@ -1382,7 +1382,6 @@ struct String(
         Returns:
           The offset of `substr` relative to the beginning of the string.
         """
-
         return self.as_string_slice().find(substr, start)
 
     fn rfind(self, substr: StringSlice, start: Int = 0) -> Int:
@@ -1396,7 +1395,6 @@ struct String(
         Returns:
           The offset of `substr` relative to the beginning of the string.
         """
-
         return self.as_string_slice().rfind(substr, start=start)
 
     fn isspace(self) -> Bool:
