@@ -1021,7 +1021,7 @@ struct String(
             return
         self._buffer.reserve(self.byte_length() + o_len + 1)
         if len(self._buffer) > 0:
-            _ = self._buffer.pop[realloc=False]()
+            _ = self._buffer.pop()
         self._buffer.extend[unsafe_no_checks=True](other)
         self._buffer.append[unsafe_no_checks=True](0)
 

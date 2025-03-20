@@ -712,12 +712,8 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
         memcpy(self._unsafe_next_uninit_ptr(), value.unsafe_ptr(), len(value))
         self._len += len(value)
 
-    fn pop[*, realloc: Bool = True](mut self, i: Int) -> T:
+    fn pop(mut self, i: Int = -1) -> T:
         """Pops a value from the list at the given index.
-
-        Parameters:
-            realloc: Whether to reallocate the buffer when
-                `len(self) * 4 < self.capacity and self.capacity > 1`.
 
         Args:
             i: The index of the value to pop.
@@ -736,30 +732,6 @@ struct List[T: CollectionElement, hint_trivial_type: Bool = False](
             (self.data + j).move_pointee_into(self.data + j - 1)
         self._len -= 1
 
-        @parameter
-        if realloc:
-            if self._len * 4 < self.capacity and self.capacity > 1:
-                self._realloc(self.capacity // 2)
-        return ret_val^
-
-    fn pop[*, realloc: Bool = True](mut self) -> T:
-        """Pops the last value from the list.
-
-        Parameters:
-            realloc: Whether to reallocate the buffer when
-                `len(self) * 4 < self.capacity and self.capacity > 1`.
-
-        Returns:
-            The popped value.
-        """
-
-        var ret_val = (self.data + (self._len - 1)).take_pointee()
-        self._len -= 1
-
-        @parameter
-        if realloc:
-            if self._len * 4 < self.capacity and self.capacity > 1:
-                self._realloc(self.capacity // 2)
         return ret_val^
 
     fn reserve(mut self, new_capacity: Int):
