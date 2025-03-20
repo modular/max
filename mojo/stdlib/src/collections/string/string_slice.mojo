@@ -603,8 +603,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             the provided string slice.
         """
         var buffer = String._buffer_type(capacity=self.byte_length() + 1)
-        buffer.extend(self.as_bytes())
-        buffer.append(0)
+        buffer.extend[unsafe_no_checks=True](self.as_bytes())
+        buffer.append[unsafe_no_checks=True](0)
         return String(buffer=buffer^)
 
     fn __repr__(self) -> String:
@@ -893,10 +893,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             A new string containing the character at the specified position.
         """
         # TODO(#933): implement this for unicode when we support llvm intrinsic evaluation at compile time
-        var buf = String._buffer_type(capacity=1)
-        buf.append(self._slice[idx])
-        buf.append(0)
-        return String(buf^)
+        return String(buffer=String._buffer_type(self._slice[idx], 0))
 
     fn __contains__(self, substr: StringSlice) -> Bool:
         """Returns True if the substring is contained within the current string.
@@ -941,9 +938,9 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var res = List[Byte](
             capacity=self.byte_length() + rhs.byte_length() + 1
         )
-        res.extend(self.as_bytes())
-        res.extend(rhs.as_bytes())
-        res.append(0)
+        res.extend[unsafe_no_checks=True](self.as_bytes())
+        res.extend[unsafe_no_checks=True](rhs.as_bytes())
+        res.append[unsafe_no_checks=True](0)
         return String(buffer=res^)
 
     fn __radd__(self, lhs: StringSlice) -> String:
@@ -958,9 +955,9 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var res = List[Byte](
             capacity=self.byte_length() + lhs.byte_length() + 1
         )
-        res.extend(lhs.as_bytes())
-        res.extend(self.as_bytes())
-        res.append(0)
+        res.extend[unsafe_no_checks=True](lhs.as_bytes())
+        res.extend[unsafe_no_checks=True](self.as_bytes())
+        res.append[unsafe_no_checks=True](0)
         return String(buffer=res^)
 
     fn __mul__(self, n: Int) -> String:
@@ -975,8 +972,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
 
         var buffer = List[Byte](capacity=self.byte_length() * n + 1)
         for i in range(n):
-            buffer.extend(self.as_bytes())
-        buffer.append(0)
+            buffer.extend[unsafe_no_checks=True](self.as_bytes())
+        buffer.append[unsafe_no_checks=True](0)
         return String(buffer=buffer)
 
     # ===------------------------------------------------------------------===#
