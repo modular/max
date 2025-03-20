@@ -1719,10 +1719,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             substr.as_bytes().get_immutable(),
         )
 
-        if not loc:
-            return -1
-
-        return Int(loc) - Int(self.unsafe_ptr())
+        return ((Int(loc) - Int(self.unsafe_ptr()) + 1) & -Int(Bool(loc))) - 1
 
     fn isspace(self) -> Bool:
         """Determines whether every character in the given StringSlice is a
