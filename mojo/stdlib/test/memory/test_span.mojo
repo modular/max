@@ -221,18 +221,15 @@ def test_span_coerce():
     takes_span(a)
 
 
-def test_count():
-    var str = String("Hello world").as_bytes()
+def test_count_func():
+    @parameter
+    fn is_2[w: Int](v: SIMD[DType.uint8, w]) -> SIMD[DType.bool, w]:
+        return v == 2
 
-    assert_equal(12, str.count("".as_bytes()))
-    assert_equal(1, str.count("Hell".as_bytes()))
-    assert_equal(3, str.count("l".as_bytes()))
-    assert_equal(1, str.count("ll".as_bytes()))
-    assert_equal(1, str.count("ld".as_bytes()))
-    assert_equal(0, str.count("universe".as_bytes()))
-
-    assert_equal("aaaaa".as_bytes().count("a".as_bytes()), 5)
-    assert_equal("aaaaaa".as_bytes().count("aa".as_bytes()), 3)
+    var data = Span(List[Byte](0, 1, 2, 1, 2, 1, 2))
+    assert_equal(3, data.count[func=is_2]())
+    assert_equal(2, data[:-1].count[func=is_2]())
+    assert_equal(1, data[:3].count[func=is_2]())
 
 
 def main():
@@ -248,4 +245,4 @@ def main():
     test_fill()
     test_ref()
     test_reversed()
-    test_count()
+    test_count_func()

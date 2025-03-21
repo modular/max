@@ -473,43 +473,6 @@ struct Span[
             alignment=alignment,
         ](ptr=self._data, length=self._len)
 
-    fn count[D: DType, //](self: Span[Scalar[D]], sub: Span[Scalar[D]]) -> UInt:
-        """Return the number of non-overlapping occurrences of subsequence.
-
-        Parameters:
-            D: The DType.
-
-        Args:
-            sub: The subsequence.
-
-        Returns:
-            The number of non-overlapping occurrences of subsequence.
-        """
-
-        if len(sub) == 1:
-
-            @parameter
-            fn equal_fn[w: Int](v: SIMD[D, w]) -> SIMD[DType.bool, w]:
-                return v == SIMD[D, w](sub.unsafe_ptr()[0])
-
-            return self.count[func=equal_fn]()
-
-        # HACK(#3548): this is a hack until we have Span.find(). All count
-        # implementations should delegate to Span.count() eventually.
-        return String(
-            StringSlice[origin](
-                ptr=self.unsafe_ptr().bitcast[Byte](),
-                length=len(self) * sizeof[Scalar[D]](),
-            )
-        ).count(
-            String(
-                StringSlice[origin](
-                    ptr=sub.unsafe_ptr().bitcast[Byte](),
-                    length=len(sub) * sizeof[Scalar[D]](),
-                )
-            )
-        )
-
     # FIXME(#2535): parametrize capturing once function effects can be parametrized
     fn count[
         D: DType, //,
