@@ -539,9 +539,9 @@ struct WritableVariadicPack[
 
 # fmt: off
 alias _hex_table = SIMD[DType.uint8, 16](
-    ord("0"), ord("1"), ord("2"), ord("3"), ord("4"), ord("5"), ord("6"),
-    ord("7"), ord("8"), ord("9"), ord("a"), ord("b"), ord("c"), ord("d"),
-    ord("e"), ord("f"),
+    ord("0"), ord("1"), ord("2"), ord("3"), ord("4"),
+    ord("5"), ord("6"), ord("7"), ord("8"), ord("9"),
+    ord("a"), ord("b"), ord("c"), ord("d"), ord("e"), ord("f"),
 )
 # fmt: on
 
