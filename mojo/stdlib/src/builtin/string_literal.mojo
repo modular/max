@@ -327,8 +327,8 @@ struct StringLiteral(
         # memory leak.
         # return self.as_string_slice()
         var buffer = String._buffer_type(capacity=self.byte_length() + 1)
-        buffer.extend(self.as_bytes())
-        buffer.append(0)
+        buffer.extend[unsafe_no_checks=True](self.as_bytes())
+        buffer.append[unsafe_no_checks=True](0)
         return String(buffer=buffer^)
 
     @no_inline
