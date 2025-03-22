@@ -12,7 +12,6 @@
 # ===----------------------------------------------------------------------=== #
 # RUN: %mojo %s
 
-from collections.string import StringSlice
 from collections.string.string import (
     _calc_initial_buffer_size_int32,
     _calc_initial_buffer_size_int64,
@@ -27,6 +26,7 @@ from testing import (
     assert_raises,
     assert_true,
 )
+from collections.string.string_slice import StringSlice, to_string_list
 
 
 @value
@@ -775,17 +775,18 @@ def test_split():
 
 
 def test_splitlines():
-    alias L = List[String]
+    alias L = List[StringSlice[StaticConstantOrigin]]
+
     # Test with no line breaks
-    assert_equal(String("hello world").splitlines(), L("hello world"))
+    assert_equal("hello world".splitlines(), L("hello world"))
 
     # Test with line breaks
-    assert_equal(String("hello\nworld").splitlines(), L("hello", "world"))
-    assert_equal(String("hello\rworld").splitlines(), L("hello", "world"))
-    assert_equal(String("hello\r\nworld").splitlines(), L("hello", "world"))
+    assert_equal("hello\nworld".splitlines(), L("hello", "world"))
+    assert_equal("hello\rworld".splitlines(), L("hello", "world"))
+    assert_equal("hello\r\nworld".splitlines(), L("hello", "world"))
 
     # Test with multiple different line breaks
-    s1 = String("hello\nworld\r\nmojo\rlanguage\r\n")
+    s1 = "hello\nworld\r\nmojo\rlanguage\r\n"
     hello_mojo = L("hello", "world", "mojo", "language")
     assert_equal(s1.splitlines(), hello_mojo)
     assert_equal(
@@ -794,9 +795,9 @@ def test_splitlines():
     )
 
     # Test with an empty string
-    assert_equal(String("").splitlines(), L())
+    assert_equal("".splitlines(), L())
     # test \v \f \x1c \x1d
-    s2 = String("hello\vworld\fmojo\x1clanguage\x1d")
+    s2 = "hello\vworld\fmojo\x1clanguage\x1d"
     assert_equal(s2.splitlines(), hello_mojo)
     assert_equal(
         s2.splitlines(keepends=True),
@@ -804,7 +805,7 @@ def test_splitlines():
     )
 
     # test \x1c \x1d \x1e
-    s3 = String("hello\x1cworld\x1dmojo\x1elanguage\x1e")
+    s3 = "hello\x1cworld\x1dmojo\x1elanguage\x1e"
     assert_equal(s3.splitlines(), hello_mojo)
     assert_equal(
         s3.splitlines(keepends=True),
@@ -812,20 +813,22 @@ def test_splitlines():
     )
 
     # test \x85 \u2028 \u2029
-    var next_line = List[UInt8](0xC2, 0x85, 0)
+    var next_line = String(buffer=List[UInt8](0xC2, 0x85, 0))
     """TODO: \\x85"""
-    var unicode_line_sep = List[UInt8](0xE2, 0x80, 0xA8, 0)
+    var unicode_line_sep = String(buffer=List[UInt8](0xE2, 0x80, 0xA8, 0))
     """TODO: \\u2028"""
-    var unicode_paragraph_sep = List[UInt8](0xE2, 0x80, 0xA9, 0)
+    var unicode_paragraph_sep = String(buffer=List[UInt8](0xE2, 0x80, 0xA9, 0))
     """TODO: \\u2029"""
 
     for i in List(next_line, unicode_line_sep, unicode_paragraph_sep):
-        u = String(buffer=i[])
-        item = String("").join("hello", u, "world", u, "mojo", u, "language", u)
-        assert_equal(item.splitlines(), hello_mojo)
+        u = i[]
+        item = "".join("hello", u, "world", u, "mojo", u, "language", u)
+        assert_equal(item.splitlines().__str__(), hello_mojo.__str__())
         assert_equal(
-            item.splitlines(keepends=True),
-            L("hello" + u, "world" + u, "mojo" + u, "language" + u),
+            item.splitlines(keepends=True).__str__(),
+            List(
+                "hello" + u, "world" + u, "mojo" + u, "language" + u
+            ).__str__(),
         )
 
 
