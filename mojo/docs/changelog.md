@@ -43,6 +43,11 @@ In this example the variadic pack is buffered to the stack in the `print` call
 along with the extra arguments, before doing a single syscall to write to
 stdout.
 
+- `Span` now has `find()` and `rfind()` methods which work for any
+  `Span[Scalar[D]]` e.g. `Span[Byte]`. The `rfind()` implementation is
+  now vectorized. PR [#3548](https://github.com/modularml/mojo/pull/3548) by
+  [@martinvuyk](https://github.com/martinvuyk).
+
 ### GPU changes
 
 - `debug_assert` in AMD GPU kernels now behaves the same as NVIDIA, printing the

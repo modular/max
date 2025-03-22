@@ -20,11 +20,15 @@ from memory import Span
 ```
 """
 
+from bit import count_trailing_zeros, count_leading_zeros
+from builtin.dtype import _uint_type_of_width
 from collections import InlineArray
-from sys.info import simdwidthof
+from memory import Pointer, UnsafePointer, memcmp, pack_bits
+from sys import simdwidthof, is_compile_time
 
 from memory import Pointer, UnsafePointer
 from memory.unsafe_pointer import _default_alignment
+from math import align_down
 
 
 trait AsBytes:
@@ -441,8 +445,7 @@ struct Span[
         return not self == rhs
 
     fn fill[origin: MutableOrigin, //](self: Span[T, origin], value: T):
-        """
-        Fill the memory that a span references with a given value.
+        """Fill the memory that a span references with a given value.
 
         Parameters:
             origin: The inferred mutable origin of the data within the Span.
@@ -461,8 +464,7 @@ struct Span[
         address_space=address_space,
         alignment=alignment,
     ]:
-        """
-        Return an immutable version of this span.
+        """Return an immutable version of this span.
 
         Returns:
             A span covering the same elements, but without mutability.
@@ -473,3 +475,343 @@ struct Span[
             address_space=address_space,
             alignment=alignment,
         ](ptr=self._data, length=self._len)
+
+    fn find[
+        O: Origin,
+        D: DType, //,
+        from_left: Bool = True,
+        single_value: Bool = False,
+        unsafe_dont_normalize: Bool = False,
+    ](
+        self: Span[Scalar[D], origin], subseq: Span[Scalar[D], O], start: Int
+    ) -> Int:
+        """Finds the offset of the first occurrence of `subseq` starting at
+        `start`. If not found, returns `-1`.
+
+        Parameters:
+            O: The origin of `subseq`.
+            D: The `DType` of the Scalar.
+            from_left: Whether to search the first occurrence from the left.
+            single_value: Whether to search with the `subseq`s first value.
+            unsafe_dont_normalize: Whether to not normalize the index (no
+                negative indexing, no bounds checks at runtime. There is still
+                a `debug_assert(0 <= start < len(self))`).
+
+        Args:
+            subseq: The sub sequence to find.
+            start: The offset from which to find.
+
+        Returns:
+            The offset of `subseq` relative to the beginning of the `Span`.
+
+        Notes:
+            The function works on an empty span, always returning `-1`.
+        """
+        var _len = len(self)
+
+        if not subseq:
+
+            @parameter
+            if from_left:
+                return 0
+            else:
+                return _len
+
+        var n_s: Int
+
+        # _memXXX implementations already handle when haystack_len == 0
+        @parameter
+        if unsafe_dont_normalize:
+            debug_assert(0 <= start < _len + Int(_len == 0), "out of bounds")
+            n_s = start
+        else:
+            var v = start + _len * Int(start < 0)
+            n_s = v * Int(v < _len and v > 0) + _len * Int(v >= _len)
+        var s_ptr = self.unsafe_ptr()
+        var haystack = __type_of(self)(
+            ptr=s_ptr + n_s, length=_len - n_s
+        ).get_immutable()
+        var loc: UnsafePointer[Scalar[D]]
+
+        @parameter
+        if from_left and not single_value:
+            loc = _memmem(
+                haystack.unsafe_ptr(),
+                len(haystack),
+                subseq.unsafe_ptr(),
+                len(subseq),
+            )
+        elif from_left:
+            loc = _memchr(
+                haystack.unsafe_ptr(), subseq.unsafe_ptr()[0], len(haystack)
+            )
+        elif not single_value:
+            loc = _memrmem(
+                haystack.unsafe_ptr(),
+                len(haystack),
+                subseq.unsafe_ptr(),
+                len(subseq),
+            )
+        else:
+            loc = _memrchr(
+                haystack.unsafe_ptr(), subseq.unsafe_ptr()[0], len(haystack)
+            )
+
+        return ((Int(loc) - Int(s_ptr) + 1) & -Int(Bool(loc))) - 1
+
+    fn find[
+        O: Origin, D: DType, //, single_value: Bool = False
+    ](self: Span[Scalar[D], origin], subseq: Span[Scalar[D], O]) -> Int:
+        """Finds the offset of the first occurrence of `subseq`. If not found,
+        returns `-1`.
+
+        Parameters:
+            O: The origin of `subseq`.
+            D: The `DType` of the Scalar.
+            single_value: Whether to search with the `subseq`s first value.
+
+        Args:
+            subseq: The sub sequence to find.
+
+        Returns:
+            The offset of `subseq` relative to the beginning of the `Span`.
+
+        Notes:
+            The function works on an empty span, always returning `-1`.
+        """
+        return self.find[single_value=single_value, unsafe_dont_normalize=True](
+            subseq, 0
+        )
+
+    @always_inline
+    fn rfind[
+        O: Origin, D: DType, //, single_value: Bool = False
+    ](
+        self: Span[Scalar[D], origin], subseq: Span[Scalar[D], O], start: Int
+    ) -> Int:
+        """Finds the offset of the last occurrence of `subseq` starting at
+        `start`. If not found, returns `-1`.
+
+        Parameters:
+            O: The origin of `subseq`.
+            D: The `DType` of the Scalar.
+            single_value: Whether to search with the `subseq`s first value.
+
+        Args:
+            subseq: The sub sequence to find.
+            start: The offset from which to find.
+
+        Returns:
+            The offset of `subseq` relative to the beginning of the `Span`.
+
+        Notes:
+            The function works on an empty span, always returning `-1`.
+        """
+        return self.find[from_left=False, single_value=single_value](
+            subseq, start
+        )
+
+    @always_inline
+    fn rfind[
+        O: Origin, D: DType, //, single_value: Bool = False
+    ](self: Span[Scalar[D], origin], subseq: Span[Scalar[D], O]) -> Int:
+        """Finds the offset of the last occurrence of `subseq`. If not found,
+        returns `-1`.
+
+        Parameters:
+            O: The immutable origin of `self`.
+            D: The `DType` of the Scalar.
+            single_value: Whether to search with the `subseq`s first value.
+
+        Args:
+            subseq: The sub sequence to find.
+
+        Returns:
+            The offset of `subseq` relative to the beginning of the `Span`.
+
+        Notes:
+            The function works on an empty span, always returning `-1`.
+        """
+        return self.find[
+            from_left=False,
+            single_value=single_value,
+            unsafe_dont_normalize=True,
+        ](subseq, 0)
+
+
+# ===----------------------------------------------------------------------===#
+# Utilities
+# ===----------------------------------------------------------------------===#
+
+
+@always_inline
+fn _memchr[
+    type: DType, //
+](
+    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
+) -> UnsafePointer[Scalar[type]]:
+    if is_compile_time() or len < simdwidthof[type]():
+        return _memchr_simple(source, char, len)
+    else:
+        return _memchr_impl(source, char, len)
+
+
+@always_inline
+fn _memchr_simple[
+    type: DType, //
+](
+    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
+) -> UnsafePointer[Scalar[type]]:
+    for i in range(len):
+        if source[i] == char:
+            return source + i
+    return UnsafePointer[Scalar[type]]()
+
+
+@always_inline
+fn _memchr_impl[
+    type: DType, //
+](
+    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
+) -> UnsafePointer[Scalar[type]]:
+    if not len:
+        return UnsafePointer[Scalar[type]]()
+    alias bool_mask_width = simdwidthof[DType.bool]()
+    var first_needle = SIMD[type, bool_mask_width](char)
+    var vectorized_end = align_down(len, bool_mask_width)
+
+    for i in range(0, vectorized_end, bool_mask_width):
+        var bool_mask = source.load[width=bool_mask_width](i) == first_needle
+        var mask = pack_bits(bool_mask)
+        if mask:
+            return source + Int(i + count_trailing_zeros(mask))
+
+    for i in range(vectorized_end, len):
+        if source[i] == char:
+            return source + i
+    return UnsafePointer[Scalar[type]]()
+
+
+@always_inline
+fn _memmem[
+    type: DType, //
+](
+    haystack: UnsafePointer[Scalar[type]],
+    haystack_len: Int,
+    needle: UnsafePointer[Scalar[type]],
+    needle_len: Int,
+) -> UnsafePointer[Scalar[type]]:
+    if not needle_len:
+        return haystack
+    if needle_len > haystack_len:
+        return UnsafePointer[Scalar[type]]()
+    if needle_len == 1:
+        return _memchr(haystack, needle[0], haystack_len)
+
+    if is_compile_time() or haystack_len < simdwidthof[type]():
+        return _memmem_impl_simple(haystack, haystack_len, needle, needle_len)
+    else:
+        return _memmem_impl(haystack, haystack_len, needle, needle_len)
+
+
+@always_inline
+fn _memmem_impl_simple[
+    type: DType, //
+](
+    haystack: UnsafePointer[Scalar[type]],
+    haystack_len: Int,
+    needle: UnsafePointer[Scalar[type]],
+    needle_len: Int,
+) -> UnsafePointer[Scalar[type]]:
+    for i in range(haystack_len - needle_len + 1):
+        if haystack[i] != needle[0]:
+            continue
+
+        if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
+            return haystack + i
+
+    return UnsafePointer[Scalar[type]]()
+
+
+@always_inline
+fn _memmem_impl[
+    type: DType, //
+](
+    haystack: UnsafePointer[Scalar[type]],
+    haystack_len: Int,
+    needle: UnsafePointer[Scalar[type]],
+    needle_len: Int,
+) -> UnsafePointer[Scalar[type]]:
+    alias bool_mask_width = simdwidthof[DType.bool]()
+    var vectorized_end = align_down(
+        haystack_len - needle_len + 1, bool_mask_width
+    )
+
+    var first_needle = SIMD[type, bool_mask_width](needle[0])
+    var last_needle = SIMD[type, bool_mask_width](needle[needle_len - 1])
+
+    for i in range(0, vectorized_end, bool_mask_width):
+        var first_block = haystack.load[width=bool_mask_width](i)
+        var last_block = haystack.load[width=bool_mask_width](
+            i + needle_len - 1
+        )
+
+        var eq_first = first_needle == first_block
+        var eq_last = last_needle == last_block
+
+        var bool_mask = eq_first & eq_last
+        var mask = pack_bits(bool_mask)
+
+        while mask:
+            var offset = Int(i + count_trailing_zeros(mask))
+            if memcmp(haystack + offset + 1, needle + 1, needle_len - 1) == 0:
+                return haystack + offset
+            mask = mask & (mask - 1)
+
+    # remaining partial block compare using byte-by-byte
+    #
+    for i in range(vectorized_end, haystack_len - needle_len + 1):
+        if haystack[i] != needle[0]:
+            continue
+
+        if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
+            return haystack + i
+
+    return UnsafePointer[Scalar[type]]()
+
+
+@always_inline
+fn _memrchr[
+    type: DType
+](
+    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
+) -> UnsafePointer[Scalar[type]]:
+    if not len:
+        return UnsafePointer[Scalar[type]]()
+    for i in reversed(range(len)):
+        if source[i] == char:
+            return source + i
+    return UnsafePointer[Scalar[type]]()
+
+
+@always_inline
+fn _memrmem[
+    type: DType
+](
+    haystack: UnsafePointer[Scalar[type]],
+    haystack_len: Int,
+    needle: UnsafePointer[Scalar[type]],
+    needle_len: Int,
+) -> UnsafePointer[Scalar[type]]:
+    if not needle_len:
+        return haystack
+    if needle_len > haystack_len:
+        return UnsafePointer[Scalar[type]]()
+    if needle_len == 1:
+        return _memrchr[type](haystack, needle[0], haystack_len)
+    for i in reversed(range(haystack_len - needle_len + 1)):
+        if haystack[i] != needle[0]:
+            continue
+        if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
+            return haystack + i
+    return UnsafePointer[Scalar[type]]()

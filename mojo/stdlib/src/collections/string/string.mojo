@@ -1382,7 +1382,6 @@ struct String(
         Returns:
           The offset of `substr` relative to the beginning of the string.
         """
-
         return self.as_string_slice().find(substr, start)
 
     fn rfind(self, substr: StringSlice, start: Int = 0) -> Int:
@@ -1396,7 +1395,6 @@ struct String(
         Returns:
           The offset of `substr` relative to the beginning of the string.
         """
-
         return self.as_string_slice().rfind(substr, start=start)
 
     fn isspace(self) -> Bool:
@@ -1513,7 +1511,7 @@ struct String(
             return self._interleave(new)
 
         var occurrences = self.count(old)
-        if occurrences == -1:
+        if occurrences == len(self) + 1:
             return self
 
         var self_start = self.unsafe_ptr()

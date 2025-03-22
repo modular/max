@@ -32,14 +32,14 @@ from collections.string._unicode import (
 )
 from hashlib._hasher import _HashableWithHasher, _Hasher
 from os import PathLike, abort
-from sys import bitwidthof, simdwidthof, is_compile_time
+from sys import simdwidthof
 from sys.ffi import c_char
 from sys.intrinsics import likely, unlikely
 
-from math import align_down
-from bit import count_leading_zeros, count_trailing_zeros
-from memory import Span, UnsafePointer, memcmp, memcpy, pack_bits
+from bit import count_leading_zeros
+from memory import Span, UnsafePointer, memcmp, memcpy
 from memory.memory import _memcmp_impl_unconstrained
+
 
 alias StaticString = StringSlice[StaticConstantOrigin]
 """An immutable static string slice."""
@@ -1669,27 +1669,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             The offset in bytes of `substr` relative to the beginning of the
             string.
         """
-        if not substr:
-            return 0
-
-        if self.byte_length() < substr.byte_length() + start:
-            return -1
-
-        # The substring to search within, offset from the beginning if `start`
-        # is positive, and offset from the end if `start` is negative.
-        var haystack_str = self._from_start(start)
-
-        var loc = _memmem(
-            haystack_str.unsafe_ptr(),
-            haystack_str.byte_length(),
-            substr.unsafe_ptr(),
-            substr.byte_length(),
-        )
-
-        if not loc:
-            return -1
-
-        return Int(loc) - Int(self.unsafe_ptr())
+        # FIXME(#3526): this should return unicode codepoint offsets
+        return self.as_bytes().find(substr.as_bytes(), start)
 
     fn rfind(self, substr: StringSlice, start: Int = 0) -> Int:
         """Finds the offset in bytes of the last occurrence of `substr` starting at
@@ -1704,27 +1685,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             The offset in bytes of `substr` relative to the beginning of the
             string.
         """
-        if not substr:
-            return len(self)
-
-        if len(self) < len(substr) + start:
-            return -1
-
-        # The substring to search within, offset from the beginning if `start`
-        # is positive, and offset from the end if `start` is negative.
-        var haystack_str = self._from_start(start)
-
-        var loc = _memrmem(
-            haystack_str.unsafe_ptr(),
-            len(haystack_str),
-            substr.unsafe_ptr(),
-            len(substr),
-        )
-
-        if not loc:
-            return -1
-
-        return Int(loc) - Int(self.unsafe_ptr())
+        # FIXME(#3526): this should return unicode codepoint offsets
+        return self.as_bytes().rfind(substr.as_bytes(), start)
 
     fn isspace(self) -> Bool:
         """Determines whether every character in the given StringSlice is a
@@ -2142,142 +2104,6 @@ fn _unsafe_strlen(owned ptr: UnsafePointer[Byte]) -> Int:
 
 
 @always_inline
-fn _memchr[
-    type: DType, //
-](
-    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
-) -> UnsafePointer[Scalar[type]]:
-    if is_compile_time() or len < simdwidthof[type]():
-        return _memchr_simple(source, char, len)
-    else:
-        return _memchr_impl(source, char, len)
-
-
-@always_inline
-fn _memchr_simple[
-    type: DType, //
-](
-    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
-) -> UnsafePointer[Scalar[type]]:
-    for i in range(len):
-        if source[i] == char:
-            return source + i
-    return UnsafePointer[Scalar[type]]()
-
-
-@always_inline
-fn _memchr_impl[
-    type: DType, //
-](
-    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
-) -> UnsafePointer[Scalar[type]]:
-    if not len:
-        return UnsafePointer[Scalar[type]]()
-    alias bool_mask_width = simdwidthof[DType.bool]()
-    var first_needle = SIMD[type, bool_mask_width](char)
-    var vectorized_end = align_down(len, bool_mask_width)
-
-    for i in range(0, vectorized_end, bool_mask_width):
-        var bool_mask = source.load[width=bool_mask_width](i) == first_needle
-        var mask = pack_bits(bool_mask)
-        if mask:
-            return source + Int(i + count_trailing_zeros(mask))
-
-    for i in range(vectorized_end, len):
-        if source[i] == char:
-            return source + i
-    return UnsafePointer[Scalar[type]]()
-
-
-@always_inline
-fn _memmem[
-    type: DType, //
-](
-    haystack: UnsafePointer[Scalar[type]],
-    haystack_len: Int,
-    needle: UnsafePointer[Scalar[type]],
-    needle_len: Int,
-) -> UnsafePointer[Scalar[type]]:
-    if not needle_len:
-        return haystack
-    if needle_len > haystack_len:
-        return UnsafePointer[Scalar[type]]()
-    if needle_len == 1:
-        return _memchr(haystack, needle[0], haystack_len)
-
-    if is_compile_time() or haystack_len < simdwidthof[type]():
-        return _memmem_impl_simple(haystack, haystack_len, needle, needle_len)
-    else:
-        return _memmem_impl(haystack, haystack_len, needle, needle_len)
-
-
-@always_inline
-fn _memmem_impl_simple[
-    type: DType, //
-](
-    haystack: UnsafePointer[Scalar[type]],
-    haystack_len: Int,
-    needle: UnsafePointer[Scalar[type]],
-    needle_len: Int,
-) -> UnsafePointer[Scalar[type]]:
-    for i in range(haystack_len - needle_len + 1):
-        if haystack[i] != needle[0]:
-            continue
-
-        if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
-            return haystack + i
-
-    return UnsafePointer[Scalar[type]]()
-
-
-@always_inline
-fn _memmem_impl[
-    type: DType, //
-](
-    haystack: UnsafePointer[Scalar[type]],
-    haystack_len: Int,
-    needle: UnsafePointer[Scalar[type]],
-    needle_len: Int,
-) -> UnsafePointer[Scalar[type]]:
-    alias bool_mask_width = simdwidthof[DType.bool]()
-    var vectorized_end = align_down(
-        haystack_len - needle_len + 1, bool_mask_width
-    )
-
-    var first_needle = SIMD[type, bool_mask_width](needle[0])
-    var last_needle = SIMD[type, bool_mask_width](needle[needle_len - 1])
-
-    for i in range(0, vectorized_end, bool_mask_width):
-        var first_block = haystack.load[width=bool_mask_width](i)
-        var last_block = haystack.load[width=bool_mask_width](
-            i + needle_len - 1
-        )
-
-        var eq_first = first_needle == first_block
-        var eq_last = last_needle == last_block
-
-        var bool_mask = eq_first & eq_last
-        var mask = pack_bits(bool_mask)
-
-        while mask:
-            var offset = Int(i + count_trailing_zeros(mask))
-            if memcmp(haystack + offset + 1, needle + 1, needle_len - 1) == 0:
-                return haystack + offset
-            mask = mask & (mask - 1)
-
-    # remaining partial block compare using byte-by-byte
-    #
-    for i in range(vectorized_end, haystack_len - needle_len + 1):
-        if haystack[i] != needle[0]:
-            continue
-
-        if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
-            return haystack + i
-
-    return UnsafePointer[Scalar[type]]()
-
-
-@always_inline
 fn _is_utf8_continuation_byte[
     w: Int
 ](vec: SIMD[DType.uint8, w]) -> SIMD[DType.bool, w]:
@@ -2337,40 +2163,3 @@ fn _utf8_byte_type(b: SIMD[DType.uint8, _], /) -> __type_of(b):
         - 4 -> start of 4 byte long sequence.
     """
     return count_leading_zeros(~b)
-
-
-@always_inline
-fn _memrchr[
-    type: DType
-](
-    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
-) -> UnsafePointer[Scalar[type]]:
-    if not len:
-        return UnsafePointer[Scalar[type]]()
-    for i in reversed(range(len)):
-        if source[i] == char:
-            return source + i
-    return UnsafePointer[Scalar[type]]()
-
-
-@always_inline
-fn _memrmem[
-    type: DType
-](
-    haystack: UnsafePointer[Scalar[type]],
-    haystack_len: Int,
-    needle: UnsafePointer[Scalar[type]],
-    needle_len: Int,
-) -> UnsafePointer[Scalar[type]]:
-    if not needle_len:
-        return haystack
-    if needle_len > haystack_len:
-        return UnsafePointer[Scalar[type]]()
-    if needle_len == 1:
-        return _memrchr[type](haystack, needle[0], haystack_len)
-    for i in reversed(range(haystack_len - needle_len + 1)):
-        if haystack[i] != needle[0]:
-            continue
-        if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
-            return haystack + i
-    return UnsafePointer[Scalar[type]]()
