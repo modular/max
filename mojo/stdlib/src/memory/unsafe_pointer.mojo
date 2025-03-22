@@ -31,6 +31,7 @@ from sys.intrinsics import (
 
 from bit import is_power_of_two
 from memory.memory import _free, _malloc
+from builtin.simd import _simd_construction_checks
 
 # ===----------------------------------------------------------------------=== #
 # UnsafePointer
@@ -501,7 +502,7 @@ struct UnsafePointer[
         Returns:
             The loaded value.
         """
-        constrained[width > 0, "width must be a positive integer value"]()
+        _simd_construction_checks[type, width]()
         constrained[
             alignment > 0, "alignment must be a positive integer value"
         ]()
