@@ -19,6 +19,8 @@ from collections import KeyElement
 from collections.string import StringSlice
 from hashlib._hasher import _HashableWithHasher, _Hasher
 from sys import bitwidthof, os_is_windows, sizeof
+from sys.intrinsics import _type_is_eq
+
 
 alias _mIsSigned = UInt8(1)
 alias _mIsInteger = UInt8(1 << 7)
@@ -235,6 +237,14 @@ struct DType(
             return DType.int64
         elif str == "uint64":
             return DType.uint64
+        elif str == "int128":
+            return DType.int128
+        elif str == "uint128":
+            return DType.uint128
+        elif str == "int256":
+            return DType.int256
+        elif str == "uint256":
+            return DType.uint256
         elif str == "index":
             return DType.index
         elif str == "float8_e3m4":
@@ -304,6 +314,14 @@ struct DType(
             return writer.write("int64")
         if self == DType.uint64:
             return writer.write("uint64")
+        if self == DType.int128:
+            return writer.write("int128")
+        if self == DType.uint128:
+            return writer.write("uint128")
+        if self == DType.int256:
+            return writer.write("int256")
+        if self == DType.uint256:
+            return writer.write("uint256")
         if self == DType.index:
             return writer.write("index")
         if self == DType.float8_e3m4:
@@ -754,6 +772,88 @@ struct DType(
             self.dispatch_integral[func]()
         else:
             raise Error("only arithmetic types are supported")
+
+    # ===----------------------------------------------------------------------===#
+    # utils
+    # ===----------------------------------------------------------------------===#
+
+    @staticmethod
+    fn get_dtype[T: AnyType, size: Int = 1]() -> DType:
+        """Get the `DType` if the given Type is a `SIMD[_, size]` of a `DType`.
+
+        Parameters:
+            T: AnyType.
+            size: The SIMD size to compare against.
+
+        Returns:
+            The `DType` if matched, otherwise `DType.invalid`.
+        """
+
+        @parameter
+        if _type_is_eq[T, SIMD[DType.bool, size]]():
+            return DType.bool
+        elif _type_is_eq[T, SIMD[DType.int8, size]]():
+            return DType.int8
+        elif _type_is_eq[T, SIMD[DType.uint8, size]]():
+            return DType.uint8
+        elif _type_is_eq[T, SIMD[DType.int16, size]]():
+            return DType.int16
+        elif _type_is_eq[T, SIMD[DType.uint16, size]]():
+            return DType.uint16
+        elif _type_is_eq[T, SIMD[DType.int32, size]]():
+            return DType.int32
+        elif _type_is_eq[T, SIMD[DType.uint32, size]]():
+            return DType.uint32
+        elif _type_is_eq[T, SIMD[DType.int64, size]]():
+            return DType.int64
+        elif _type_is_eq[T, SIMD[DType.uint64, size]]():
+            return DType.uint64
+        elif _type_is_eq[T, SIMD[DType.int128, size]]():
+            return DType.int128
+        elif _type_is_eq[T, SIMD[DType.uint128, size]]():
+            return DType.uint128
+        elif _type_is_eq[T, SIMD[DType.int256, size]]():
+            return DType.int256
+        elif _type_is_eq[T, SIMD[DType.uint256, size]]():
+            return DType.uint256
+        elif _type_is_eq[T, SIMD[DType.index, size]]():
+            return DType.index
+        elif _type_is_eq[T, SIMD[DType.float8_e3m4, size]]():
+            return DType.float8_e3m4
+        elif _type_is_eq[T, SIMD[DType.float8_e4m3, size]]():
+            return DType.float8_e4m3
+        elif _type_is_eq[T, SIMD[DType.float8_e5m2, size]]():
+            return DType.float8_e5m2
+        elif _type_is_eq[T, SIMD[DType.float8_e5m2fnuz, size]]():
+            return DType.float8_e5m2fnuz
+        elif _type_is_eq[T, SIMD[DType.float8_e4m3fn, size]]():
+            return DType.float8_e4m3fn
+        elif _type_is_eq[T, SIMD[DType.float8_e4m3fnuz, size]]():
+            return DType.float8_e4m3fnuz
+        elif _type_is_eq[T, SIMD[DType.bfloat16, size]]():
+            return DType.bfloat16
+        elif _type_is_eq[T, SIMD[DType.float16, size]]():
+            return DType.float16
+        elif _type_is_eq[T, SIMD[DType.float32, size]]():
+            return DType.float32
+        elif _type_is_eq[T, SIMD[DType.float64, size]]():
+            return DType.float64
+        elif _type_is_eq[T, SIMD[DType.tensor_float32, size]]():
+            return DType.tensor_float32
+        else:
+            return DType.invalid
+
+    @staticmethod
+    fn is_scalar[T: AnyType]() -> Bool:
+        """Whether the given Type is a Scalar of a DType.
+
+        Parameters:
+            T: AnyType.
+
+        Returns:
+            The result.
+        """
+        return Self.get_dtype[T]() is not DType.invalid
 
 
 # ===-------------------------------------------------------------------===#
