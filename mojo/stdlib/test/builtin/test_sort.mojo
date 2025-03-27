@@ -19,6 +19,8 @@ from sys import env_get_string, os_is_windows
 from builtin.sort import _quicksort, _small_sort, _SortWrapper
 from testing import assert_equal, assert_false, assert_true
 
+from collections.string.string_slice import to_string_list
+
 
 fn random_numbers[
     dtype: DType
@@ -533,7 +535,7 @@ def test_sort_strings():
     var text = (
         _dir_of_current_file() / "test_file_dummy_input.txt"
     ).read_text()
-    var strings = text.split(" ")
+    var strings = to_string_list(text.split(" "))
     sort(strings)
     assert_sorted_string(strings)
 
