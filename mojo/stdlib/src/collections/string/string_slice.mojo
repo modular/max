@@ -2351,9 +2351,15 @@ fn _memrchr[
     var haystack = span.unsafe_ptr()
     var length = len(span)
     alias bool_mask_width = simdwidthof[DType.bool]()
-    var vectorized_end = align_down(length, bool_mask_width) & -Int(
-        length >= bool_mask_width
-    )
+    if length < bool_mask_width:
+        for i in reversed(range(length)):
+            if haystack[i] == char:
+                output = haystack + i
+                return
+        output = UnsafePointer[Scalar[D]]()
+        return
+
+    var vectorized_end = align_down(length, bool_mask_width)
 
     for i in reversed(range(vectorized_end, length)):
         if haystack[i] == char:
@@ -2395,9 +2401,19 @@ fn _memrmem[
 
     alias bool_mask_width = simdwidthof[DType.bool]()
     var length = haystack_len - needle_len + 1
-    var vectorized_end = align_down(length, bool_mask_width) & -Int(
-        length >= bool_mask_width
-    )
+
+    if haystack_len < bool_mask_width:
+        for i in reversed(range(length)):
+            if haystack[i] != needle[0]:
+                continue
+
+            if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
+                output = haystack + i
+                return
+        output = UnsafePointer[Scalar[D]]()
+        return
+
+    var vectorized_end = align_down(length, bool_mask_width)
 
     for i in reversed(range(vectorized_end, length)):
         if haystack[i] != needle[0]:
