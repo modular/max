@@ -160,7 +160,13 @@ struct _GPUAddressSpace(EqualityComparable):
 
 @value
 @register_passable("trivial")
-struct AddressSpace(EqualityComparable, Stringable, Writable):
+struct AddressSpace(
+    EqualityComparable,
+    Stringable,
+    Writable,
+    CollectionElement,
+    EqualityComparableCollectionElement,
+):
     """Address space of the pointer."""
 
     var _value: Int
@@ -301,7 +307,7 @@ struct Pointer[
     type: AnyType,
     origin: Origin[mut],
     address_space: AddressSpace = AddressSpace.GENERIC,
-](CollectionElementNew, Stringable):
+](CollectionElementNew, Stringable, CollectionElement):
     """Defines a non-nullable safe pointer.
 
     For a comparison with other pointer types, see [Intro to

@@ -29,8 +29,8 @@ from sys.intrinsics import (
     strided_store,
 )
 
-from bit import is_power_of_two
 from memory.memory import _free, _malloc
+from builtin.simd import _simd_construction_checks
 
 # ===----------------------------------------------------------------------=== #
 # UnsafePointer
@@ -501,7 +501,7 @@ struct UnsafePointer[
         Returns:
             The loaded value.
         """
-        constrained[width > 0, "width must be a positive integer value"]()
+        _simd_construction_checks[type, width]()
         constrained[
             alignment > 0, "alignment must be a positive integer value"
         ]()
@@ -583,7 +583,7 @@ struct UnsafePointer[
         Returns:
             The loaded value.
         """
-        constrained[offset.type.is_integral(), "offset must be integer"]()
+        constrained[offset.dtype.is_integral(), "offset must be integer"]()
         return self.offset(Int(offset)).load[
             width=width,
             alignment=alignment,
@@ -914,11 +914,11 @@ struct UnsafePointer[
             The SIMD vector containing the gathered values.
         """
         constrained[
-            offset.type.is_integral(),
+            offset.dtype.is_integral(),
             "offset type must be an integral type",
         ]()
         constrained[
-            is_power_of_two(alignment),
+            alignment.is_power_of_two(),
             "alignment must be a power of two integer value",
         ]()
 
@@ -969,11 +969,11 @@ struct UnsafePointer[
         """
         constrained[mut, _must_be_mut_err]()
         constrained[
-            offset.type.is_integral(),
+            offset.dtype.is_integral(),
             "offset type must be an integral type",
         ]()
         constrained[
-            is_power_of_two(alignment),
+            alignment.is_power_of_two(),
             "alignment must be a power of two integer value",
         ]()
 
