@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Type, TypeVar
 
 from max.driver import load_devices
 from max.engine import InferenceSession
@@ -24,7 +24,8 @@ from max.graph.weights import load_weights
 from max.profiler import Tracer, traced
 from transformers import AutoConfig
 
-from .config import PipelineConfig
+if TYPE_CHECKING:
+    from .config import PipelineConfig
 from .context import InputContext
 from .hf_utils import download_weight_files
 from .interfaces import EmbeddingsGenerator, EmbeddingsResponse
@@ -85,6 +86,8 @@ class EmbeddingsPipeline(EmbeddingsGenerator[T]):
             devices=devices,
             kv_cache_config=self._pipeline_config.model_config.kv_cache_config,
             weights=weights,
+            adapter=None,
+            return_n_logits=-1,
         )
 
     @traced

@@ -19,6 +19,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import (
+    TYPE_CHECKING,
     Generic,
     Optional,
     Protocol,
@@ -47,7 +48,9 @@ from max.pipelines.kv_cache import (
 from max.profiler import Tracer, traced
 from transformers import AutoConfig, AutoTokenizer
 
-from .config import PipelineConfig
+if TYPE_CHECKING:
+    from .config import PipelineConfig
+
 from .config_enums import SupportedEncoding
 from .context import InputContext
 from .hf_utils import download_weight_files
@@ -139,11 +142,14 @@ class ModelInputs:
 
 @dataclass(frozen=True)
 class ModelOutputs:
+    logits: Tensor
+    """Logits for a variable number of tokens per sequence."""
+
     next_token_logits: Tensor | None = None
     """Logits for just the next token."""
 
-    logits: Tensor | None = None
-    """Logits for the entire token sequence."""
+    logit_offsets: Tensor | None = None
+    """Offsets to access variable length logits for each sequence."""
 
 
 T = TypeVar("T", bound=InputContext)
@@ -164,7 +170,8 @@ class PipelineModel(ABC, Generic[T]):
         devices: list[Device],
         kv_cache_config: KVCacheConfig,
         weights: Weights,
-        adapter: Optional[WeightsAdapter] = None,
+        adapter: Optional[WeightsAdapter],
+        return_n_logits: int,
     ) -> None:
         self.pipeline_config = pipeline_config
         self.huggingface_config = huggingface_config
@@ -173,6 +180,7 @@ class PipelineModel(ABC, Generic[T]):
         self.kv_cache_config = kv_cache_config
         self.weights = weights
         self.adapter = adapter
+        self.return_n_logits = return_n_logits
 
         if isinstance(self, KVCacheMixin):
             self.kv_manager = self.load_kv_manager(
@@ -508,6 +516,7 @@ class TextGenerationPipeline(TokenGenerator[T]):
             kv_cache_config=self._pipeline_config.model_config.kv_cache_config,
             weights=weights,
             adapter=self._weight_adapters.get(_weight_format, None),
+            return_n_logits=-1 if self._pipeline_config.enable_echo else 1,
         )
 
         # Load sampler.
@@ -666,15 +675,18 @@ class TextGenerationPipeline(TokenGenerator[T]):
         self,
         logits: Tensor,
         prev_tokens: Tensor,
+        logit_offsets: Optional[Tensor],
         bitmask: Optional[Tensor],
     ) -> tuple[Tensor, Tensor]:
-        if bitmask is not None:
-            a, b = self._sampler(logits, prev_tokens, bitmask)[:2]
-        else:
-            a, b = self._sampler(
-                logits,
-                prev_tokens,
-            )[:2]
+        graph_inputs = [logits, prev_tokens]
+
+        if logit_offsets:
+            graph_inputs.append(logit_offsets)
+
+        if bitmask:
+            graph_inputs.append(bitmask)
+
+        a, b = self._sampler(*graph_inputs)[:2]
         assert isinstance(a, Tensor)
         assert isinstance(b, Tensor)
         return (a, b)
@@ -723,8 +735,6 @@ class TextGenerationPipeline(TokenGenerator[T]):
             model_outputs = self._pipeline_model.execute(
                 model_inputs=curr_step_inputs,
             )
-            assert model_outputs.next_token_logits is not None
-            next_token_logits = model_outputs.next_token_logits
 
             if bitmask is not None:
                 assert self.vocab_size is not None
@@ -741,8 +751,9 @@ class TextGenerationPipeline(TokenGenerator[T]):
             # Sample next token.
             tracer.next("sample_next_token")
             new_tokens, new_generated_tokens = self.sample_logits(
-                next_token_logits,
+                model_outputs.logits,
                 generated_tokens,
+                model_outputs.logit_offsets,
                 bitmask,
             )
 
@@ -829,7 +840,10 @@ class TextGenerationPipeline(TokenGenerator[T]):
                     log_probs = log_probs_for_step[batch_index]
 
                 # Identify completion criteria.
-                is_eos = next_token in self._eos_token_id
+                if context.ignore_eos:
+                    is_eos = False
+                else:
+                    is_eos = next_token in self._eos_token_id
 
                 # Write this token into our pre-allocated tokens array.
                 context.update(

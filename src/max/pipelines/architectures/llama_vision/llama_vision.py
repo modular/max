@@ -35,9 +35,9 @@ from max.pipelines import (
     PipelineConfig,
     PipelineModel,
     SupportedEncoding,
-    TextAndVisionContext,
     upper_bounded_default,
 )
+from max.pipelines.context import TextAndVisionContext
 from max.pipelines.kv_cache import (
     ContinuousBatchingKVCacheManager,
     KVCacheInputs,
@@ -689,6 +689,7 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
         kv_cache_config: KVCacheConfig,
         weights: Weights,
         adapter: Optional[WeightsAdapter] = None,
+        return_n_logits: int = 1,
     ) -> None:
         # Set convenience attributes for the text and vision configs.
         self.vision_config = huggingface_config.vision_config
@@ -707,6 +708,7 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
             kv_cache_config,
             weights,
             adapter,
+            return_n_logits,
         )
         self.vision_model, self.language_model = self.load_model(session)
         # Note that in a multimodal model, the language model is the last model in the
@@ -1082,9 +1084,17 @@ class LlamaVision(PipelineModel[TextAndVisionContext]):
             *all_kv_cache_inputs,
             copy_inputs_to_device=False,
         )
-        assert not self.pipeline_config.enable_echo
-        assert isinstance(model_outputs[0], Tensor)
-        return ModelOutputs(next_token_logits=model_outputs[0])
+        if len(model_outputs) == 3:
+            return ModelOutputs(
+                next_token_logits=cast(Tensor, model_outputs[0]),
+                logits=cast(Tensor, model_outputs[1]),
+                logit_offsets=cast(Tensor, model_outputs[2]),
+            )
+        else:
+            return ModelOutputs(
+                next_token_logits=cast(Tensor, model_outputs[0]),
+                logits=cast(Tensor, model_outputs[0]),
+            )
 
     @classmethod
     def get_kv_params(

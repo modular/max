@@ -423,6 +423,12 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     EqualityComparable,
     Hashable,
     PathLike,
+    FloatableRaising,
+    Boolable,
+    IntableRaising,
+    RepresentableCollectionElement,
+    EqualityComparableCollectionElement,
+    _CurlyEntryFormattable,
 ):
     """A non-owning view to encoded string data.
 
@@ -549,7 +555,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     @implicit
     fn __init__[
         O: ImmutableOrigin, //
-    ](mut self: StringSlice[O], ref [O]value: String):
+    ](out self: StringSlice[O], ref [O]value: String):
         """Construct an immutable StringSlice.
 
         Parameters:
