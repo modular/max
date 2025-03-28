@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
-# RUN: %mojo-no-debug %s -t
+# RUN: %mojo-no-debug %s
 # NOTE: to test changes on the current branch using run-benchmarks.sh, remove
 # the -t flag. Remember to replace it again before pushing any code.
 
@@ -203,6 +203,48 @@ fn bench_string_replace[
 
 
 # ===-----------------------------------------------------------------------===#
+# Benchmark string rfind single
+# ===-----------------------------------------------------------------------===#
+@parameter
+fn bench_string_rfind_single[
+    length: UInt = 0, filename: StringLiteral = "UN_charter_EN"
+](mut b: Bencher) raises:
+    var items = make_string[length](filename + ".txt")
+
+    @always_inline
+    @parameter
+    fn call_fn() raises:
+        for _ in range(1_000_000):
+            var res = items.rfind("Z")  # something that probably won't be there
+            keep(res)
+
+    b.iter[call_fn]()
+    keep(Bool(items))
+
+
+# ===-----------------------------------------------------------------------===#
+# Benchmark string rfind multiple
+# ===-----------------------------------------------------------------------===#
+@parameter
+fn bench_string_rfind_multiple[
+    length: UInt = 0, filename: StringLiteral = "UN_charter_EN"
+](mut b: Bencher) raises:
+    var items = make_string[length](filename + ".txt")
+    var sequence = "ZZZZ"  # something that probably won't be there
+
+    @always_inline
+    @parameter
+    fn call_fn() raises:
+        for _ in range(1_000_000):
+            var res = items.rfind(sequence)
+            keep(res)
+
+    b.iter[call_fn]()
+    keep(Bool(items))
+    keep(Bool(sequence))
+
+
+# ===-----------------------------------------------------------------------===#
 # Benchmark string _is_valid_utf8
 # ===-----------------------------------------------------------------------===#
 @parameter
@@ -282,6 +324,12 @@ def main():
             )
             m.bench_function[bench_string_replace[length, fname, old, new]](
                 BenchId(String("bench_string_replace" + suffix))
+            )
+            m.bench_function[bench_string_rfind_single[length, fname]](
+                BenchId(String("bench_string_rfind_single" + suffix))
+            )
+            m.bench_function[bench_string_rfind_multiple[length, fname]](
+                BenchId(String("bench_string_rfind_multiple" + suffix))
             )
             m.bench_function[bench_string_is_valid_utf8[length, fname]](
                 BenchId(String("bench_string_is_valid_utf8" + suffix))

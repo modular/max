@@ -2345,14 +2345,16 @@ fn _memrchr[
     var haystack = span.unsafe_ptr()
     var length = len(span)
     alias bool_mask_width = simdwidthof[DType.bool]()
-    var first_needle = SIMD[D, bool_mask_width](char)
-    var vectorized_end = align_down(length, bool_mask_width)
+    var vectorized_end = align_down(length, bool_mask_width) & -Int(
+        length >= bool_mask_width
+    )
 
     for i in reversed(range(vectorized_end, length)):
         if haystack[i] == char:
             output = haystack + i
             return
 
+    var first_needle = SIMD[D, bool_mask_width](char)
     for i in reversed(range(0, vectorized_end, bool_mask_width)):
         var bool_mask = haystack.load[width=bool_mask_width](i) == first_needle
         var mask = pack_bits(bool_mask)
@@ -2386,11 +2388,12 @@ fn _memrmem[
         return
 
     alias bool_mask_width = simdwidthof[DType.bool]()
-    var vectorized_end = align_down(
-        haystack_len - needle_len + 1, bool_mask_width
+    var length = haystack_len - needle_len + 1
+    var vectorized_end = align_down(length, bool_mask_width) & -Int(
+        length >= bool_mask_width
     )
 
-    for i in reversed(range(vectorized_end, haystack_len - needle_len + 1)):
+    for i in reversed(range(vectorized_end, length)):
         if haystack[i] != needle[0]:
             continue
 
