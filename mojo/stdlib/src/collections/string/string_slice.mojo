@@ -1721,16 +1721,11 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var haystack_str = self._from_start(start)
 
         var loc = _memrmem(
-            haystack_str.unsafe_ptr(),
-            len(haystack_str),
-            substr.unsafe_ptr(),
-            len(substr),
+            haystack_str.as_bytes().get_immutable(),
+            substr.as_bytes().get_immutable(),
         )
 
-        if not loc:
-            return -1
-
-        return Int(loc) - Int(self.unsafe_ptr())
+        return ((Int(loc) - Int(self.unsafe_ptr()) + 1) & -Int(Bool(loc))) - 1
 
     fn isspace(self) -> Bool:
         """Determines whether every character in the given StringSlice is a
@@ -2347,36 +2342,106 @@ fn _utf8_byte_type(b: SIMD[DType.uint8, _], /) -> __type_of(b):
 
 @always_inline
 fn _memrchr[
-    type: DType
+    O: ImmutableOrigin, D: DType, //
 ](
-    source: UnsafePointer[Scalar[type]], char: Scalar[type], len: Int
-) -> UnsafePointer[Scalar[type]]:
-    if not len:
-        return UnsafePointer[Scalar[type]]()
-    for i in reversed(range(len)):
-        if source[i] == char:
-            return source + i
-    return UnsafePointer[Scalar[type]]()
+    span: Span[Scalar[D], O],
+    char: Scalar[D],
+    out output: UnsafePointer[Scalar[D]],
+):
+    var haystack = span.unsafe_ptr()
+    var length = len(span)
+    alias bool_mask_width = simdwidthof[DType.bool]()
+    if length < bool_mask_width:
+        for i in reversed(range(length)):
+            if haystack[i] == char:
+                output = haystack + i
+                return
+        output = UnsafePointer[Scalar[D]]()
+        return
+
+    var vectorized_end = align_down(length, bool_mask_width)
+
+    for i in reversed(range(vectorized_end, length)):
+        if haystack[i] == char:
+            output = haystack + i
+            return
+
+    var first_needle = SIMD[D, bool_mask_width](char)
+    for i in reversed(range(0, vectorized_end, bool_mask_width)):
+        var bool_mask = haystack.load[width=bool_mask_width](i) == first_needle
+        var mask = pack_bits(bool_mask)
+        if mask:
+            var zeros = Int(count_leading_zeros(mask)) + 1
+            output = haystack + (i + bool_mask_width - zeros)
+            return
+
+    output = UnsafePointer[Scalar[D]]()
 
 
 @always_inline
 fn _memrmem[
-    type: DType
+    O1: ImmutableOrigin, O2: ImmutableOrigin, D: DType, //
 ](
-    haystack: UnsafePointer[Scalar[type]],
-    haystack_len: Int,
-    needle: UnsafePointer[Scalar[type]],
-    needle_len: Int,
-) -> UnsafePointer[Scalar[type]]:
-    if not needle_len:
-        return haystack
-    if needle_len > haystack_len:
-        return UnsafePointer[Scalar[type]]()
+    haystack_span: Span[Scalar[D], O1],
+    needle_span: Span[Scalar[D], O2],
+    out output: UnsafePointer[Scalar[D]],
+):
+    var haystack = haystack_span.unsafe_ptr()
+    var haystack_len = len(haystack_span)
+    var needle = needle_span.unsafe_ptr()
+    var needle_len = len(needle_span)
+    debug_assert(needle_len > 0, "needle_len must be > 0")
+
     if needle_len == 1:
-        return _memrchr[type](haystack, needle[0], haystack_len)
-    for i in reversed(range(haystack_len - needle_len + 1)):
+        output = _memrchr(haystack_span, needle[0])
+        return
+    elif needle_len > haystack_len:
+        output = UnsafePointer[Scalar[D]]()
+        return
+
+    alias bool_mask_width = simdwidthof[DType.bool]()
+    var length = haystack_len - needle_len + 1
+
+    if haystack_len < bool_mask_width:
+        for i in reversed(range(length)):
+            if haystack[i] != needle[0]:
+                continue
+
+            if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
+                output = haystack + i
+                return
+        output = UnsafePointer[Scalar[D]]()
+        return
+
+    var vectorized_end = align_down(length, bool_mask_width)
+
+    for i in reversed(range(vectorized_end, length)):
         if haystack[i] != needle[0]:
             continue
+
         if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
-            return haystack + i
-    return UnsafePointer[Scalar[type]]()
+            output = haystack + i
+            return
+
+    var first_needle = SIMD[D, bool_mask_width](needle[0])
+    var last_needle = SIMD[D, bool_mask_width](needle[needle_len - 1])
+
+    for i in reversed(range(0, vectorized_end, bool_mask_width)):
+        var first_block = haystack.load[width=bool_mask_width](i)
+        var last_block = haystack.load[width=bool_mask_width](
+            i + needle_len - 1
+        )
+
+        var bool_mask = (first_needle == first_block) & (
+            last_needle == last_block
+        )
+        var mask = pack_bits(bool_mask)
+
+        while mask:
+            var offset = i + bool_mask_width - Int(count_leading_zeros(mask))
+            if memcmp(haystack + offset, needle + 1, needle_len - 1) == 0:
+                output = haystack + offset - 1
+                return
+            mask = mask & (mask - 1)
+
+    output = UnsafePointer[Scalar[D]]()
