@@ -41,8 +41,79 @@ from bit import count_leading_zeros, count_trailing_zeros
 from memory import Span, UnsafePointer, memcmp, memcpy, pack_bits
 from memory.memory import _memcmp_impl_unconstrained
 
+
 alias StaticString = StringSlice[StaticConstantOrigin]
 """An immutable static string slice."""
+
+
+@value
+struct _SplitlinesIter[
+    is_mutable: Bool, //,
+    origin: Origin[is_mutable],
+    forward: Bool = True,
+]:
+    """Iterator for `StringSlice` over unicode linebreaks.
+
+    Parameters:
+        is_mutable: Whether the slice is mutable.
+        origin: The origin of the underlying string data.
+        forward: The iteration direction. `False` is backwards.
+    """
+
+    alias `\r` = UInt8(ord("\r"))
+    alias `\n` = UInt8(ord("\n"))
+
+    var _slice: StringSlice[origin]
+    var keepends: Bool
+
+    fn __iter__(self) -> Self:
+        return self
+
+    fn __next__(mut self) -> StringSlice[origin]:
+        # highly performance sensitive code, benchmark before touching
+        @parameter
+        if forward:
+            var eol_start = 0
+            var eol_length = 0
+            var length = self._slice.byte_length()
+            var ptr = self._slice.unsafe_ptr()
+
+            while eol_start < length:
+                var b0 = ptr[eol_start]
+                var char_len = _utf8_first_byte_sequence_length(b0)
+                debug_assert(
+                    eol_start + char_len <= length,
+                    "corrupted sequence causing unsafe memory access",
+                )
+                var isnewline = unlikely(
+                    _is_newline_char(ptr, eol_start, b0, char_len)
+                )
+                var char_end = Int(isnewline) * (eol_start + char_len)
+                var next_idx = char_end * Int(char_end < length)
+                var is_r_n = b0 == Self.`\r` and next_idx != 0 and ptr[
+                    next_idx
+                ] == Self.`\n`
+                eol_length = Int(isnewline) * char_len + Int(is_r_n)
+                if isnewline:
+                    break
+                eol_start += char_len
+
+            var str_len = eol_start + Int(self.keepends) * eol_length
+            var s = StringSlice[origin](
+                ptr=self._slice.unsafe_ptr(), length=str_len
+            )
+            var offset = eol_start + eol_length
+            self._slice = StringSlice[origin](
+                ptr=self._slice.unsafe_ptr() + offset, length=length - offset
+            )
+            return s
+        else:
+            constrained[False, "reversed splitlines not yet implemented"]()
+            return abort[StringSlice[origin]]()
+
+    @always_inline
+    fn __has_next__(self) -> Bool:
+        return self._slice.byte_length() > 0
 
 
 @value
@@ -269,6 +340,25 @@ struct CodepointSliceIter[
             self._slice._slice._len -= slice_len
 
         return result
+
+    fn splitlines(
+        owned self: CodepointSliceIter[forward=True], *, keepends: Bool = False
+    ) -> _SplitlinesIter[origin, forward=True]:
+        """Split the string at line boundaries. This corresponds to Python's
+        [universal newlines:](
+        https://docs.python.org/3/library/stdtypes.html#str.splitlines)
+        `"\\r\\n"` and `"\\t\\n\\v\\f\\r\\x1c\\x1d\\x1e\\x85\\u2028\\u2029"`.
+
+        Args:
+            keepends: If True, line breaks are kept in the resulting strings.
+
+        Returns:
+            An iterator of StringSlices over the input split by line boundaries.
+        """
+        # FIXME: some weird lowering issue
+        # argument #0 cannot be converted from 'StringSlice[origin]' to 'StringSlice[origin]'
+        alias S = _SplitlinesIter[origin, True]
+        return S(rebind[StringSlice[S.origin]](self._slice), keepends)
 
 
 @value
@@ -869,7 +959,6 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             self.unsafe_ptr(), rhs.unsafe_ptr(), min(len1, len2)
         )
 
-    @deprecated("Use `str.codepoints()` or `str.codepoint_slices()` instead.")
     fn __iter__(self) -> CodepointSliceIter[origin]:
         """Iterate over the string, returning immutable references.
 
@@ -1806,16 +1895,11 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
                 offset += b_len
             return length != 0
 
-    fn splitlines[
-        O: ImmutableOrigin, //
-    ](self: StringSlice[O], keepends: Bool = False) -> List[StringSlice[O]]:
+    fn splitlines(self, keepends: Bool = False) -> List[Self]:
         """Split the string at line boundaries. This corresponds to Python's
         [universal newlines:](
         https://docs.python.org/3/library/stdtypes.html#str.splitlines)
         `"\\r\\n"` and `"\\t\\n\\v\\f\\r\\x1c\\x1d\\x1e\\x85\\u2028\\u2029"`.
-
-        Parameters:
-            O: The immutable origin.
 
         Args:
             keepends: If True, line breaks are kept in the resulting strings.
@@ -1824,44 +1908,9 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             A List of Strings containing the input split by line boundaries.
         """
 
-        # highly performance sensitive code, benchmark before touching
-        alias `\r` = UInt8(ord("\r"))
-        alias `\n` = UInt8(ord("\n"))
-
-        output = List[StringSlice[O]](capacity=128)  # guessing
-        var ptr = self.unsafe_ptr()
-        var length = self.byte_length()
-        var offset = 0
-
-        while offset < length:
-            var eol_start = offset
-            var eol_length = 0
-
-            while eol_start < length:
-                var b0 = ptr[eol_start]
-                var char_len = _utf8_first_byte_sequence_length(b0)
-                debug_assert(
-                    eol_start + char_len <= length,
-                    "corrupted sequence causing unsafe memory access",
-                )
-                var isnewline = unlikely(
-                    _is_newline_char(ptr, eol_start, b0, char_len)
-                )
-                var char_end = Int(isnewline) * (eol_start + char_len)
-                var next_idx = char_end * Int(char_end < length)
-                var is_r_n = b0 == `\r` and next_idx != 0 and ptr[
-                    next_idx
-                ] == `\n`
-                eol_length = Int(isnewline) * char_len + Int(is_r_n)
-                if isnewline:
-                    break
-                eol_start += char_len
-
-            var str_len = eol_start - offset + Int(keepends) * eol_length
-            var s = StringSlice[O](ptr=ptr + offset, length=str_len)
+        var output = List[Self](capacity=128)  # guessing
+        for s in self.__iter__().splitlines(keepends=keepends):
             output.append(s)
-            offset = eol_start + eol_length
-
         return output^
 
     fn count(self, substr: StringSlice) -> Int:

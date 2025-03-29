@@ -1031,7 +1031,6 @@ struct String(
         """
         self._iadd(other.as_bytes())
 
-    @deprecated("Use `str.codepoints()` or `str.codepoint_slices()` instead.")
     fn __iter__(self) -> CodepointSliceIter[__origin_of(self)]:
         """Iterate over the string, returning immutable references.
 
