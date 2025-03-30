@@ -476,7 +476,8 @@ struct SIMD[dtype: DType, size: Int](
             var val = __mlir_op.`pop.cast_from_builtin`[
                 _type = __mlir_type.`!pop.scalar<ui256>`
             ](ui256)
-            casted = __mlir_op.`pop.cast`[_type = Scalar[dtype]._mlir_type](val)
+            var casted = __mlir_op.`pop.cast`[_type = Scalar[dtype]._mlir_type](val)
+            self = Scalar[dtype](casted)
         else:
             var si256 = __mlir_attr[
                 `#pop<int_literal_convert<`, value.value, `, 0>> : si256`
@@ -484,8 +485,8 @@ struct SIMD[dtype: DType, size: Int](
             var val = __mlir_op.`pop.cast_from_builtin`[
                 _type = __mlir_type.`!pop.scalar<si256>`
             ](si256)
-            casted = __mlir_op.`pop.cast`[_type = Scalar[dtype]._mlir_type](val)
-        self = Scalar[dtype](casted)
+            var casted = __mlir_op.`pop.cast`[_type = Scalar[dtype]._mlir_type](val)
+            self = Scalar[dtype](casted)
 
     @always_inline("nodebug")
     @implicit
