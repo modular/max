@@ -54,8 +54,9 @@ class Llama3ConfigBase(MAXModelConfigBase):
     model_quantization_encoding: Optional[QuantizationEncoding]
     quantization_config: Optional[QuantizationConfig]
     kv_params: KVCacheParams
-    all_logits: bool
+    return_n_logits: int
     norm_method: Literal["rms_norm"] | Literal["layer_norm"]
+    attention_bias: bool
     rms_norm_eps: Optional[float]
     tie_word_embeddings: bool
     stacked_mlp: bool
@@ -164,7 +165,9 @@ class Llama3Config(MAXModelConfig, Llama3ConfigBase):
         logits_postprocessor: Callable[[TensorValue], TensorValue] | None,
         cache_dtype: DType,
         kv_cache_config: KVCacheConfig,
+        return_n_logits: int,
         norm_method: Literal["rms_norm"] | Literal["layer_norm"] = "rms_norm",
+        attention_bias: bool = False,
     ) -> Llama3Config:
         _weights_format = weights_format(
             pipeline_config.model_config.weight_path
@@ -240,7 +243,7 @@ class Llama3Config(MAXModelConfig, Llama3ConfigBase):
             # on the underlying model repo id.
             model_quantization_encoding=pipeline_config.model_config.graph_quantization_encoding,
             quantization_config=pipeline_config.model_config._quant_config,
-            all_logits=pipeline_config.enable_echo,
+            return_n_logits=return_n_logits,
             max_seq_len=Llama3Config.calculate_max_seq_len(
                 pipeline_config, huggingface_config=huggingface_config
             ),
@@ -251,6 +254,7 @@ class Llama3Config(MAXModelConfig, Llama3ConfigBase):
                 cache_dtype=cache_dtype,
             ),
             norm_method=norm_method,
+            attention_bias=attention_bias,
             tie_word_embeddings=tie_word_embeddings,
             stacked_mlp="layers.0.mlp.gate_up_proj.weight" in state_dict,
             stacked_qkv="layers.0.self_attn.qkv_proj.weight" in state_dict,

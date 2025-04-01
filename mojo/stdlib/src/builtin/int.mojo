@@ -15,8 +15,15 @@
 These are Mojo built-ins, so you don't need to import them.
 """
 
+from builtin.math import (
+    _CopyableGreaterThanComparable,
+    _CopyableLessThanComparable,
+    Powable,
+    Absable,
+)
 from collections import KeyElement
 from collections.string import StringSlice
+from collections.string.format import _CurlyEntryFormattable
 from collections.string.string import (
     _calc_initial_buffer_size_int32,
     _calc_initial_buffer_size_int64,
@@ -323,6 +330,14 @@ struct Int(
     Roundable,
     _HashableWithHasher,
     ExplicitlyCopyable,
+    Writable,
+    ComparableCollectionElement,
+    _CopyableGreaterThanComparable,
+    Powable,
+    Absable,
+    _CurlyEntryFormattable,
+    _CopyableLessThanComparable,
+    EqualityComparableCollectionElement,
 ):
     """This type represents an integer value."""
 
@@ -343,7 +358,7 @@ struct Int(
     @always_inline("builtin")
     fn __init__(out self):
         """Default constructor that produces zero."""
-        self.value = __mlir_op.`index.constant`[value = __mlir_attr.`0:index`]()
+        self.value = __mlir_attr.`0 : index`
 
     fn copy(self) -> Self:
         """Explicitly copy the provided value.
@@ -1041,7 +1056,7 @@ struct Int(
     # Trait implementations
     # ===-------------------------------------------------------------------===#
 
-    @always_inline("nodebug")
+    @always_inline("builtin")
     fn __bool__(self) -> Bool:
         """Convert this Int to Bool.
 
@@ -1050,7 +1065,7 @@ struct Int(
         """
         return self != 0
 
-    @always_inline("nodebug")
+    @always_inline("builtin")
     fn __as_bool__(self) -> Bool:
         """Convert this Int to Bool.
 
@@ -1195,6 +1210,15 @@ struct Int(
     # ===-------------------------------------------------------------------===#
     # Methods
     # ===-------------------------------------------------------------------===#
+
+    @always_inline("builtin")
+    fn is_power_of_two(self) -> Bool:
+        """Check if the integer is a (non-zero) power of two.
+
+        Returns:
+            True if the integer is a power of two, False otherwise.
+        """
+        return (self & (self - 1) == 0) & (self > 0)
 
     fn write_to[W: Writer](self, mut writer: W):
         """
