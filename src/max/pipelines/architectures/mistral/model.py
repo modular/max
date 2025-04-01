@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional, Sequence, cast
+from collections.abc import Sequence
+from typing import Optional, cast
 
 import numpy as np
 from max.driver import Device, Tensor
@@ -29,9 +30,9 @@ from max.pipelines import (
     PipelineConfig,
     PipelineModel,
     SupportedEncoding,
-    TextContext,
     upper_bounded_default,
 )
+from max.pipelines.context import TextContext
 from max.pipelines.kv_cache import (
     KVCacheInputs,
     KVCacheManager,
@@ -80,6 +81,7 @@ class MistralModel(PipelineModel[TextContext]):
         kv_cache_config: KVCacheConfig,
         weights: Weights,
         adapter: Optional[WeightsAdapter] = None,
+        return_n_logits: int = 1,
     ) -> None:
         super().__init__(
             pipeline_config,
@@ -90,6 +92,7 @@ class MistralModel(PipelineModel[TextContext]):
             kv_cache_config,
             weights,
             adapter,
+            return_n_logits,
         )
         self.model = self.load_model(session)
 
@@ -105,8 +108,17 @@ class MistralModel(PipelineModel[TextContext]):
             *model_inputs.kv_cache_inputs,
             copy_inputs_to_device=False,
         )
-        assert isinstance(model_outputs[0], Tensor)
-        return ModelOutputs(next_token_logits=model_outputs[0])
+        if len(model_outputs) == 3:
+            return ModelOutputs(
+                next_token_logits=cast(Tensor, model_outputs[0]),
+                logits=cast(Tensor, model_outputs[1]),
+                logit_offsets=cast(Tensor, model_outputs[2]),
+            )
+        else:
+            return ModelOutputs(
+                next_token_logits=cast(Tensor, model_outputs[0]),
+                logits=cast(Tensor, model_outputs[0]),
+            )
 
     def prepare_initial_token_inputs(
         self,
