@@ -38,6 +38,7 @@ from sys.intrinsics import _type_is_eq
 
 from bit import count_leading_zeros
 from memory import Span, UnsafePointer, memcmp, memcpy
+from os import PathLike
 from python import PythonObject
 
 from utils import IndexList, Variant, Writable, Writer, write_args
@@ -467,6 +468,9 @@ struct String(
     CollectionElementNew,
     FloatableRaising,
     _HashableWithHasher,
+    WritableCollectionElement,
+    PathLike,
+    _CurlyEntryFormattable,
 ):
     """Represents a mutable string."""
 
@@ -475,7 +479,7 @@ struct String(
     var _buffer: Self._buffer_type
     """The underlying storage for the string."""
 
-    """ Useful string aliases. """
+    # Useful string aliases.
     alias ASCII_LOWERCASE = "abcdefghijklmnopqrstuvwxyz"
     alias ASCII_UPPERCASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     alias ASCII_LETTERS = Self.ASCII_LOWERCASE + Self.ASCII_UPPERCASE
@@ -589,15 +593,6 @@ struct String(
         self = String()
         write_buffered(self, args, sep=sep, end=end)
 
-    @no_inline
-    fn __init__(out self, value: None):
-        """Initialize a `None` type as "None".
-
-        Args:
-            value: The object to get the string representation of.
-        """
-        self = "None"
-
     @always_inline
     fn __init__(out self, *, capacity: Int):
         """Construct an uninitialized string with the given capacity.
@@ -639,6 +634,8 @@ struct String(
         """
         return self  # Just use the implicit copyinit.
 
+    # This constructor is needed so that StringLiteral *implicitly* converts to
+    # String, rather than the Stringable ctor which is explicit.
     @always_inline
     @implicit
     fn __init__(out self, literal: StringLiteral):
