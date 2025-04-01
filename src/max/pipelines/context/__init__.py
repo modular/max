@@ -10,14 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
-# RUN: %mojo %s
 
-from testing import assert_equal
+from .context import InputContext, TextAndVisionContext, TextContext
 
-
-def test_str_none():
-    assert_equal(String(None), "None")
-
-
-def main():
-    test_str_none()
+__all__ = [
+    "InputContext",
+    "TextAndVisionContext",
+    "TextContext",
+]
