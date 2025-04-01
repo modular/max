@@ -13,13 +13,14 @@
 
 from __future__ import annotations
 
-from typing import List, Sequence
+from collections.abc import Sequence
+from typing import Optional
 
 import numpy as np
 from max.driver import Device, Tensor
 from max.dtype import DType
 from max.engine import InferenceSession, Model
-from max.graph.weights import Weights
+from max.graph.weights import Weights, WeightsAdapter
 from max.pipelines import (
     KVCacheConfig,
     ModelInputs,
@@ -27,12 +28,12 @@ from max.pipelines import (
     PipelineConfig,
     PipelineModel,
     SupportedEncoding,
-    TextAndVisionContext,
 )
 from max.pipelines.architectures.qwen2_5vl.nn.data_processing import (
     get_window_index,
     mrope_pos_ids_3d,
 )
+from max.pipelines.context import TextAndVisionContext
 from max.pipelines.kv_cache import KVCacheInputs, KVCacheParams, KVCacheStrategy
 from transformers import AutoConfig
 
@@ -58,7 +59,7 @@ class Qwen2_5VLInputs(ModelInputs):
     pixel_row_offsets: Tensor
 
     # Vision model inputs.
-    """ image pixel_values stacked in 2D tensor of shape [n_patches, in_channels * 
+    """ image pixel_values stacked in 2D tensor of shape [n_patches, in_channels *
     temporal_patch_size * patch_size * patch_size] """
     pixel_values: Tensor | None
 
@@ -141,6 +142,8 @@ class Qwen2_5VLModel(PipelineModel[TextAndVisionContext]):
         devices: list[Device],
         kv_cache_config: KVCacheConfig,
         weights: Weights,
+        adapter: Optional[WeightsAdapter] = None,
+        return_n_logits: int = 1,
     ) -> None:
         super().__init__(
             pipeline_config,
@@ -150,6 +153,8 @@ class Qwen2_5VLModel(PipelineModel[TextAndVisionContext]):
             devices,
             kv_cache_config,
             weights,
+            adapter,
+            return_n_logits,
         )
         self.model = self.load_model(session)
 
@@ -351,7 +356,7 @@ class Qwen2_5VLModel(PipelineModel[TextAndVisionContext]):
         cls,
         pipeline_config: PipelineConfig,
         available_cache_memory: int,
-        devices: List[Device],
+        devices: list[Device],
         huggingface_config: AutoConfig,
     ) -> int:
         raise NotImplementedError

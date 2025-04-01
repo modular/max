@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
-"""Implements the StringLiteral class.
+"""Implements the StringLiteral struct.
 
 These are Mojo built-ins, so you don't need to import them.
 """
@@ -27,6 +27,8 @@ from hashlib._hasher import _HashableWithHasher, _Hasher
 from sys.ffi import c_char
 
 from memory import Span, UnsafePointer, memcpy
+
+from os import PathLike
 
 from utils import Writable, Writer
 from utils._visualizers import lldb_formatter_wrapping_type
@@ -51,6 +53,9 @@ struct StringLiteral(
     Stringable,
     FloatableRaising,
     _HashableWithHasher,
+    PathLike,
+    EqualityComparableCollectionElement,
+    _CurlyEntryFormattable,
 ):
     """This type represents a string literal.
 
