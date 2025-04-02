@@ -87,14 +87,14 @@ struct InlineArray[
     Examples:
 
     ```mojo
-        # Create array of 3 integers
-        var arr = InlineArray[Int, 3](1, 2, 3)
+    # Create array of 3 integers
+    var arr = InlineArray[Int, 3](1, 2, 3)
 
-        # Create array filled with value
-        var filled = InlineArray[Int, 5](fill=42)
+    # Create array filled with value
+    var filled = InlineArray[Int, 5](fill=42)
 
-        # Access elements
-        print(arr[0])  # Prints 1
+    # Access elements
+    print(arr[0])  # Prints 1
     ```
     """
 
