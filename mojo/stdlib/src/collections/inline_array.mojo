@@ -21,14 +21,14 @@ in order to use it.
 Examples:
 
 ```mojo
-    # Create an array of 3 integers
-    var arr = InlineArray[Int, 3](1, 2, 3)
+# Create an array of 3 integers
+var arr = InlineArray[Int, 3](1, 2, 3)
 
-    # Access elements
-    print(arr[0])  # Prints 1
+# Access elements
+print(arr[0])  # Prints 1
 
-    # Fill with a value
-    var filled = InlineArray[Int, 5](fill=42)
+# Fill with a value
+var filled = InlineArray[Int, 5](fill=42)
 ```
 
 Notes:
@@ -364,7 +364,7 @@ struct InlineArray[
 
         Args:
             idx: The index to access. Can be positive (0 to len-1) or negative
-            (-len to -1).
+                (-len to -1).
 
         Returns:
             A reference to the element at the specified index.
