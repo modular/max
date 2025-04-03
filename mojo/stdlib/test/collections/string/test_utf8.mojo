@@ -84,22 +84,25 @@ alias BAD_SEQUENCES = List[List[Byte]](
 # ===----------------------------------------------------------------------=== #
 # Tests
 # ===----------------------------------------------------------------------=== #
+from builtin._location import __call_location
 
 
-fn validate_utf8[span: Span[Byte]]() -> Bool:
+def validate_utf8[span: Span[Byte]]() -> Bool:
     alias comptime = _is_valid_utf8_comptime(span)
     var runtime = _is_valid_utf8_runtime(span)
-    return comptime and runtime
+    assert_equal(comptime, runtime)
+    return comptime
 
 
-fn validate_utf8(span: Span[Byte]) -> Bool:
+def validate_utf8(span: Span[Byte]) -> Bool:
     var comptime = _is_valid_utf8_comptime(span)
     var runtime = _is_valid_utf8_runtime(span)
-    return comptime and runtime
+    assert_equal(comptime, runtime)
+    return comptime
 
 
 fn test_utf8_validation() raises:
-    var text = """Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam
+    alias text = """Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam
     varius tellus quis tincidunt dictum. Donec eros orci, ultricies ac metus non
     , rutrum faucibus neque. Nunc ultricies turpis ut lacus consequat dapibus.
     Nulla nec risus a purus volutpat blandit. Donec sit amet massa velit. Aenean
@@ -126,7 +129,7 @@ fn test_utf8_validation() raises:
      ظهرت نسخ جديدة ومختلفة من نص لوريم إيبسوم، أحياناً عن طريق
      الصدفة، وأحياناً عن عمد كإدخال بعض العبارات الفكاهية إليها.
     """
-    assert_true(validate_utf8(text.as_bytes()))
+    assert_true(validate_utf8[text.as_bytes()]())
 
     alias positive = List[List[UInt8]](
         List[UInt8](0x0),
@@ -192,6 +195,7 @@ def test_good_utf8_sequences():
 def test_bad_utf8_sequences():
     @parameter
     for i in range(len(BAD_SEQUENCES)):
+        print(i.__str__())
         assert_false(validate_utf8[BAD_SEQUENCES[i]]())
 
 
