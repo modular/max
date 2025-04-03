@@ -84,7 +84,6 @@ alias BAD_SEQUENCES = List[List[Byte]](
 # ===----------------------------------------------------------------------=== #
 # Tests
 # ===----------------------------------------------------------------------=== #
-from builtin._location import __call_location
 
 
 def validate_utf8[span: Span[Byte]]() -> Bool:
