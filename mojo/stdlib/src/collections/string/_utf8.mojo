@@ -166,14 +166,17 @@ fn _validate_utf8_simd_slice[
     width: Int, remainder: Bool = False
 ](ptr: UnsafePointer[UInt8], length: Int, mut iter_len: UInt) -> Bool:
     """Internal method to validate utf8, use _is_valid_utf8_comptime.
+
     Parameters:
         width: The width of the SIMD vector to build for validation.
         remainder: Whether it is computing the remainder that doesn't fit in the
             SIMD vector.
+
     Args:
         ptr: Pointer to the data.
         length: The length of the items in the pointer.
         iter_len: The amount of items to still iterate through.
+
     Returns:
         Whether the slice is valid.
     """
