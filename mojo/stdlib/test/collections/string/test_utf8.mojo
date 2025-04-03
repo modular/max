@@ -13,7 +13,8 @@
 # RUN: %mojo %s
 
 from collections.string._utf8 import (
-    _is_valid_utf8,
+    _is_valid_utf8_runtime,
+    _is_valid_utf8_comptime,
     _count_utf8_continuation_bytes,
 )
 from collections.string.string_slice import StringSlice
@@ -85,6 +86,18 @@ alias BAD_SEQUENCES = List[List[Byte]](
 # ===----------------------------------------------------------------------=== #
 
 
+fn validate_utf8[span: Span[Byte]]() -> Bool:
+    alias comptime = _is_valid_utf8_comptime(span)
+    var runtime = _is_valid_utf8_runtime(span)
+    return comptime and runtime
+
+
+fn validate_utf8(span: Span[Byte]) -> Bool:
+    var comptime = _is_valid_utf8_comptime(span)
+    var runtime = _is_valid_utf8_runtime(span)
+    return comptime and runtime
+
+
 fn test_utf8_validation() raises:
     var text = """Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam
     varius tellus quis tincidunt dictum. Donec eros orci, ultricies ac metus non
@@ -113,10 +126,9 @@ fn test_utf8_validation() raises:
      ظهرت نسخ جديدة ومختلفة من نص لوريم إيبسوم، أحياناً عن طريق
      الصدفة، وأحياناً عن عمد كإدخال بعض العبارات الفكاهية إليها.
     """
-    assert_true(_is_valid_utf8(text.as_bytes()))
-    assert_true(_is_valid_utf8(text.as_bytes()))
+    assert_true(validate_utf8(text.as_bytes()))
 
-    var positive = List[List[UInt8]](
+    alias positive = List[List[UInt8]](
         List[UInt8](0x0),
         List[UInt8](0x00),
         List[UInt8](0x66),
@@ -133,10 +145,12 @@ fn test_utf8_validation() raises:
         List[UInt8](0xF2, 0x81, 0xBE, 0x99),
         List[UInt8](0xF4, 0x8F, 0x88, 0xAA),
     )
-    for item in positive:
-        assert_true(_is_valid_utf8(Span(item[])))
-        assert_true(_is_valid_utf8(Span(item[])))
-    var negative = List[List[UInt8]](
+
+    @parameter
+    for i in range(len(positive)):
+        assert_true(validate_utf8[positive[i]]())
+
+    alias negative = List[List[UInt8]](
         List[UInt8](0x80),
         List[UInt8](0xBF),
         List[UInt8](0xC0, 0x80),
@@ -163,23 +177,22 @@ fn test_utf8_validation() raises:
         List[UInt8](0x00, 0x00, 0xF1, 0x80, 0xC2, 0x80, 0x00),
         List[UInt8](0x00, 0x00, 0xF0, 0x80, 0x80, 0x80),
     )
-    for item in negative:
-        assert_false(_is_valid_utf8(Span(item[])))
-        assert_false(_is_valid_utf8(Span(item[])))
 
-
-fn validate_utf8(span: Span[Byte]) -> Bool:
-    return _is_valid_utf8(span)
+    @parameter
+    for i in range(len(negative)):
+        assert_false(validate_utf8[negative[i]]())
 
 
 def test_good_utf8_sequences():
-    for sequence in GOOD_SEQUENCES:
-        assert_true(validate_utf8(sequence[]))
+    @parameter
+    for i in range(len(GOOD_SEQUENCES)):
+        assert_true(validate_utf8[GOOD_SEQUENCES[i]]())
 
 
 def test_bad_utf8_sequences():
-    for sequence in BAD_SEQUENCES:
-        assert_false(validate_utf8(Span(sequence[])))
+    @parameter
+    for i in range(len(BAD_SEQUENCES)):
+        assert_false(validate_utf8[BAD_SEQUENCES[i]]())
 
 
 def test_stringslice_from_utf8():
