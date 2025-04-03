@@ -37,6 +37,7 @@ alias GOOD_SEQUENCES = List[List[Byte]](
     List("\xf0\x90\x80\x80".as_bytes()),
     List("\xee\x80\x80".as_bytes()),
     List("very very very long string 🔥🔥🔥".as_bytes()),
+    List(" τo".as_bytes()),
 )
 
 
