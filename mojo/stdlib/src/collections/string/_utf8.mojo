@@ -275,13 +275,17 @@ fn _is_valid_utf8_comptime(span: Span[Byte]) -> Bool:
 @always_inline("nodebug")
 fn _is_valid_utf8(span: Span[Byte]) -> Bool:
     """Verify that the bytes are valid UTF-8.
+
     Args:
         span: The Span of bytes.
+
     Returns:
         Whether the data is valid UTF-8.
+
     #### UTF-8 coding format
     [Table 3-7 page 94](http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf).
     Well-Formed UTF-8 Byte Sequences
+
     Code Points        | First Byte | Second Byte | Third Byte | Fourth Byte |
     :----------        | :--------- | :---------- | :--------- | :---------- |
     U+0000..U+007F     | 00..7F     |             |            |             |
