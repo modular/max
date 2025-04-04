@@ -1364,10 +1364,15 @@ struct CPython:
         mut self,
         obj: PyObjectPtr,
         name: StringSlice,
-    ) -> Int:
-        var r = self.lib.get_function[
-            fn (PyObjectPtr, UnsafePointer[UInt8]) -> Int
-        ]("PyObject_HasAttrString")(obj, name.unsafe_ptr())
+    ) -> c_int:
+        """Returns `1` if `obj` has the attribute `attr_name`, and `0` otherwise.
+
+        [Reference](https://docs.python.org/3/c-api/object.html#c.PyObject_HasAttrString).
+        """
+        # int PyObject_HasAttrString(PyObject *o, const char *attr_name)
+        var r = self.lib.call["PyObject_HasAttrString", c_int](
+            obj, name.unsafe_ptr().bitcast[c_char]()
+        )
         return r
 
     fn PyObject_GetAttrString(
@@ -1375,12 +1380,13 @@ struct CPython:
         obj: PyObjectPtr,
         name: StringSlice,
     ) -> PyObjectPtr:
-        """[Reference](
-        https://docs.python.org/3/c-api/object.html#c.PyObject_GetAttrString).
-        """
+        """Retrieve an attribute named `name` from object `obj`.
 
+        [Reference](https://docs.python.org/3/c-api/object.html#c.PyObject_GetAttrString).
+        """
+        # PyObject *PyObject_GetAttrString(PyObject *o, const char *attr_name)
         var r = self.lib.call["PyObject_GetAttrString", PyObjectPtr](
-            obj, name.unsafe_ptr()
+            obj, name.unsafe_ptr().bitcast[c_char]()
         )
 
         self.log(
@@ -1397,14 +1403,18 @@ struct CPython:
         return r
 
     fn PyObject_SetAttrString(
-        mut self, obj: PyObjectPtr, name: StringSlice, new_value: PyObjectPtr
+        mut self,
+        obj: PyObjectPtr,
+        name: StringSlice,
+        new_value: PyObjectPtr,
     ) -> c_int:
-        """[Reference](
-        https://docs.python.org/3/c-api/object.html#c.PyObject_SetAttrString).
-        """
+        """Set the value of the attribute named `name`, for object `obj`, to the value `new_value`.
 
+        [Reference](https://docs.python.org/3/c-api/object.html#c.PyObject_SetAttrString).
+        """
+        # int PyObject_SetAttrString(PyObject *o, const char *attr_name, PyObject *v)
         var r = self.lib.call["PyObject_SetAttrString", c_int](
-            obj, name.unsafe_ptr(), new_value
+            obj, name.unsafe_ptr().bitcast[c_char](), new_value
         )
 
         self.log(
