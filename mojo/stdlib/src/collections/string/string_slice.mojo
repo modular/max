@@ -642,8 +642,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             the provided string slice.
         """
         var buffer = String._buffer_type(capacity=self.byte_length() + 1)
-        buffer.extend(self.as_bytes())
-        buffer.append(0)
+        buffer.extend[unsafe_no_checks=True](self.as_bytes())
+        buffer.append[unsafe_no_checks=True](0)
         return String(buffer=buffer^)
 
     fn __repr__(self) -> String:
@@ -932,10 +932,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             A new string containing the character at the specified position.
         """
         # TODO(#933): implement this for unicode when we support llvm intrinsic evaluation at compile time
-        var buf = String._buffer_type(capacity=1)
-        buf.append(self._slice[idx])
-        buf.append(0)
-        return String(buf^)
+        return String(buffer=String._buffer_type(self._slice[idx], 0))
 
     fn __contains__(self, substr: StringSlice) -> Bool:
         """Returns True if the substring is contained within the current string.
@@ -980,9 +977,9 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var res = List[Byte](
             capacity=self.byte_length() + rhs.byte_length() + 1
         )
-        res.extend(self.as_bytes())
-        res.extend(rhs.as_bytes())
-        res.append(0)
+        res.extend[unsafe_no_checks=True](self.as_bytes())
+        res.extend[unsafe_no_checks=True](rhs.as_bytes())
+        res.append[unsafe_no_checks=True](0)
         return String(buffer=res^)
 
     fn __radd__(self, lhs: StringSlice) -> String:
@@ -997,9 +994,9 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var res = List[Byte](
             capacity=self.byte_length() + lhs.byte_length() + 1
         )
-        res.extend(lhs.as_bytes())
-        res.extend(self.as_bytes())
-        res.append(0)
+        res.extend[unsafe_no_checks=True](lhs.as_bytes())
+        res.extend[unsafe_no_checks=True](self.as_bytes())
+        res.append[unsafe_no_checks=True](0)
         return String(buffer=res^)
 
     fn __mul__(self, n: Int) -> String:
@@ -1014,8 +1011,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
 
         var buffer = List[Byte](capacity=self.byte_length() * n + 1)
         for i in range(n):
-            buffer.extend(self.as_bytes())
-        buffer.append(0)
+            buffer.extend[unsafe_no_checks=True](self.as_bytes())
+        buffer.append[unsafe_no_checks=True](0)
         return String(buffer=buffer)
 
     # ===------------------------------------------------------------------===#
@@ -2042,7 +2039,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var fillbyte = fillchar.as_bytes()[0]
         var buffer = List[Byte](capacity=width + 1)
         buffer.resize(width, fillbyte)
-        buffer.append(0)
+        buffer.append[unsafe_no_checks=True](0)
         memcpy(buffer.unsafe_ptr().offset(start), self.unsafe_ptr(), len(self))
         var result = String(buffer=buffer)
         return result^
@@ -2058,20 +2055,17 @@ fn _to_string_list[
     len_fn: fn (T) -> Int,
     unsafe_ptr_fn: fn (T) -> UnsafePointer[Byte],
 ](items: List[T]) -> List[String]:
-    i_len = len(items)
-    i_ptr = items.unsafe_ptr()
-    out_ptr = UnsafePointer[String].alloc(i_len)
+    var strings = List[String](capacity=len(items))
 
-    for i in range(i_len):
-        og_len = len_fn(i_ptr[i])
-        f_len = og_len + 1  # null terminator
-        p = UnsafePointer[Byte].alloc(f_len)
-        og_ptr = unsafe_ptr_fn(i_ptr[i])
-        memcpy(p, og_ptr, og_len)
-        p[og_len] = 0  # null terminator
-        buf = String._buffer_type(ptr=p, length=f_len, capacity=f_len)
-        (out_ptr + i).init_pointee_move(String(buf^))
-    return List[String](ptr=out_ptr, length=i_len, capacity=i_len)
+    for item in items:
+        var og_len = len_fn(item[])
+        var buf = List[Byte](capacity=og_len + 1)  # null terminator
+        var og_ptr = unsafe_ptr_fn(item[])
+        alias S = Span[Byte, ImmutableAnyOrigin]
+        buf.extend[unsafe_no_checks=True](S(ptr=og_ptr, length=og_len))
+        buf.append[unsafe_no_checks=True](0)  # null terminator
+        strings.append[unsafe_no_checks=True](String(buffer=buf^))
+    return strings^
 
 
 @always_inline
