@@ -97,6 +97,32 @@ fn bench_dict_lookup[size: Int](mut b: Bencher) raises:
 
 
 # ===-----------------------------------------------------------------------===#
+# Benchmark Dict Lookup (types that allocated)
+# ===-----------------------------------------------------------------------===#
+@parameter
+fn bench_dict_lookup_types_that_allocates[size: Int](mut b: Bencher) raises:
+    """Lookup size items."""
+    var dict = Dict[String, String]()
+    var keys = List[String](capacity=size)
+    for i in range(size):
+        keys.append(String(i))
+    for i in range(size):
+        dict[keys[i]] = keys[i]
+
+    @always_inline
+    @parameter
+    fn call_fn() raises:
+        var res = 0
+        for i in range(size):
+            res += len(dict[keys[i]])
+        keep(res)
+
+    b.iter[call_fn]()
+    keep(Bool(dict))
+    keep(Bool(keys))
+
+
+# ===-----------------------------------------------------------------------===#
 # Benchmark Dict Memory Footprint
 # ===-----------------------------------------------------------------------===#
 
@@ -139,6 +165,10 @@ def main():
         m.bench_function[bench_dict_lookup[size]](
             BenchId(String("bench_dict_lookup[", size, "]"))
         )
+
+    m.bench_function[bench_dict_lookup_types_that_allocates[256]](
+        BenchId(String("bench_dict_lookup_types_that_allocates[256]"))
+    )
 
     m.dump_report()
 
