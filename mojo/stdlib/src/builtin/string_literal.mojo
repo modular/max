@@ -460,11 +460,7 @@ struct StringLiteral(
         Returns:
             A string slice pointing to this static string literal.
         """
-
-        # FIXME(MSTDL-160):
-        #   Enforce UTF-8 encoding in StringLiteral so this is actually
-        #   guaranteed to be valid.
-        return StaticString(ptr=self.unsafe_ptr(), length=self.byte_length())
+        return StaticString(self)
 
     @always_inline("nodebug")
     fn as_bytes(self) -> Span[Byte, StaticConstantOrigin]:

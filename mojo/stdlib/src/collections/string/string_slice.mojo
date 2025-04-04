@@ -52,6 +52,7 @@ from collections import List, Optional
 from collections.string.format import _CurlyEntryFormattable, _FormatCurlyEntry
 from collections.string._utf8 import (
     _is_valid_utf8,
+    _is_valid_utf8_comptime,
     _count_utf8_continuation_bytes,
     _utf8_first_byte_sequence_length,
     _utf8_byte_type,
@@ -496,11 +497,23 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         # slice to live for.
         # SAFETY:
         #   StringLiteral is guaranteed to use UTF-8 encoding.
-        # FIXME(MSTDL-160):
-        #   Ensure StringLiteral _actually_ always uses UTF-8 encoding.
-        self = StaticString(unsafe_from_utf8=lit.as_bytes())
+        # NOTE: validating StringLiterals would cause recursive loops
+        self._slice = lit.as_bytes()
 
-    @always_inline("builtin")
+    fn __init__(
+        out self, *, unsafe_from_utf8_no_validation: Span[Byte, origin]
+    ):
+        """Unsafely construct a StringSlice with no checks. This is to avoid
+        recursive code-paths. Internal use only.
+
+        Args:
+            unsafe_from_utf8_no_validation: A `Span[Byte]` encoded in UTF-8.
+
+        Safety:
+            `unsafe_from_utf8_no_validation` MUST be valid UTF-8 encoded data.
+        """
+        self._slice = unsafe_from_utf8_no_validation
+
     fn __init__(out self, *, unsafe_from_utf8: Span[Byte, origin]):
         """Construct a new `StringSlice` from a sequence of UTF-8 encoded bytes.
 
@@ -510,14 +523,16 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         Safety:
             `unsafe_from_utf8` MUST be valid UTF-8 encoded data.
         """
-        # FIXME(#3706): can't run at compile time
-        # TODO(MOCO-1525):
-        #   Support skipping UTF-8 during comptime evaluations, or support
-        #   the necessary SIMD intrinsics to allow this to evaluate at compile
-        #   time.
-        # debug_assert(
-        #     _is_valid_utf8(value.as_bytes()), "value is not valid utf8"
-        # )
+
+        # NOTE: using the comptime version is because the fast runtime one
+        # causes recursive loops when used here
+        if not _is_valid_utf8_comptime(unsafe_from_utf8):
+            alias msg = "buffer is not valid UTF-8"
+            if is_compile_time():
+                abort(msg)
+            # FIXME(#4146): this should have location=location.or_else(__call_location())
+            debug_assert(False, msg)
+
         self._slice = unsafe_from_utf8
 
     fn __init__(out self, *, unsafe_from_utf8_ptr: UnsafePointer[Byte]):
@@ -534,13 +549,10 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             - `unsafe_from_utf8_ptr` MUST be null terminated.
         """
 
-        var count = _unsafe_strlen(unsafe_from_utf8_ptr)
-
         var byte_slice = Span[Byte, origin](
             ptr=unsafe_from_utf8_ptr,
-            length=count,
+            length=_unsafe_strlen(unsafe_from_utf8_ptr),
         )
-
         self = Self(unsafe_from_utf8=byte_slice)
 
     fn __init__(out self, *, unsafe_from_utf8_cstr_ptr: UnsafePointer[c_char]):
@@ -559,7 +571,6 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var ptr = unsafe_from_utf8_cstr_ptr.bitcast[Byte]()
         self = Self(unsafe_from_utf8_ptr=ptr)
 
-    @always_inline("builtin")
     fn __init__(out self, *, ptr: UnsafePointer[Byte], length: UInt):
         """Construct a `StringSlice` from a pointer to a sequence of UTF-8
         encoded bytes and a length.
@@ -583,7 +594,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         Returns:
             A copy of the value.
         """
-        return Self(unsafe_from_utf8=self._slice)
+        return Self(unsafe_from_utf8_no_validation=self._slice)
 
     @implicit
     fn __init__[
@@ -1461,7 +1472,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         # overall length in bytes.
         # For a visual explanation of how this UTF-8 codepoint counting works:
         #   https://connorgray.com/ephemera/project-log#2025-01-13
-        var continuation_count = _count_utf8_continuation_bytes(self)
+        var continuation_count = _count_utf8_continuation_bytes(self.as_bytes())
         return self.byte_length() - continuation_count
 
     fn is_codepoint_boundary(self, index: UInt) -> Bool:
@@ -1667,7 +1678,9 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         # TODO: We assumes the StringSlice only has ASCII.
         # When we support utf-8 slicing, we should drop self._slice[abs_start:]
         # and use something smarter.
-        return StringSlice(unsafe_from_utf8=self._slice[abs_start:])
+        return StringSlice(
+            unsafe_from_utf8_no_validation=self._slice[abs_start:]
+        )
 
     @always_inline
     fn format[*Ts: _CurlyEntryFormattable](self, *args: *Ts) raises -> String:

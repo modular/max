@@ -67,6 +67,7 @@ from sys import (
     simdwidthof,
     sizeof,
     CompilationTarget,
+    is_compile_time,
 )
 from sys._assembly import inlined_assembly
 from sys.info import _is_sm_9x
@@ -2238,17 +2239,22 @@ struct SIMD[dtype: DType, size: Int](
         ]()
 
         @parameter
-        if output_width == 1:
-            return self[offset]
-
-        @parameter
-        if offset % simdwidthof[dtype]():
+        fn slice_body() -> SIMD[dtype, output_width]:
             var tmp = SIMD[dtype, output_width]()
 
             @parameter
             for i in range(output_width):
                 tmp[i] = self[i + offset]
             return tmp
+
+        @parameter
+        if output_width == 1:
+            return self[offset]
+        elif offset % simdwidthof[dtype]():
+            return slice_body()
+
+        if is_compile_time():
+            return slice_body()
 
         return llvm_intrinsic[
             "llvm.vector.extract",

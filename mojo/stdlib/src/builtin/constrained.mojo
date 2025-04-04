@@ -32,7 +32,7 @@ fn constrained[cond: Bool, msg: StaticString, *extra: StaticString]():
         msg: The message to display on failure.
         extra: Additional messages to concatenate to msg.
 
-    Example:
+    Examples:
 
     ```mojo
     from sys.info import num_physical_cores
@@ -69,7 +69,7 @@ fn constrained[cond: Bool]():
     Parameters:
         cond: The bool value to assert.
 
-    Example:
+    Examples:
 
     ```mojo
     from sys.info import num_physical_cores
