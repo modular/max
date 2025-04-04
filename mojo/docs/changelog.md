@@ -80,6 +80,9 @@ for i in range(iteration_range):
   `constrained[cond, "hello: ", String(n), ": world"]()` which is more comptime
   efficient and somewhat more ergonomic than using string concatenation.
 
+- The types `StringSlice` and `StaticString` are now part of the prelude, there
+  is no need to import them anymore.
+
 ### GPU changes
 
 - `debug_assert` in AMD GPU kernels now behaves the same as NVIDIA, printing the
