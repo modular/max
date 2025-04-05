@@ -22,7 +22,12 @@ from os import listdir
 
 from collections import InlineArray, List
 from collections.string import StringSlice
-from sys import external_call, is_gpu, os_is_linux, os_is_windows
+from sys import (
+    external_call,
+    is_gpu,
+    os_is_linux,
+    os_is_windows,
+)
 from sys.ffi import OpaquePointer, c_char
 
 from memory import UnsafePointer
