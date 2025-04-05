@@ -66,7 +66,7 @@ struct _SpanIter[
 
     """
 
-    var index: Int
+    var index: UInt
     var src: Span[T, origin, address_space=address_space, alignment=alignment]
 
     @always_inline
@@ -126,7 +126,7 @@ struct Span[
         address_space=address_space,
         alignment=alignment,
     ]
-    var _len: Int
+    var _len: UInt
 
     # ===------------------------------------------------------------------===#
     # Life cycle methods
@@ -206,14 +206,12 @@ struct Span[
         Returns:
             An element reference.
         """
-        # TODO: Simplify this with a UInt type.
-        debug_assert(
-            -self._len <= Int(idx) < self._len, "index must be within bounds"
-        )
-        # TODO(MSTDL-1086): optimize away SIMD/UInt normalization check
-        var offset = Int(idx)
-        if offset < 0:
-            offset += len(self)
+        var offset = UInt(idx.__index__())
+        # TODO(MSTDL-1086): optimize away SIMD normalization check
+        if not _type_is_eq[I, UInt]():
+            if offset < 0:
+                offset = len(self) + Int(i)
+        debug_assert(offset < self._len, "index must be within bounds")
         return self._data[offset]
 
     @always_inline
