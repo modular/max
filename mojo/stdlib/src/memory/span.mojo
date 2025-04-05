@@ -22,6 +22,7 @@ from memory import Span
 
 from collections import InlineArray
 from sys.info import simdwidthof
+from sys.intrinsics import _type_is_eq
 
 from memory import Pointer, UnsafePointer
 from memory.unsafe_pointer import _default_alignment
@@ -210,7 +211,7 @@ struct Span[
         # TODO(MSTDL-1086): optimize away SIMD normalization check
         if not _type_is_eq[I, UInt]():
             if offset < 0:
-                offset = len(self) + Int(i)
+                offset = len(self) + Int(idx)
         debug_assert(offset < self._len, "index must be within bounds")
         return self._data[offset]
 
