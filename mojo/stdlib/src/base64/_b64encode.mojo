@@ -141,7 +141,7 @@ fn _get_table_number_of_bytes_to_store_from_number_of_bytes_to_load[
 
 
 fn _get_number_of_bytes_to_store_from_number_of_bytes_to_load[
-    max_size: Int
+    max_size: UInt
 ](nb_of_elements_to_load: Int) -> Int:
     alias table = _get_table_number_of_bytes_to_store_from_number_of_bytes_to_load[
         max_size
@@ -176,7 +176,7 @@ fn _get_table_number_of_bytes_to_store_from_number_of_bytes_to_load_without_equa
 
 
 fn _get_number_of_bytes_to_store_from_number_of_bytes_to_load_without_equal_sign[
-    max_size: Int
+    max_size: UInt
 ](nb_of_elements_to_load: Int) -> Int:
     alias table = _get_table_number_of_bytes_to_store_from_number_of_bytes_to_load_without_equal_sign[
         max_size

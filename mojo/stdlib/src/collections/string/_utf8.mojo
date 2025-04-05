@@ -89,7 +89,7 @@ fn _extract_vector[
 
 
 fn validate_chunk[
-    simd_size: Int
+    simd_size: UInt
 ](
     current_block: SIMD[DType.uint8, simd_size],
     previous_input_block: SIMD[DType.uint8, simd_size],

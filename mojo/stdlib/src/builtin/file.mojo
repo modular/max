@@ -125,7 +125,7 @@ struct FileHandle(Writer):
         self.handle = existing.handle
         existing.handle = OpaquePointer()
 
-    fn read(self, size: Int64 = -1) raises -> String:
+    fn read(self, size: UInt64 = -1) raises -> String:
         """Reads data from a file and sets the file handle seek position. If
         size is left as the default of -1, it will read to the end of the file.
         Setting size to a number larger than what's in the file will set
@@ -196,7 +196,7 @@ struct FileHandle(Writer):
     fn read[
         dtype: DType
     ](
-        self, ptr: UnsafePointer[Scalar[dtype]], size: Int64 = -1
+        self, ptr: UnsafePointer[Scalar[dtype]], size: UInt64 = -1
     ) raises -> Int64:
         """Read data from the file into the pointer. Setting size will read up
         to `sizeof(type) * size`. The default value of `size` is -1 which
@@ -271,7 +271,7 @@ struct FileHandle(Writer):
 
         return bytes_read
 
-    fn read_bytes(self, size: Int64 = -1) raises -> List[UInt8]:
+    fn read_bytes(self, size: UInt64 = -1) raises -> List[UInt8]:
         """Reads data from a file and sets the file handle seek position. If
         size is left as default of -1, it will read to the end of the file.
         Setting size to a number larger than what's in the file will be handled

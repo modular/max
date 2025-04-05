@@ -167,7 +167,7 @@ fn _is_unsigned[dtype: DType]() -> Bool:
 @value
 @register_passable("trivial")
 struct IndexList[
-    size: Int,
+    size: UInt,
     *,
     element_bitwidth: Int = bitwidthof[Int](),
     unsigned: Bool = False,
@@ -1080,7 +1080,7 @@ fn Index[
 
 
 @always_inline
-fn product[size: Int](tuple: IndexList[size, **_], end_idx: Int = size) -> Int:
+fn product[size: UInt](tuple: IndexList[size, **_], end_idx: Int = size) -> Int:
     """Computes a product of values in the tuple up to the given index.
 
     Parameters:
@@ -1098,7 +1098,7 @@ fn product[size: Int](tuple: IndexList[size, **_], end_idx: Int = size) -> Int:
 
 @always_inline
 fn product[
-    size: Int
+    size: UInt
 ](tuple: IndexList[size, **_], start_idx: Int, end_idx: Int) -> Int:
     """Computes a product of values in the tuple in the given index range.
 

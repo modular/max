@@ -198,7 +198,7 @@ alias Byte = UInt8
 
 
 @always_inline("nodebug")
-fn _simd_construction_checks[dtype: DType, size: Int]():
+fn _simd_construction_checks[dtype: DType, size: UInt]():
     """Checks if the SIMD size is valid.
 
     The SIMD size is valid if it is a power of two and is positive.
@@ -228,7 +228,7 @@ fn _simd_construction_checks[dtype: DType, size: Int]():
 
 
 @always_inline("nodebug")
-fn _unchecked_zero[dtype: DType, size: Int]() -> SIMD[dtype, size]:
+fn _unchecked_zero[dtype: DType, size: UInt]() -> SIMD[dtype, size]:
     var zero = __mlir_op.`pop.cast`[_type = Scalar[dtype]._mlir_type](
         __mlir_attr.`#pop.simd<0> : !pop.scalar<index>`
     )
@@ -252,7 +252,7 @@ fn _has_native_f8_support() -> Bool:
 
 @lldb_formatter_wrapping_type
 @register_passable("trivial")
-struct SIMD[dtype: DType, size: Int](
+struct SIMD[dtype: DType, size: UInt](
     Absable,
     Boolable,
     Ceilable,
@@ -1968,7 +1968,7 @@ struct SIMD[dtype: DType, size: Int](
 
     @always_inline("nodebug")
     fn _shuffle_variadic[
-        *mask: Int, output_size: Int = size
+        *mask: Int, output_size: UInt = size
     ](self, other: Self) -> SIMD[dtype, output_size]:
         """Shuffles (also called blend) the values of the current vector with
         the `other` value using the specified mask (permutation). The mask
@@ -2029,7 +2029,7 @@ struct SIMD[dtype: DType, size: Int](
 
     @always_inline("nodebug")
     fn _shuffle_list[
-        output_size: Int, mask: StaticTuple[Int, output_size]
+        output_size: UInt, mask: StaticTuple[Int, output_size]
     ](self, other: Self) -> SIMD[dtype, output_size]:
         """Shuffles (also called blend) the values of the current vector with
         the `other` value using the specified mask (permutation). The mask
@@ -2130,7 +2130,7 @@ struct SIMD[dtype: DType, size: Int](
     # TODO: move to the utils directory - see https://github.com/modular/max/issues/3477
     @always_inline
     fn _dynamic_shuffle[
-        mask_size: Int, //
+        mask_size: UInt, //
     ](self, mask: SIMD[DType.uint8, mask_size]) -> SIMD[Self.dtype, mask_size]:
         """Shuffles (also called blend) the values of the current vector.
 
@@ -3137,7 +3137,7 @@ fn _convert_float8_to_f32_scaler[
 @always_inline
 fn _convert_float8_to_f32[
     dtype: DType,
-    size: Int,
+    size: UInt,
 ](val: SIMD[dtype, size]) -> SIMD[DType.float32, size]:
     @parameter
     if is_nvidia_gpu() and _is_sm_9x():
@@ -3161,7 +3161,7 @@ fn _convert_float8_to_f32[
 @always_inline
 fn _convert_float8_to_f16[
     dtype: DType,
-    size: Int,
+    size: UInt,
 ](val: SIMD[dtype, size],) -> SIMD[DType.float16, size]:
     @parameter
     if is_nvidia_gpu() and _is_sm_9x():
@@ -3203,7 +3203,7 @@ fn _convert_float8_to_f16[
 fn _convert_f32_to_float8[
     dtype: DType,
     target: DType,
-    size: Int,
+    size: UInt,
 ](val: SIMD[dtype, size],) -> SIMD[target, size]:
     @parameter
     if is_nvidia_gpu() and _is_sm_9x():
@@ -3383,7 +3383,7 @@ fn _bfloat16_to_f32_scalar(
 
 @always_inline
 fn _bfloat16_to_f32[
-    size: Int
+    size: UInt
 ](val: SIMD[DType.bfloat16, size]) -> SIMD[DType.float32, size]:
     @parameter
     if has_neon():
@@ -3427,7 +3427,7 @@ fn _f32_to_bfloat16_scalar(
 
 @always_inline
 fn _f32_to_bfloat16[
-    size: Int
+    size: UInt
 ](val: SIMD[DType.float32, size]) -> SIMD[DType.bfloat16, size]:
     @parameter
     if has_neon():

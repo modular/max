@@ -48,7 +48,7 @@ def test_rebind_register():
 
 
 @value
-struct MyMemStruct[size: Int]:
+struct MyMemStruct[size: UInt]:
     var value: Int
 
     fn __copyinit__(out self, existing: Self):

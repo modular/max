@@ -59,7 +59,7 @@ def test_memcpy():
     assert_equal(pair2.hi, 2)
 
     @parameter
-    def _test_memcpy_buf[size: Int]():
+    def _test_memcpy_buf[size: UInt]():
         var buf = UnsafePointer[UInt8]().alloc(size * 2)
         memset_zero(buf + size, size)
         var src = UnsafePointer[UInt8]().alloc(size * 2)

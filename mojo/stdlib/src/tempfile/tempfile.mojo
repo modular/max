@@ -32,7 +32,7 @@ from utils import write_buffered
 alias TMP_MAX = 10_000
 
 
-fn _get_random_name(size: Int = 8) -> String:
+fn _get_random_name(size: UInt = 8) -> String:
     alias characters = String("abcdefghijklmnopqrstuvwxyz0123456789_")
     var name_list = List[UInt8](capacity=size + 1)
     for _ in range(size):
@@ -364,7 +364,7 @@ struct NamedTemporaryFile:
         self._delete = existing._delete
         self.name = existing.name^
 
-    fn read(self, size: Int64 = -1) raises -> String:
+    fn read(self, size: UInt64 = -1) raises -> String:
         """Reads the data from the file.
 
         Args:
@@ -375,7 +375,7 @@ struct NamedTemporaryFile:
         """
         return self._file_handle.read(size)
 
-    fn read_bytes(self, size: Int64 = -1) raises -> List[UInt8]:
+    fn read_bytes(self, size: UInt64 = -1) raises -> List[UInt8]:
         """Read from file buffer until we have `size` characters or we hit EOF.
         If `size` is negative or omitted, read until EOF.
 
