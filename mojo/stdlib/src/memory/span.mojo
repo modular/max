@@ -52,7 +52,7 @@ struct _SpanIter[
     origin: Origin[mut],
     forward: Bool = True,
     address_space: AddressSpace = AddressSpace.GENERIC,
-    alignment: Int = _default_alignment[T](),
+    alignment: UInt = _default_alignment[T](),
 ]:
     """Iterator for Span.
 
@@ -106,7 +106,7 @@ struct Span[
     origin: Origin[mut],
     *,
     address_space: AddressSpace = AddressSpace.GENERIC,
-    alignment: Int = _default_alignment[T](),
+    alignment: UInt = _default_alignment[T](),
 ](CollectionElementNew, CollectionElement, Sized):
     """A non-owning view of contiguous data.
 
@@ -402,7 +402,7 @@ struct Span[
 
     @always_inline
     fn copy_from[
-        origin: MutableOrigin, other_alignment: Int, //
+        origin: MutableOrigin, other_alignment: UInt, //
     ](
         self: Span[T, origin, alignment=alignment],
         other: Span[T, _, alignment=other_alignment],
@@ -435,7 +435,7 @@ struct Span[
     # accesses to the origin.
     @__unsafe_disable_nested_origin_exclusivity
     fn __eq__[
-        T: EqualityComparableCollectionElement, rhs_alignment: Int, //
+        T: EqualityComparableCollectionElement, rhs_alignment: UInt, //
     ](
         self: Span[T, origin, alignment=alignment],
         rhs: Span[T, _, alignment=rhs_alignment],

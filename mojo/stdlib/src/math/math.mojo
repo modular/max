@@ -1238,7 +1238,7 @@ fn fma[
 
 
 @always_inline
-fn align_down(value: Int, alignment: Int) -> Int:
+fn align_down(value: Int, alignment: UInt) -> Int:
     """Returns the closest multiple of alignment that is less than or equal to
     value.
 
@@ -1277,7 +1277,7 @@ fn align_down(value: UInt, alignment: UInt) -> UInt:
 
 
 @always_inline
-fn align_up(value: Int, alignment: Int) -> Int:
+fn align_up(value: Int, alignment: UInt) -> Int:
     """Returns the closest multiple of alignment that is greater than or equal
     to value.
 
