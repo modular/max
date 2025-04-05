@@ -102,18 +102,9 @@ struct Origin[is_mutable: Bool]:
         """Initialize an Origin from a raw MLIR `!lit.origin` value.
 
         Args:
-            mlir_origin: The raw MLIR origin value."""
+            mlir_origin: The raw MLIR origin value.
+        """
         self._mlir_origin = mlir_origin
-
-    @doc_private
-    @implicit
-    @always_inline("nodebug")
-    fn __init__(out self: ImmutableOrigin, origin: MutableOrigin):
-        """Initialize an ImmutableOrigin from a MutableOrigin.
-
-        Args:
-            origin: The origin value."""
-        self = rebind[ImmutableOrigin](origin)
 
 
 struct _lit_mut_cast[
