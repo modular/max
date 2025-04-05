@@ -1040,7 +1040,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     # ===------------------------------------------------------------------===#
 
     @always_inline
-    fn immut(self) -> Self.ImmutSelf:
+    fn get_immutable(self) -> Self.ImmutSelf:
         """Return an immutable version of this Span.
 
         Returns:
