@@ -210,7 +210,7 @@ struct Span[
         var offset = UInt(idx.__index__())
         # TODO(MSTDL-1086): optimize away SIMD normalization check
         if not _type_is_eq[I, UInt]():
-            if offset < 0:
+            if Int(idx) < 0:
                 offset = len(self) + Int(idx)
         debug_assert(offset < self._len, "index must be within bounds")
         return self._data[offset]
