@@ -80,9 +80,9 @@ trait UIntSized:
     ```mojo
     @value
     struct Foo(Sized):
-        var length: Int
+        var length: UInt
 
-        fn __len__(self) -> Int:
+        fn __len__(self) -> UInt:
             return self.length
     ```
 
@@ -171,6 +171,22 @@ fn len[T: Sized](value: T) -> Int:
 
     Parameters:
         T: The Sized type.
+
+    Args:
+        value: The object to get the length of.
+
+    Returns:
+        The length of the object.
+    """
+    return value.__len__()
+
+
+@always_inline
+fn len[T: UIntSized](value: T) -> UInt:
+    """Get the length of a value.
+
+    Parameters:
+        T: The UIntSized type.
 
     Args:
         value: The object to get the length of.
