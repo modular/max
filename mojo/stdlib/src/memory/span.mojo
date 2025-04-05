@@ -120,9 +120,9 @@ struct Span[
 
     # Aliases
     alias MutSelf = Span[T, MutableOrigin.cast_from[origin].result]
-    """The mutable version of the Span."""
+    """The mutable version of the `Span`."""
     alias ImmutSelf = Span[T, ImmutableOrigin.cast_from[origin].result]
-    """The immutable version of the Span."""
+    """The immutable version of the `Span`."""
     # Fields
     var _data: UnsafePointer[
         T,
@@ -489,9 +489,9 @@ struct Span[
 
     @always_inline
     fn immut(self) -> Self.ImmutSelf:
-        """Return an immutable version of this Span.
+        """Return an immutable version of this `Span`.
 
         Returns:
-            An immutable version of the same Span.
+            An immutable version of the same `Span`.
         """
         return rebind[Self.ImmutSelf](self)

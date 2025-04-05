@@ -478,10 +478,10 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     """
 
     # Aliases
-    alias MutSelf = Span[T, MutableOrigin.cast_from[origin].result]
-    """The mutable version of the Span."""
-    alias ImmutSelf = Span[T, ImmutableOrigin.cast_from[origin].result]
-    """The immutable version of the Span."""
+    alias MutSelf = StringSlice[MutableOrigin.cast_from[origin].result]
+    """The mutable version of the `StringSlice`."""
+    alias ImmutSelf = StringSlice[ImmutableOrigin.cast_from[origin].result]
+    """The immutable version of the `StringSlice`."""
     # Fields
     var _slice: Span[Byte, origin]
 
