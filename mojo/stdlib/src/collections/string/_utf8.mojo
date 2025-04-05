@@ -80,7 +80,7 @@ alias shuf3 = SIMD[DType.uint8, 16](
 
 @always_inline
 fn _extract_vector[
-    width: Int, //, offset: Int
+    width: UInt, //, offset: Int
 ](a: SIMD[DType.uint8, width], b: SIMD[DType.uint8, width]) -> SIMD[
     DType.uint8, width
 ]:

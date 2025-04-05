@@ -301,7 +301,7 @@ struct _FormatCurlyEntry(CollectionElement, CollectionElementNew):
         mut manual_indexing_count: Int,
         mut raised_manual_index: Optional[Int],
         mut raised_kwarg_field: Optional[String],
-        mut total_estimated_entry_byte_width: Int,
+        mut total_estimated_entry_byte_width: UInt,
     ) raises -> Bool:
         alias S = StringSlice[StaticConstantOrigin]
 

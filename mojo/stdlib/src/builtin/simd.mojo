@@ -2215,7 +2215,7 @@ struct SIMD[dtype: DType, size: UInt](
 
     @always_inline
     fn slice[
-        output_width: Int, /, *, offset: Int = 0
+        output_width: UInt, /, *, offset: Int = 0
     ](self) -> SIMD[dtype, output_width]:
         """Returns a slice of the vector of the specified width with the given
         offset.
@@ -2409,7 +2409,7 @@ struct SIMD[dtype: DType, size: UInt](
 
     @always_inline
     fn reduce[
-        func: fn[dtype: DType, width: Int] (
+        func: fn[dtype: DType, width: UInt] (
             SIMD[dtype, width], SIMD[dtype, width]
         ) capturing -> SIMD[dtype, width],
         size_out: Int = 1,
@@ -2462,7 +2462,7 @@ struct SIMD[dtype: DType, size: UInt](
             @always_inline
             @parameter
             fn max_reduce_body[
-                dtype: DType, width: Int
+                dtype: DType, width: UInt
             ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[
                 dtype, width
             ]:
@@ -2520,7 +2520,7 @@ struct SIMD[dtype: DType, size: UInt](
             @always_inline
             @parameter
             fn min_reduce_body[
-                dtype: DType, width: Int
+                dtype: DType, width: UInt
             ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[
                 dtype, width
             ]:
@@ -2571,7 +2571,7 @@ struct SIMD[dtype: DType, size: UInt](
         @always_inline
         @parameter
         fn add_reduce_body[
-            dtype: DType, width: Int
+            dtype: DType, width: UInt
         ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[dtype, width]:
             return v1 + v2
 
@@ -2595,7 +2595,7 @@ struct SIMD[dtype: DType, size: UInt](
         @always_inline
         @parameter
         fn mul_reduce_body[
-            dtype: DType, width: Int
+            dtype: DType, width: UInt
         ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[dtype, width]:
             return v1 * v2
 
@@ -2629,7 +2629,7 @@ struct SIMD[dtype: DType, size: UInt](
             @always_inline
             @parameter
             fn and_reduce_body[
-                dtype: DType, width: Int
+                dtype: DType, width: UInt
             ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[
                 dtype, width
             ]:
@@ -2675,7 +2675,7 @@ struct SIMD[dtype: DType, size: UInt](
             @always_inline
             @parameter
             fn or_reduce_body[
-                dtype: DType, width: Int
+                dtype: DType, width: UInt
             ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[
                 dtype, width
             ]:
@@ -2972,7 +2972,7 @@ fn _tbl1(
 
 @always_inline
 fn _pow[
-    simd_width: Int
+    simd_width: UInt
 ](base: SIMD[_, simd_width], exp: SIMD[_, simd_width]) -> __type_of(base):
     """Computes the power of the elements of a SIMD vector raised to the
     corresponding elements of another SIMD vector.
@@ -3030,7 +3030,7 @@ fn _powf_scalar(base: Scalar, exponent: Scalar) -> __type_of(base):
 
 @always_inline
 fn _powf[
-    simd_width: Int
+    simd_width: UInt
 ](base: SIMD[_, simd_width], exp: SIMD[_, simd_width]) -> __type_of(base):
     constrained[
         exp.dtype.is_floating_point(), "exponent must be floating point"
@@ -3457,7 +3457,7 @@ fn _simd_apply[
         Scalar[input_dtype]
     ) capturing -> Scalar[result_dtype],
     result_dtype: DType,
-    simd_width: Int,
+    simd_width: UInt,
 ](x: SIMD[_, simd_width]) -> SIMD[result_dtype, simd_width]:
     """Returns a value whose elements corresponds to applying `func` to each
     element in the vector.
@@ -3489,7 +3489,7 @@ fn _simd_apply[
         Scalar[lhs_dtype], Scalar[rhs_dtype]
     ) capturing -> Scalar[result_dtype],
     result_dtype: DType,
-    simd_width: Int,
+    simd_width: UInt,
 ](x: SIMD[_, simd_width], y: SIMD[_, simd_width]) -> SIMD[
     result_dtype, simd_width
 ]:

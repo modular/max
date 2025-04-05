@@ -152,7 +152,7 @@ fn _bool_tuple_reduce[
 # ===-----------------------------------------------------------------------===#
 
 
-fn _type_of_width[bitwidth: Int, unsigned: Bool]() -> DType:
+fn _type_of_width[bitwidth: UInt, unsigned: Bool]() -> DType:
     @parameter
     if unsigned:
         return _uint_type_of_width[bitwidth]()
@@ -169,7 +169,7 @@ fn _is_unsigned[dtype: DType]() -> Bool:
 struct IndexList[
     size: UInt,
     *,
-    element_bitwidth: Int = bitwidthof[Int](),
+    element_bitwidth: UInt = bitwidthof[Int](),
     unsigned: Bool = False,
 ](
     Sized,
@@ -797,7 +797,7 @@ struct IndexList[
     @always_inline
     fn cast[
         *,
-        element_bitwidth: Int = Self.element_bitwidth,
+        element_bitwidth: UInt = Self.element_bitwidth,
         unsigned: Bool = Self.unsigned,
     ](
         self,
@@ -848,7 +848,7 @@ struct IndexList[
 fn Index[
     T0: Intable, //,
     *,
-    element_bitwidth: Int = bitwidthof[Int](),
+    element_bitwidth: UInt = bitwidthof[Int](),
     unsigned: Bool = False,
 ](
     x: T0,
@@ -874,7 +874,7 @@ fn Index[
 
 @always_inline
 fn Index[
-    *, element_bitwidth: Int = bitwidthof[Int](), unsigned: Bool = False
+    *, element_bitwidth: UInt = bitwidthof[Int](), unsigned: Bool = False
 ](
     x: UInt,
     out result: IndexList[
@@ -901,7 +901,7 @@ fn Index[
     T0: Intable,
     T1: Intable, //,
     *,
-    element_bitwidth: Int = bitwidthof[Int](),
+    element_bitwidth: UInt = bitwidthof[Int](),
     unsigned: Bool = False,
 ](
     x: T0,
@@ -930,7 +930,7 @@ fn Index[
 
 @always_inline
 fn Index[
-    *, element_bitwidth: Int = bitwidthof[Int](), unsigned: Bool = False
+    *, element_bitwidth: UInt = bitwidthof[Int](), unsigned: Bool = False
 ](
     x: UInt,
     y: UInt,
@@ -960,7 +960,7 @@ fn Index[
     T1: Intable,
     T2: Intable, //,
     *,
-    element_bitwidth: Int = bitwidthof[Int](),
+    element_bitwidth: UInt = bitwidthof[Int](),
     unsigned: Bool = False,
 ](
     x: T0,
@@ -997,7 +997,7 @@ fn Index[
     T2: Intable,
     T3: Intable, //,
     *,
-    element_bitwidth: Int = bitwidthof[Int](),
+    element_bitwidth: UInt = bitwidthof[Int](),
     unsigned: Bool = False,
 ](
     x: T0,
@@ -1038,7 +1038,7 @@ fn Index[
     T3: Intable,
     T4: Intable, //,
     *,
-    element_bitwidth: Int = bitwidthof[Int](),
+    element_bitwidth: UInt = bitwidthof[Int](),
     unsigned: Bool = False,
 ](
     x: T0,

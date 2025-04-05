@@ -650,7 +650,7 @@ fn compressed_store[
 
 @always_inline("nodebug")
 fn strided_load[
-    dtype: DType, //, simd_width: Int, *, invariant: Bool = False
+    dtype: DType, //, simd_width: UInt, *, invariant: Bool = False
 ](
     addr: UnsafePointer[Scalar[dtype], **_],
     stride: Int,
@@ -691,7 +691,7 @@ fn strided_load[
 
 @always_inline("nodebug")
 fn strided_store[
-    dtype: DType, //, simd_width: Int
+    dtype: DType, //, simd_width: UInt
 ](
     value: SIMD[dtype, simd_width],
     addr: UnsafePointer[Scalar[dtype], **_],
