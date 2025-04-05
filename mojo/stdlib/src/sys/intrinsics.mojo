@@ -20,6 +20,7 @@ from sys import PrefetchLocality
 """
 
 import math
+from sys import is_compile_time
 from sys.info import is_gpu, _is_sm_9x
 
 from memory import AddressSpace, UnsafePointer
