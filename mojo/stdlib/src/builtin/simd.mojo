@@ -2760,7 +2760,7 @@ struct SIMD[dtype: DType, size: UInt](
         elements (with wrap-around).
 
         Constraints:
-            `-size <= shift < size`
+            `-Int(size) <= shift < size`
 
         Parameters:
             shift: The number of positions by which to rotate the elements of
@@ -2772,8 +2772,8 @@ struct SIMD[dtype: DType, size: UInt](
         """
 
         constrained[
-            shift >= -size and shift < size,
-            "Constraint: -size <= shift < size",
+            shift >= -Int(size) and shift < size,
+            "Constraint: -Int(size) <= shift < size",
         ]()
 
         @parameter
@@ -2790,7 +2790,7 @@ struct SIMD[dtype: DType, size: UInt](
         elements (with wrap-around).
 
         Constraints:
-            `-size < shift <= size`
+            `-Int(size) < shift <= size`
 
         Parameters:
             shift: The number of positions by which to rotate the elements of
@@ -2802,8 +2802,8 @@ struct SIMD[dtype: DType, size: UInt](
         """
 
         constrained[
-            shift > -size and shift <= size,
-            "Constraint: -size < shift <= size",
+            shift > -Int(size) and shift <= size,
+            "Constraint: -Int(size) < shift <= size",
         ]()
 
         @parameter
@@ -2911,7 +2911,7 @@ struct SIMD[dtype: DType, size: UInt](
             var idx = 0
 
             @parameter
-            for i in reversed(range(size)):
+            for i in reversed(range(Int(size))):
                 values[idx] = i
                 idx += 1
             return values

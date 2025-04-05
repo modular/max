@@ -197,7 +197,7 @@ fn _is_valid_utf8(span: Span[Byte]) -> Bool:
 
 @always_inline
 fn _is_utf8_continuation_byte[
-    w: Int
+    w: UInt
 ](vec: SIMD[DType.uint8, w]) -> SIMD[DType.bool, w]:
     return vec.cast[DType.int8]() < -(0b1000_0000 >> 1)
 

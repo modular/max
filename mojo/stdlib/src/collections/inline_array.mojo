@@ -215,7 +215,7 @@ struct InlineArray[
 
         # Fill the remainder
         @parameter
-        for _ in range(unroll_end, size):
+        for _ in range(unroll_end, Int(size)):
             ptr.init_pointee_copy(fill)
             ptr += 1
         debug_assert(
@@ -392,8 +392,8 @@ struct InlineArray[
         print(arr[-1])  # Prints 3 - last element
         ```
         """
-        constrained[-size <= Int(idx) < size, "Index must be within bounds."]()
         alias normalized_index = normalize_index["InlineArray"](idx, size)
+        constrained[normalized_index < size, "Index must be within bounds."]()
         return self.unsafe_get(normalized_index)
 
     # ===------------------------------------------------------------------=== #
