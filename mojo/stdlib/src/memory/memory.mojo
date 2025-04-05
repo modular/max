@@ -387,7 +387,7 @@ fn stack_allocation[
     count: Int,
     dtype: DType,
     /,
-    alignment: Int = alignof[dtype]() if is_gpu() else 1,
+    alignment: UInt = alignof[dtype]() if is_gpu() else 1,
     address_space: AddressSpace = AddressSpace.GENERIC,
 ]() -> UnsafePointer[Scalar[dtype], address_space=address_space]:
     """Allocates data buffer space on the stack given a data type and number of
@@ -414,7 +414,7 @@ fn stack_allocation[
     type: AnyType,
     /,
     name: Optional[StringLiteral] = None,
-    alignment: Int = alignof[type]() if is_gpu() else 1,
+    alignment: UInt = alignof[type]() if is_gpu() else 1,
     address_space: AddressSpace = AddressSpace.GENERIC,
 ]() -> UnsafePointer[type, address_space=address_space]:
     """Allocates data buffer space on the stack given a data type and number of
@@ -496,7 +496,7 @@ fn _malloc[
     type: AnyType,
     /,
     *,
-    alignment: Int = alignof[type]() if is_gpu() else 1,
+    alignment: UInt = alignof[type]() if is_gpu() else 1,
 ](size: Int, /) -> UnsafePointer[
     type, address_space = AddressSpace.GENERIC, alignment=alignment
 ]:
