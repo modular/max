@@ -807,9 +807,6 @@ fn expect[T: AnyTrivialRegType, //, expected_val: T](val: T) -> T:
     """Provides information about expected (the most probable) value of `val`,
     which can be used by optimizers.
 
-    Constraints:
-        Only work with integer types.
-
     Parameters:
         T: The type of the input value.
         expected_val: The expected value of `val`.
@@ -819,7 +816,12 @@ fn expect[T: AnyTrivialRegType, //, expected_val: T](val: T) -> T:
 
     Returns:
         The input value.
+
+    Notes:
+        Only works with integer/boolean types.
     """
+    if is_compile_time():
+        return val
     return llvm_intrinsic["llvm.expect", T, has_side_effect=False](
         val, expected_val
     )
