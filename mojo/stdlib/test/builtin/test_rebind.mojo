@@ -24,7 +24,7 @@ def main():
 # ===----------------------------------------------------------------------=== #
 
 
-fn test_rebind_reg[X: Int](a: SIMD[DType.int32, X]):
+fn test_rebind_reg[width: UInt](a: SIMD[DType.int32, width]):
     print("there: ", rebind[SIMD[DType.int32, 4]](a))
 
 
@@ -49,7 +49,7 @@ def test_rebind_register():
 
 @value
 struct MyMemStruct[size: UInt]:
-    var value: Int
+    var value: UInt
 
     fn __copyinit__(out self, existing: Self):
         # Make sure no copy is made due to the rebind.
@@ -60,7 +60,7 @@ struct MyMemStruct[size: UInt]:
         print("hello, I am", size, "I hold", self.value)
 
 
-fn indirect_with_rebind[X: Int](a: MyMemStruct[X]):
+fn indirect_with_rebind[width: UInt](a: MyMemStruct[width]):
     rebind[MyMemStruct[4]](a).speak()
 
 
