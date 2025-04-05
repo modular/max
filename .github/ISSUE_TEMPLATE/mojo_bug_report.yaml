@@ -1,8 +1,21 @@
+##===----------------------------------------------------------------------===##
+# Copyright (c) 2025, Modular Inc. All rights reserved.
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions:
+# https://llvm.org/LICENSE.txt
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##===----------------------------------------------------------------------===##
+
 name: Mojo bug report
 description: Create a bug report to help us improve Mojo
 title: "[BUG]"
 labels:
-  - "bug,mojo"
+  - "bug,mojo,max-repo"
 body:
   - type: markdown
     attributes:
@@ -44,6 +57,5 @@ body:
       label: System information
       description: What version of Mojo are you using?
       value: |
-        - What OS did you install Mojo on?
-        - Provide version information for Mojo by pasting the output of `mojo -v`.
-        - Provide the Modular CLI version by pasting the output of `modular -v`.
+        - Provide the system information by running `magic info`.
+        - Provide version information for MAX (includes Mojo) by pasting the output of `magic list max`.
