@@ -87,11 +87,7 @@ struct Error(
         """
         var length = src.byte_length()
         var dest = UnsafePointer[UInt8].alloc(length + 1)
-        memcpy(
-            dest=dest,
-            src=src.unsafe_ptr(),
-            count=length,
-        )
+        memcpy(dest, src.unsafe_ptr(), length)
         dest[length] = 0
         self.data = dest
         self.loaded_length = -length
@@ -105,11 +101,7 @@ struct Error(
         """
         var length = len(src)
         var dest = UnsafePointer[UInt8].alloc(length + 1)
-        memcpy(
-            dest=dest,
-            src=src.unsafe_ptr(),
-            count=length,
-        )
+        memcpy(dest, src.unsafe_ptr(), length)
         dest[length] = 0
         self.data = dest
         self.loaded_length = -length
@@ -197,11 +189,7 @@ struct Error(
         """
         if not self:
             return
-        writer.write(
-            StringSlice[__origin_of(self)](
-                unsafe_from_utf8_cstr_ptr=self.unsafe_cstr_ptr()
-            )
-        )
+        writer.write(self.as_string_slice())
 
     @no_inline
     fn __repr__(self) -> String:
@@ -210,17 +198,15 @@ struct Error(
         Returns:
             A printable representation of the error message.
         """
-        return String(
-            "Error(",
-            repr(
-                String(
-                    StringSlice[__origin_of(self)](
-                        unsafe_from_utf8_cstr_ptr=self.unsafe_cstr_ptr()
-                    )
-                )
-            ),
-            ")",
-        )
+        return String("Error(", repr(self.as_string_slice()), ")")
+
+    fn __len__(self) -> Int:
+        """Get the length of the Error string.
+
+        Returns:
+            The length of the Error string.
+        """
+        return abs(self.loaded_length)
 
     # ===-------------------------------------------------------------------===#
     # Methods
@@ -235,6 +221,18 @@ struct Error(
             The pointer to the underlying memory.
         """
         return self.data.bitcast[c_char]()
+
+    fn as_string_slice(read self) -> StringSlice[__origin_of(self)]:
+        """Returns a string slice of the data maybe owned by the Error.
+
+        Returns:
+            A string slice pointing to the data maybe owned by the Error.
+
+        Notes:
+            Since the data is not guaranteed to be owned by the Error, the
+            resulting StringSlice is given an ImmutableOrigin.
+        """
+        return StringSlice[__origin_of(self)](ptr=self.data, length=len(self))
 
 
 @doc_private
