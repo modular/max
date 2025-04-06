@@ -21,7 +21,7 @@ from os import listdir
 """
 
 from collections import InlineArray, List
-from collections.string import StringSlice
+from collections.string.string_slice import _strnlen
 from sys import external_call, is_gpu, os_is_linux, os_is_windows
 from sys.ffi import OpaquePointer, c_char
 
@@ -82,13 +82,6 @@ struct _dirent_macos:
     """Type of file."""
     var name: InlineArray[c_char, Self.MAX_NAME_SIZE]
     """Name of entry."""
-
-
-fn _strnlen(ptr: UnsafePointer[c_char], max: Int) -> Int:
-    var offset = 0
-    while offset < max and ptr[offset]:
-        offset += 1
-    return offset
 
 
 struct _DirHandle:
