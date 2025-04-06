@@ -77,7 +77,7 @@ struct Error(
             value: The error message.
         """
         self.data = value.unsafe_ptr()
-        self.loaded_length = len(value)
+        self.loaded_length = value.byte_length()
 
     @implicit
     fn __init__(out self, src: String):
@@ -100,7 +100,7 @@ struct Error(
         Args:
             src: The error message.
         """
-        var length = len(src)
+        var length = src.byte_length()
         var dest = UnsafePointer[UInt8].alloc(length + 1)
         memcpy(dest, src.unsafe_ptr(), length)
         dest[length] = 0
@@ -201,11 +201,11 @@ struct Error(
         """
         return String("Error(", repr(self.as_string_slice()), ")")
 
-    fn __len__(self) -> Int:
-        """Get the length of the Error string.
+    fn byte_length(self) -> Int:
+        """Get the byte length of the Error string.
 
         Returns:
-            The length of the Error string.
+            The byte length of the Error string.
         """
         return abs(self.loaded_length)
 
@@ -223,7 +223,7 @@ struct Error(
         """
         return self.data.bitcast[c_char]()
 
-    fn as_string_slice(read self) -> StringSlice[__origin_of(self)]:
+    fn as_string_slice(self) -> StringSlice[ImmutableAnyOrigin]:
         """Returns a string slice of the data maybe owned by the Error.
 
         Returns:
@@ -231,9 +231,11 @@ struct Error(
 
         Notes:
             Since the data is not guaranteed to be owned by the Error, the
-            resulting StringSlice is given an ImmutableOrigin.
+            resulting StringSlice is given an ImmutableAnyOrigin.
         """
-        return StringSlice[__origin_of(self)](ptr=self.data, length=len(self))
+        return StringSlice[ImmutableAnyOrigin](
+            ptr=self.data, length=self.byte_length()
+        )
 
 
 @doc_private
