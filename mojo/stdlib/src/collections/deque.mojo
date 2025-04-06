@@ -110,7 +110,7 @@ struct Deque[ElementType: CollectionElement](
             min_capacity == 0
         ) else UInt(next_power_of_two(min_capacity))
 
-        if maxlen == 0 or maxlen == UInt.MAX:
+        if Int(maxlen) <= 0:
             max_deque_len = UInt.MAX
         else:
             max_deque_len = maxlen
@@ -492,7 +492,7 @@ struct Deque[ElementType: CollectionElement](
             value: The value to append.
         """
         # checking for positive _maxlen first is important for speed
-        if self._maxlen != UInt.MAX and len(self) == self._maxlen:
+        if Int(self._maxlen) > 0 and len(self) == self._maxlen:
             (self._data + self._head).destroy_pointee()
             self._head = self._physical_index(self._head + 1)
 
@@ -509,7 +509,7 @@ struct Deque[ElementType: CollectionElement](
             value: The value to append.
         """
         # checking for positive _maxlen first is important for speed
-        if self._maxlen != UInt.MAX and len(self) == self._maxlen:
+        if Int(self._maxlen) > 0 and len(self) == self._maxlen:
             self._tail = self._physical_index(self._tail - 1)
             (self._data + self._tail).destroy_pointee()
 
