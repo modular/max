@@ -28,6 +28,11 @@ what we publish.
   attach other kinds of attributes, and this helps guard against typos and mojo
   code getting outdated when the dialect changes.
 
+- `def` functions now require type annotations on arguments, and treat a missing
+  return type as returning `None`. Previously these defaulted to the `object`
+  type which led to a variety of problems.  Support for `object` is being
+  removed until we have time to investigate a proper replacement.
+
 ### Standard library changes
 
 - `Pointer` now has `get_immutable()` to return a new `Pointer`
@@ -75,6 +80,9 @@ for i in range(iteration_range):
 - The `is_power_of_two(x)` function in the `bit` package is now a method on
   `Int`, `UInt` and `SIMD`.
 
+- The types `StringSlice` and `StaticString` are now part of the prelude, there
+  is no need to import them anymore.
+  
 - The `constrained[cond, string]()` function now accepts multiple strings that
   are printed concatenated on failure, so you can use:
   `constrained[cond, "hello: ", String(n), ": world"]()` which is more comptime
@@ -158,6 +166,8 @@ previously compiler would throw error "cannot fold operation".
 
 - The `StringableCollectionElement` trait has been removed in favor of
   `WritableCollectionElement`.
+
+- The `object` type has been removed.
 
 ### 🛠️ Fixed
 
