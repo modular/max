@@ -2301,7 +2301,7 @@ fn _to_string_list[
     return _to_string_list[items.T, len_fn, unsafe_ptr_fn](items)
 
 
-fn _strnlen(ptr: UnsafePointer[Byte], max: UInt) -> UInt:
+fn _strnlen(ptr: UnsafePointer[Byte], max: UInt = UInt.MAX) -> UInt:
     """Get the length of a null-terminated string from a pointer.
 
     Args:
@@ -2333,7 +2333,7 @@ fn _unsafe_strlen(owned ptr: UnsafePointer[Byte]) -> UInt:
     Notes:
         The length does NOT include the null terminator.
     """
-    return _strnlen(ptr, UInt.MAX)
+    return _strnlen(ptr)
 
 
 @always_inline
