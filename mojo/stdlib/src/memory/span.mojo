@@ -209,6 +209,9 @@ struct Span[
         """
         var offset = UInt(idx.__index__())
         # TODO(MSTDL-1086): optimize away SIMD normalization check
+        # TODO(#3810): fix MSTDL-1086 adding and not DType.get_dtype[I]().is_unsigned()
+
+        @parameter
         if not _type_is_eq[I, UInt]():
             if Int(idx) < 0:
                 offset = len(self) + Int(idx)
