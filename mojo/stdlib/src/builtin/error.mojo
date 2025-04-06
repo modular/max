@@ -201,10 +201,13 @@ struct Error(
         return String("Error(", repr(self.as_string_slice()), ")")
 
     fn byte_length(self) -> Int:
-        """Get the byte length of the Error string.
+        """Get the length of the Error string in bytes.
 
         Returns:
-            The byte length of the Error string.
+            The length of the Error string in bytes.
+
+        Notes:
+            This does not include the trailing null terminator in the count.
         """
         return abs(self.loaded_length)
 
