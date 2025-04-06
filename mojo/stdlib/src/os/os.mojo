@@ -141,9 +141,9 @@ struct _DirHandle:
             if not ep:
                 break
             var name = ep.take_pointee().name
-            var name_ptr = name.unsafe_ptr()
+            var name_ptr = name.unsafe_ptr().bitcast[UInt8]()
             var name_str = StringSlice[__origin_of(name)](
-                ptr=name_ptr.bitcast[UInt8](),
+                ptr=name_ptr,
                 length=_strnlen(name_ptr, _dirent_linux.MAX_NAME_SIZE),
             )
             if name_str == "." or name_str == "..":
@@ -168,9 +168,9 @@ struct _DirHandle:
             if not ep:
                 break
             var name = ep.take_pointee().name
-            var name_ptr = name.unsafe_ptr()
+            var name_ptr = name.unsafe_ptr().bitcast[UInt8]()
             var name_str = StringSlice[__origin_of(name)](
-                ptr=name_ptr.bitcast[UInt8](),
+                ptr=name_ptr,
                 length=_strnlen(name_ptr, _dirent_macos.MAX_NAME_SIZE),
             )
             if name_str == "." or name_str == "..":
