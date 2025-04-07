@@ -73,6 +73,7 @@ from math import align_down
 from bit import count_leading_zeros, count_trailing_zeros
 from memory import Span, UnsafePointer, memcmp, memcpy, pack_bits
 from memory.memory import _memcmp_impl_unconstrained
+from utils.write import _WriteBufferStack
 
 alias StaticString = StringSlice[StaticConstantOrigin]
 """An immutable static string slice."""
@@ -483,6 +484,18 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     # Initializers
     # ===------------------------------------------------------------------===#
 
+    @doc_private
+    @always_inline
+    @implicit
+    fn __init__(out self: StaticString, _kgen: __mlir_type.`!kgen.string`):
+        # FIXME(MSTDL-160): !kgen.string's are not guaranteed to be UTF-8
+        # encoded, they can be arbitrary binary data.
+        var length: Int = __mlir_op.`pop.string.size`(_kgen)
+        var ptr = UnsafePointer(__mlir_op.`pop.string.address`(_kgen)).bitcast[
+            Byte
+        ]()
+        self._slice = Span[Byte, StaticConstantOrigin](ptr=ptr, length=length)
+
     @always_inline
     @implicit
     fn __init__(out self: StaticString, lit: StringLiteral):
@@ -498,7 +511,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         #   StringLiteral is guaranteed to use UTF-8 encoding.
         # FIXME(MSTDL-160):
         #   Ensure StringLiteral _actually_ always uses UTF-8 encoding.
-        self = StaticString(unsafe_from_utf8=lit.as_bytes())
+        self = StaticString(lit.value)
 
     @always_inline("builtin")
     fn __init__(out self, *, unsafe_from_utf8: Span[Byte, origin]):
@@ -1021,6 +1034,75 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
     # ===------------------------------------------------------------------===#
     # Methods
     # ===------------------------------------------------------------------===#
+
+    fn replace(self, old: StringSlice, new: StringSlice) -> String:
+        """Return a copy of the string with all occurrences of substring `old`
+        if replaced by `new`.
+
+        Args:
+            old: The substring to replace.
+            new: The substring to replace with.
+
+        Returns:
+            The string where all occurrences of `old` are replaced with `new`.
+        """
+        if not old:
+            return self._interleave(new)
+
+        var occurrences = self.count(old)
+        if occurrences == -1:
+            return String(self)
+
+        var self_start = self.unsafe_ptr()
+        var self_ptr = self.unsafe_ptr()
+        var new_ptr = new.unsafe_ptr()
+
+        var self_len = self.byte_length()
+        var old_len = old.byte_length()
+        var new_len = new.byte_length()
+
+        var res = String._buffer_type()
+        res.reserve(self_len + (old_len - new_len) * occurrences + 1)
+
+        for _ in range(occurrences):
+            var curr_offset = Int(self_ptr) - Int(self_start)
+
+            var idx = self.find(old, curr_offset)
+
+            debug_assert(idx >= 0, "expected to find occurrence during find")
+
+            # Copy preceding unchanged chars
+            for _ in range(curr_offset, idx):
+                res.append(self_ptr[])
+                self_ptr += 1
+
+            # Insert a copy of the new replacement string
+            for i in range(new_len):
+                res.append(new_ptr[i])
+
+            self_ptr += old_len
+
+        while True:
+            var val = self_ptr[]
+            if val == 0:
+                break
+            res.append(self_ptr[])
+            self_ptr += 1
+
+        res.append(0)
+        return String(res^)
+
+    fn _interleave(self, val: StringSlice) -> String:
+        var res = String._buffer_type()
+        var val_ptr = val.unsafe_ptr()
+        var self_ptr = self.unsafe_ptr()
+        res.reserve(val.byte_length() * self.byte_length() + 1)
+        for i in range(self.byte_length()):
+            for j in range(val.byte_length()):
+                res.append(val_ptr[j])
+            res.append(self_ptr[i])
+        res.append(0)
+        return String(res^)
 
     fn split[
         sep_mut: Bool,
@@ -2047,10 +2129,105 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var result = String(buffer=buffer)
         return result^
 
+    fn join[T: WritableCollectionElement](self, elems: List[T, *_]) -> String:
+        """Joins string elements using the current string as a delimiter.
+
+        Parameters:
+            T: The types of the elements.
+
+        Args:
+            elems: The input values.
+
+        Returns:
+            The joined string.
+        """
+        var string = String()
+        var buffer = _WriteBufferStack(string)
+        for i in range(len(elems)):
+            buffer.write(elems[i])
+            if i < len(elems) - 1:
+                buffer.write(self)
+        buffer.flush()
+        return string
+
+    # TODO(MOCO-1791): The corresponding String.__init__ is limited to
+    # StaticString. This is because default arguments and param inference aren't
+    # powerful enough to declare sep/end as StringSlice.
+    fn join[*Ts: Writable](self: StaticString, *elems: *Ts) -> String:
+        """Joins string elements using the current string as a delimiter.
+
+        Parameters:
+            Ts: The types of the elements.
+
+        Args:
+            elems: The input values.
+
+        Returns:
+            The joined string.
+        """
+        return String(elems, sep=self)
+
 
 # ===-----------------------------------------------------------------------===#
 # Utils
 # ===-----------------------------------------------------------------------===#
+
+
+@always_inline("nodebug")
+fn _get_kgen_string[
+    string: StaticString, *extra: StaticString
+]() -> __mlir_type.`!kgen.string`:
+    """Form a `!kgen.string` from compile-time StringSlice values concatenated.
+
+    Parameters:
+        string: The first StringSlice value.
+        extra: Additional StringSlice values to concatenate.
+
+    Returns:
+        The string value as a StringLiteral.
+    """
+    return _get_kgen_string[string, extra]()
+
+
+@always_inline("nodebug")
+fn _get_kgen_string[
+    string: StaticString, extra: VariadicList[StaticString]
+]() -> __mlir_type.`!kgen.string`:
+    """Form a `!kgen.string` from compile-time StringSlice values concatenated.
+
+    Parameters:
+        string: The first string slice to use.
+        extra: Additional string slices to concatenate.
+
+    Returns:
+        The string value as a StringLiteral.
+    """
+    return __mlir_attr[
+        `#kgen.param.expr<data_to_str,`,
+        string,
+        `,`,
+        extra.value,
+        `> : !kgen.string`,
+    ]
+
+
+@always_inline("nodebug")
+fn get_static_string[
+    string: StaticString, *extra: StaticString
+]() -> StaticString:
+    """Form a StaticString from compile-time StringSlice values. This
+    guarantees that the returned string is compile-time constant in static
+    memory.  It also guarantees that there is a 'nul' zero byte at the end,
+    which is not included in the returned range.
+
+    Parameters:
+        string: The first StringSlice value.
+        extra: Additional StringSlice values to concatenate.
+
+    Returns:
+        The string value as a StaticString.
+    """
+    return _get_kgen_string[string, extra]()
 
 
 fn _to_string_list[

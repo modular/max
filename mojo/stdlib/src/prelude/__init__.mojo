@@ -15,7 +15,17 @@
 """
 
 from collections import KeyElement, List, Optional, InlineArray
-from collections.string import Codepoint, String, ascii, atof, atol, chr, ord
+from collections.string import (
+    Codepoint,
+    StaticString,
+    String,
+    StringSlice,
+    ascii,
+    atof,
+    atol,
+    chr,
+    ord,
+)
 from hashlib.hash import Hashable, hash
 
 from builtin.anytype import AnyType, UnknownDestructibility
@@ -71,7 +81,6 @@ from builtin.math import (
     round,
 )
 from builtin.none import NoneType
-from builtin.object import Attr, object
 from builtin.range import range
 from builtin.rebind import rebind
 from builtin.repr import Representable, repr
@@ -103,7 +112,7 @@ from builtin.simd import (
 )
 from builtin.sort import partition, sort
 from builtin.str import Stringable, StringableRaising, str
-from builtin.string_literal import StringLiteral, get_string_literal
+from builtin.string_literal import StringLiteral
 from builtin.swap import swap
 from builtin.tuple import Tuple
 from builtin.type_aliases import (

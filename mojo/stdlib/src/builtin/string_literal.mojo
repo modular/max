@@ -16,12 +16,11 @@ These are Mojo built-ins, so you don't need to import them.
 """
 
 from collections import List
-from collections.string.format import _CurlyEntryFormattable, _FormatCurlyEntry
+from collections.string.format import _CurlyEntryFormattable
 from collections.string.string_slice import (
     StaticString,
     StringSlice,
     CodepointSliceIter,
-    _to_string_list,
 )
 from hashlib._hasher import _HashableWithHasher, _Hasher
 from sys.ffi import c_char
@@ -32,7 +31,6 @@ from os import PathLike
 
 from utils import Writable, Writer
 from utils._visualizers import lldb_formatter_wrapping_type
-from utils.write import _WriteBufferStack
 
 # ===-----------------------------------------------------------------------===#
 # StringLiteral
@@ -479,32 +477,6 @@ struct StringLiteral(
             ptr=self.unsafe_ptr(), length=self.byte_length()
         )
 
-    @always_inline
-    fn format[*Ts: _CurlyEntryFormattable](self, *args: *Ts) raises -> String:
-        """Format a template with `*args`.
-
-        Args:
-            args: The substitution values.
-
-        Parameters:
-            Ts: The types of substitution values that implement `Representable`
-                and `Stringable` (to be changed and made more flexible).
-
-        Returns:
-            The template with the given values substituted.
-
-        Examples:
-
-        ```mojo
-        # Manual indexing:
-        print("{0} {1} {0}".format("Mojo", 1.125)) # Mojo 1.125 Mojo
-        # Automatic indexing:
-        print("{} {}".format(True, "hello world")) # True hello world
-        ```
-        .
-        """
-        return _FormatCurlyEntry.format(self, args)
-
     fn write_to[W: Writer](self, mut writer: W):
         """
         Formats this string literal to the provided Writer.
@@ -543,121 +515,6 @@ struct StringLiteral(
           The offset of `substr` relative to the beginning of the string.
         """
         return self.as_string_slice().rfind(substr, start=start)
-
-    fn replace(self, old: StringLiteral, new: StringLiteral) -> StringLiteral:
-        """Return a copy of the string with all occurrences of substring `old`
-        if replaced by `new`. This operation only works in the param domain.
-
-        Args:
-            old: The substring to replace.
-            new: The substring to replace with.
-
-        Returns:
-            The string where all occurrences of `old` are replaced with `new`.
-        """
-        return __mlir_op.`pop.string.replace`(self.value, old.value, new.value)
-
-    fn join[T: WritableCollectionElement](self, elems: List[T, *_]) -> String:
-        """Joins string elements using the current string as a delimiter.
-
-        Parameters:
-            T: The types of the elements.
-
-        Args:
-            elems: The input values.
-
-        Returns:
-            The joined string.
-        """
-        var string = String()
-        var buffer = _WriteBufferStack(string)
-        for i in range(len(elems)):
-            buffer.write(elems[i])
-            if i < len(elems) - 1:
-                buffer.write(self)
-        buffer.flush()
-        return string
-
-    fn join[*Ts: Writable](self, *elems: *Ts) -> String:
-        """Joins string elements using the current string as a delimiter.
-
-        Parameters:
-            Ts: The types of the elements.
-
-        Args:
-            elems: The input values.
-
-        Returns:
-            The joined string.
-        """
-        return String(elems, sep=self)
-
-    fn split(self, sep: StringSlice, maxsplit: Int = -1) raises -> List[String]:
-        """Split the string literal by a separator.
-
-        Args:
-            sep: The string to split on.
-            maxsplit: The maximum amount of items to split from String.
-                Defaults to unlimited.
-
-        Returns:
-            A List of Strings containing the input split by the separator.
-
-        Examples:
-
-        ```mojo
-        # Splitting a space
-        _ = "hello world".split(" ") # ["hello", "world"]
-        # Splitting adjacent separators
-        _ = "hello,,world".split(",") # ["hello", "", "world"]
-        # Splitting with maxsplit
-        _ = "1,2,3".split(",", 1) # ['1', '2,3']
-        ```
-        .
-        """
-        return String(self).split(sep, maxsplit)
-
-    fn split(self, sep: NoneType = None, maxsplit: Int = -1) -> List[String]:
-        """Split the string literal by every whitespace separator.
-
-        Args:
-            sep: None.
-            maxsplit: The maximum amount of items to split from string. Defaults
-                to unlimited.
-
-        Returns:
-            A List of Strings containing the input split by the separator.
-
-        Examples:
-
-        ```mojo
-        # Splitting an empty string or filled with whitespaces
-        _ = "      ".split() # []
-        _ = "".split() # []
-
-        # Splitting a string with leading, trailing, and middle whitespaces
-        _ = "      hello    world     ".split() # ["hello", "world"]
-        # Splitting adjacent universal newlines:
-        _ = "hello \\t\\n\\v\\f\\r\\x1c\\x1d\\x1e\\x85\\u2028\\u2029world".split()
-        # ["hello", "world"]
-        ```
-        .
-        """
-        return String(self).split(sep, maxsplit)
-
-    fn splitlines(self, keepends: Bool = False) -> List[String]:
-        """Split the string literal at line boundaries. This corresponds to Python's
-        [universal newlines:](
-            https://docs.python.org/3/library/stdtypes.html#str.splitlines)
-        `"\\r\\n"` and `"\\t\\n\\v\\f\\r\\x1c\\x1d\\x1e\\x85\\u2028\\u2029"`.
-
-        Args:
-            keepends: If True, line breaks are kept in the resulting strings.
-
-        Returns:
-            A List of Strings containing the input split by line boundaries.
-        """
-        return _to_string_list(self.as_string_slice().splitlines(keepends))
 
     fn count(self, substr: StringSlice) -> Int:
         """Return the number of non-overlapping occurrences of substring
@@ -860,112 +717,3 @@ struct StringLiteral(
             A copy of the string with no leading whitespaces.
         """
         return String(String(self).lstrip())
-
-
-@always_inline("nodebug")
-fn get_string_literal_slice[
-    string: StaticString, *extra: StaticString
-]() -> StringLiteral:
-    """Form a string literal from a compile-time StringSlice value and additional
-    compile-time StringSlice values.
-
-    Parameters:
-        string: The first StringSlice value.
-        extra: Additional StringSlice values to concatenate.
-
-    Returns:
-        The string value as a StringLiteral.
-    """
-    return get_string_literal_slice2[string, extra]()
-
-
-@always_inline("nodebug")
-fn get_string_literal_slice2[
-    string: StaticString, extra: VariadicList[StaticString]
-]() -> StringLiteral:
-    """Form a string literal from N compile-time StringSlice values concatenated.
-
-    Parameters:
-        string: The first string slice to use.
-        extra: Additional string slices to concatenate.
-
-    Returns:
-        The string value as a StringLiteral.
-    """
-    return __mlir_attr[
-        `#kgen.param.expr<data_to_str,`,
-        string,
-        `,`,
-        extra.value,
-        `> : !kgen.string`,
-    ]
-
-
-# TODO(MOCO-1460): get_string_literal should be an initializer, but Mojo tries
-# to bind the parameter in `StringLiteral["foo"]()` to the type instead of the
-# initializer.   Use a global function to work around this for now.
-@always_inline("nodebug")
-fn get_string_literal[value: String, *extra: StaticString]() -> StringLiteral:
-    """Form a string literal from an arbitrary compile-time String value.
-
-    Parameters:
-        value: The value to convert to StringLiteral.
-        extra: Additional StringSlice values to concatenate.
-
-    Returns:
-        The string value as a StringLiteral.
-    """
-    return get_string_literal_slice2[value, extra]()
-
-
-@always_inline("nodebug")
-fn get_string_literal[
-    type: Stringable, //, value: type, *extra: StaticString
-]() -> StringLiteral:
-    """Form a string literal from an arbitrary compile-time stringable value.
-
-    Parameters:
-        type: The type of the value.
-        value: The value to serialize.
-        extra: Additional StringSlice values to concatenate.
-
-    Returns:
-        The string value as a StringLiteral.
-    """
-    return get_string_literal_slice2[String(value), extra]()
-
-
-fn _base64_encode[str: StringLiteral]() -> StringLiteral:
-    """Encode the string literal using Base64 encoding.
-
-    Returns:
-        A new string literal with the Base64 encoded string.
-    """
-    return __mlir_op.`pop.string.base64.encode`(str.value)
-
-
-fn _base64_decode[str: StringLiteral]() -> StringLiteral:
-    """Decode the string literal using Base64 encoding.
-
-    Returns:
-        A new string literal with the Base64 decoded string.
-    """
-    return __mlir_op.`pop.string.base64.decode`(str.value)
-
-
-fn _compress[str: StringLiteral]() -> StringLiteral:
-    """Compress the string literal using zlib.
-
-    Returns:
-        A new string literal with the compressed string.
-    """
-    return __mlir_op.`pop.string.compress`(str.value)
-
-
-fn _decompress[str: StringLiteral]() -> StringLiteral:
-    """Decompress the string literal using zlib.
-
-    Returns:
-        A new string literal with the decompressed string.
-    """
-    return __mlir_op.`pop.string.decompress`(str.value)

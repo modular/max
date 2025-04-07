@@ -69,13 +69,14 @@ from sys import (
     CompilationTarget,
 )
 from sys._assembly import inlined_assembly
-from sys.info import _is_sm_9x
+from sys.info import _is_sm_9x_or_newer
 
 from bit import byte_swap, pop_count
 from builtin._format_float import _write_float
 from builtin.dtype import _uint_type_of_width
 from builtin.format_int import _try_write_int
 from builtin.io import _snprintf
+from collections.string import StaticString
 from documentation import doc_private
 from memory import Span, UnsafePointer, bitcast, memcpy
 
@@ -242,7 +243,7 @@ fn _has_native_bf16_support() -> Bool:
 
 @always_inline("nodebug")
 fn _has_native_f8_support() -> Bool:
-    return _is_sm_9x() or is_nvidia_gpu["sm_89"]() or is_amd_gpu()
+    return _is_sm_9x_or_newer() or is_nvidia_gpu["sm_89"]() or is_amd_gpu()
 
 
 # ===----------------------------------------------------------------------=== #
@@ -523,7 +524,6 @@ struct SIMD[dtype: DType, size: Int](
         )
 
     @always_inline("nodebug")
-    @implicit
     fn __init__(out self, *elems: Scalar[dtype]):
         """Constructs a SIMD vector via a variadic list of elements.
 
@@ -1461,9 +1461,7 @@ struct SIMD[dtype: DType, size: Int](
             # a large unsigned
             return self.cast[_uint_type_of_width[int_width]()]().__int__()
         else:
-            return __mlir_op.`pop.cast`[
-                _type = __mlir_type.`!pop.scalar<index>`
-            ](rebind[Scalar[dtype]](self).value)
+            return rebind[Scalar[DType.index]](self.cast[DType.index]()).value
 
     @always_inline("nodebug")
     fn __index__(self) -> __mlir_type.index:
@@ -1488,9 +1486,7 @@ struct SIMD[dtype: DType, size: Int](
             The value as a float.
         """
         constrained[size == 1, "expected a scalar type"]()
-        return __mlir_op.`pop.cast`[_type = __mlir_type.`!pop.scalar<f64>`](
-            rebind[Scalar[dtype]](self).value
-        )
+        return rebind[Scalar[dtype]](self).cast[DType.float64]()
 
     @no_inline
     fn __str__(self) -> String:
@@ -1872,9 +1868,7 @@ struct SIMD[dtype: DType, size: Int](
         Returns:
             The integer value.
         """
-        var ptr: UnsafePointer[Scalar[dtype]] = bytes.unsafe_ptr().bitcast[
-            Scalar[dtype]
-        ]()
+        var ptr = bytes.unsafe_ptr().bitcast[Scalar[dtype]]()
         var value = ptr[]
 
         @parameter
@@ -1907,7 +1901,7 @@ struct SIMD[dtype: DType, size: Int](
 
         return array^
 
-    fn _floor_ceil_trunc_impl[intrinsic: StringLiteral](self) -> Self:
+    fn _floor_ceil_trunc_impl[intrinsic: StaticString](self) -> Self:
         constrained[
             intrinsic == "llvm.floor"
             or intrinsic == "llvm.ceil"
@@ -1962,9 +1956,9 @@ struct SIMD[dtype: DType, size: Int](
         """
         constrained[dtype.is_numeric(), "the SIMD type must be numeric"]()
 
-        return __mlir_op.`pop.fma`(
-            self.value, multiplier.value, accumulator.value
-        )
+        return __mlir_op.`pop.fma`[
+            fastmathFlags = __mlir_attr.`#pop<fmf contract>`
+        ](self.value, multiplier.value, accumulator.value)
 
     @always_inline("nodebug")
     fn _shuffle_variadic[
@@ -3140,7 +3134,7 @@ fn _convert_float8_to_f32[
     size: Int,
 ](val: SIMD[dtype, size]) -> SIMD[DType.float32, size]:
     @parameter
-    if is_nvidia_gpu() and _is_sm_9x():
+    if _is_sm_9x_or_newer():
         return _convert_float8_to_f16(rebind[SIMD[dtype, size]](val)).cast[
             DType.float32
         ]()
@@ -3164,7 +3158,7 @@ fn _convert_float8_to_f16[
     size: Int,
 ](val: SIMD[dtype, size],) -> SIMD[DType.float16, size]:
     @parameter
-    if is_nvidia_gpu() and _is_sm_9x():
+    if _is_sm_9x_or_newer():
         alias asm_prefix = "cvt.rn.f16x2.e4m3x2" if dtype is DType.float8_e4m3fn else "cvt.rn.f16x2.e5m2x2"
         var val_uint8 = bitcast[DType.uint8](val)
 
@@ -3206,7 +3200,7 @@ fn _convert_f32_to_float8[
     size: Int,
 ](val: SIMD[dtype, size],) -> SIMD[target, size]:
     @parameter
-    if is_nvidia_gpu() and _is_sm_9x():
+    if _is_sm_9x_or_newer():
         return __mlir_op.`pop.cast`[_type = SIMD[target, size]._mlir_type](
             val.value
         )
@@ -3372,7 +3366,7 @@ fn _bfloat16_to_f32_scalar(
     @parameter
     if is_nvidia_gpu():
         return inlined_assembly[
-            "cvt.f32.bf16 $0, $1;" if _is_sm_9x() else "mov.b32 $0, {0, $1};",
+            "cvt.f32.bf16 $0, $1;" if _is_sm_9x_or_newer() else "mov.b32 $0, {0, $1};",
             Float32,
             constraints="=f,h",
             has_side_effect=False,
