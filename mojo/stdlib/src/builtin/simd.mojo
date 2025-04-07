@@ -42,7 +42,7 @@ domain-specific libraries for machine learning and scientific computing.
 
 import math
 from collections import InlineArray
-from collections.string import StringSlice
+
 from collections.string.string import (
     _calc_format_buffer_size,
     _calc_initial_buffer_size,
@@ -76,7 +76,7 @@ from builtin._format_float import _write_float
 from builtin.dtype import _uint_type_of_width
 from builtin.format_int import _try_write_int
 from builtin.io import _snprintf
-from collections.string import StaticString
+
 from documentation import doc_private
 from memory import Span, UnsafePointer, bitcast, memcpy
 
@@ -131,10 +131,9 @@ alias UInt256 = Scalar[DType.uint256]
 """Represents a 256-bit unsigned scalar integer."""
 
 alias Float8_e5m2 = Scalar[DType.float8_e5m2]
-"""Represents a FP8E5M2 floating point format from the [OFP8
-standard](https://www.opencompute.org/documents/ocp-8-bit-floating-point-specification-ofp8-revision-1-0-2023-12-01-pdf-1).
-
-The 8 bits are encoded as `seeeeemm`:
+"""Represents the 8-bit E5M2 floating point format from the [OFP8
+standard](https://www.opencompute.org/documents/ocp-8-bit-floating-point-specification-ofp8-revision-1-0-2023-12-01-pdf-1),
+encoded as `seeeeemm`:
 - (s)ign: 1 bit
 - (e)xponent: 5 bits
 - (m)antissa: 2 bits
@@ -145,9 +144,7 @@ The 8 bits are encoded as `seeeeemm`:
 - -0: 10000000
 """
 alias Float8_e5m2fnuz = Scalar[DType.float8_e5m2fnuz]
-"""Represents a FP8E5M2FNUZ floating point format.
-
-The 8 bits are encoded as `seeeeemm`:
+"""Represents an 8-bit floating point format, encoded as `seeeeemm`:
 - (s)ign: 1 bit
 - (e)xponent: 5 bits
 - (m)antissa: 2 bits
@@ -157,10 +154,15 @@ The 8 bits are encoded as `seeeeemm`:
 - uz: unsigned zero (no -0 encoding)
 """
 alias Float8_e4m3fn = Scalar[DType.float8_e4m3fn]
-"""Represents a FP8E4M3 floating point format from the [OFP8
+"""Represents the E4M3 floating point format defined in the [OFP8
 standard](https://www.opencompute.org/documents/ocp-8-bit-floating-point-specification-ofp8-revision-1-0-2023-12-01-pdf-1).
 
-The 8 bits are encoded as `seeeemmm`:
+This type is named differently across libraries and vendors, for example:
+- Mojo, PyTorch, JAX, and LLVM refer to it as `e4m3fn`.
+- OCP, NVIDIA CUDA, and AMD ROCm refer to it as `e4m3`.
+
+In these contexts, they are all referring to the same finite type specified
+in the OFP8 standard above, encoded as `seeeemmm`:
 - (s)ign: 1 bit
 - (e)xponent: 4 bits
 - (m)antissa: 3 bits
@@ -170,9 +172,8 @@ The 8 bits are encoded as `seeeemmm`:
 - fn: finite (no inf or -inf encodings)
 """
 alias Float8_e4m3fnuz = Scalar[DType.float8_e4m3fnuz]
-"""Represents a FP8E4M3FNUZ floating point format.
-
-The 8 bits are encoded as `seeeemmm`:
+"""Represents an 8-bit e4m3fnuz floating point format, encoded as
+`seeeemmm`:
 - (s)ign: 1 bit
 - (e)xponent: 4 bits
 - (m)antissa: 3 bits

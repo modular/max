@@ -27,8 +27,6 @@ from sys import has_neon, os_is_linux, os_is_macos, os_is_windows
 
 from memory import Span
 
-from utils import StringSlice
-
 from .. import PathLike
 from .._linux_aarch64 import _lstat as _lstat_linux_arm
 from .._linux_aarch64 import _stat as _stat_linux_arm
@@ -51,7 +49,7 @@ fn _constrain_unix():
 
 
 @always_inline
-fn _get_stat_st_mode(path: String) raises -> Int:
+fn _get_stat_st_mode(path: StringSlice) raises -> Int:
     @parameter
     if os_is_macos():
         return Int(_stat_macos(path).st_mode)
@@ -62,7 +60,7 @@ fn _get_stat_st_mode(path: String) raises -> Int:
 
 
 @always_inline
-fn _get_lstat_st_mode(path: String) raises -> Int:
+fn _get_lstat_st_mode(path: StringSlice) raises -> Int:
     @parameter
     if os_is_macos():
         return Int(_lstat_macos(path).st_mode)
