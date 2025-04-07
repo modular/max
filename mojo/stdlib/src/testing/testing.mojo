@@ -178,7 +178,7 @@ fn assert_equal(
 
 @always_inline
 fn assert_equal[
-    dtype: DType, size: Int
+    dtype: DType, size: UInt
 ](
     lhs: SIMD[dtype, size],
     rhs: SIMD[dtype, size],
@@ -387,7 +387,7 @@ fn assert_not_equal(
 
 @always_inline
 fn assert_not_equal[
-    dtype: DType, size: Int
+    dtype: DType, size: UInt
 ](
     lhs: SIMD[dtype, size],
     rhs: SIMD[dtype, size],
@@ -455,7 +455,7 @@ fn assert_not_equal[
 
 @always_inline
 fn assert_almost_equal[
-    dtype: DType, size: Int
+    dtype: DType, size: UInt
 ](
     lhs: SIMD[dtype, size],
     rhs: SIMD[dtype, size],

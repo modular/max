@@ -219,7 +219,7 @@ fn _sqrt_nvvm(x: SIMD) -> __type_of(x):
 
 @always_inline
 fn sqrt[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Performs elementwise square root on the elements of a SIMD vector.
 
@@ -360,7 +360,7 @@ fn recip(x: SIMD) -> __type_of(x):
 
 @always_inline
 fn exp2[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Computes elementwise 2 raised to the power of n, where n is an element
     of the input SIMD vector.
@@ -456,7 +456,7 @@ fn exp2[
 
 @always_inline
 fn _ldexp_impl[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width], exp: SIMD[dtype, simd_width]) -> SIMD[
     dtype, simd_width
 ]:
@@ -517,7 +517,7 @@ fn _ldexp_impl[
 
 @always_inline
 fn ldexp[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width], exp: SIMD[DType.int32, simd_width]) -> SIMD[
     dtype, simd_width
 ]:
@@ -548,7 +548,7 @@ fn ldexp[
 
 @always_inline
 fn _exp_taylor[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     alias coefficients = List[SIMD[dtype, simd_width]](
         1.0,
@@ -572,7 +572,7 @@ fn _exp_taylor[
 
 @always_inline
 fn exp[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Calculates elementwise exponential of the input vector.
 
@@ -632,7 +632,7 @@ fn exp[
 
 @always_inline
 fn _frexp_mask1[
-    simd_width: Int, dtype: DType
+    simd_width: UInt, dtype: DType
 ]() -> SIMD[_integral_type_of[dtype](), simd_width]:
     @parameter
     if dtype is DType.float16:
@@ -648,7 +648,7 @@ fn _frexp_mask1[
 
 @always_inline
 fn _frexp_mask2[
-    simd_width: Int, dtype: DType
+    simd_width: UInt, dtype: DType
 ]() -> SIMD[_integral_type_of[dtype](), simd_width]:
     @parameter
     if dtype is DType.float16:
@@ -664,7 +664,7 @@ fn _frexp_mask2[
 
 @always_inline
 fn frexp[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> StaticTuple[SIMD[dtype, simd_width], 2]:
     """Breaks floating point values into a fractional part and an exponent part.
     This follows C and Python in increasing the exponent by 1 and normalizing the
@@ -710,7 +710,7 @@ fn frexp[
 
 @always_inline
 fn _log_base[
-    dtype: DType, simd_width: Int, //, base: Int
+    dtype: DType, simd_width: UInt, //, base: Int
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Performs elementwise log of a SIMD vector with a specific base.
 
@@ -833,7 +833,7 @@ fn log2(x: SIMD) -> __type_of(x):
 
 @always_inline
 fn copysign[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](magnitude: SIMD[dtype, simd_width], sign: SIMD[dtype, simd_width]) -> SIMD[
     dtype, simd_width
 ]:
@@ -873,7 +873,7 @@ fn copysign[
 
 @always_inline
 fn erf[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Performs the elementwise Erf on a SIMD vector.
 
@@ -927,7 +927,7 @@ fn erf[
 
 @always_inline
 fn tanh[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Performs elementwise evaluation of the tanh function.
 
@@ -995,7 +995,7 @@ fn tanh[
 # TODO: control symmetric behavior with flag so we can be compatible with Python
 @always_inline
 fn isclose[
-    dtype: DType, simd_width: Int
+    dtype: DType, simd_width: UInt
 ](
     a: SIMD[dtype, simd_width],
     b: SIMD[dtype, simd_width],
@@ -1063,7 +1063,7 @@ fn isclose[
 
 # TODO: Remove this when `iota` works at compile-time
 fn _compile_time_iota[
-    dtype: DType, simd_width: Int
+    dtype: DType, simd_width: UInt
 ]() -> SIMD[dtype, simd_width]:
     constrained[
         dtype.is_integral(),
@@ -1077,7 +1077,7 @@ fn _compile_time_iota[
 
 @always_inline
 fn iota[
-    dtype: DType, simd_width: Int
+    dtype: DType, simd_width: UInt
 ](offset: Scalar[dtype] = 0) -> SIMD[dtype, simd_width]:
     """Creates a SIMD vector containing an increasing sequence, starting from
     offset.
@@ -1201,7 +1201,7 @@ fn fma(a: UInt, b: UInt, c: UInt) -> UInt:
 
 @always_inline("nodebug")
 fn fma[
-    dtype: DType, simd_width: Int
+    dtype: DType, simd_width: UInt
 ](
     a: SIMD[dtype, simd_width],
     b: SIMD[dtype, simd_width],
@@ -1371,7 +1371,7 @@ fn atan(x: SIMD) -> __type_of(x):
 
 
 fn atan2[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](y: SIMD[dtype, simd_width], x: SIMD[dtype, simd_width]) -> SIMD[
     dtype, simd_width
 ]:
@@ -1423,7 +1423,7 @@ fn atan2[
 
 
 fn cos[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Computes the `cos` of the inputs.
 
@@ -1460,7 +1460,7 @@ fn cos[
 
 
 fn sin[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Computes the `sin` of the inputs.
 
@@ -1739,7 +1739,7 @@ fn cbrt(x: SIMD) -> __type_of(x):
 
 # TODO: implement for variadic inputs as Python.
 fn hypot[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](arg0: SIMD[dtype, simd_width], arg1: SIMD[dtype, simd_width]) -> SIMD[
     dtype, simd_width
 ]:
@@ -1852,7 +1852,7 @@ fn gamma(x: SIMD) -> __type_of(x):
 
 
 fn remainder[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](x: SIMD[dtype, simd_width], y: SIMD[dtype, simd_width]) -> SIMD[
     dtype, simd_width
 ]:
@@ -1991,7 +1991,7 @@ fn y1(x: SIMD) -> __type_of(x):
 
 
 fn scalb[
-    dtype: DType, simd_width: Int, //
+    dtype: DType, simd_width: UInt, //
 ](arg0: SIMD[dtype, simd_width], arg1: SIMD[dtype, simd_width]) -> SIMD[
     dtype, simd_width
 ]:
@@ -2219,7 +2219,7 @@ fn modf(x: SIMD) -> Tuple[__type_of(x), __type_of(x)]:
 
 @always_inline
 fn ulp[
-    dtype: DType, simd_width: Int
+    dtype: DType, simd_width: UInt
 ](x: SIMD[dtype, simd_width]) -> SIMD[dtype, simd_width]:
     """Computes the ULP (units of last place) or (units of least precision) of
     the number.
@@ -2389,7 +2389,7 @@ fn _type_is_libm_supported(dtype: DType) -> Bool:
 fn _call_libm[
     func_name: StaticString,
     arg_type: DType,
-    simd_width: Int,
+    simd_width: UInt,
     *,
     result_type: DType = arg_type,
 ](arg: SIMD[arg_type, simd_width]) -> SIMD[result_type, simd_width]:
@@ -2417,7 +2417,7 @@ fn _call_libm[
 fn _call_libm_impl[
     func_name: StaticString,
     arg_type: DType,
-    simd_width: Int,
+    simd_width: UInt,
     *,
     result_type: DType = arg_type,
 ](arg: SIMD[arg_type, simd_width]) -> SIMD[result_type, simd_width]:
@@ -2464,7 +2464,7 @@ fn _call_ptx_intrinsic_scalar[
 
 fn _call_ptx_intrinsic[
     dtype: DType,
-    simd_width: Int, //,
+    simd_width: UInt, //,
     *,
     instruction: StaticString,
     constraints: StaticString,
@@ -2487,7 +2487,7 @@ fn _call_ptx_intrinsic[
 
 fn _call_ptx_intrinsic[
     dtype: DType,
-    simd_width: Int, //,
+    simd_width: UInt, //,
     *,
     scalar_instruction: StaticString,
     vector2_instruction: StaticString,
@@ -2518,7 +2518,7 @@ fn _call_ptx_intrinsic[
 
 fn _call_ptx_intrinsic[
     dtype: DType,
-    simd_width: Int, //,
+    simd_width: UInt, //,
     *,
     scalar_instruction: StaticString,
     vector2_instruction: StaticString,
