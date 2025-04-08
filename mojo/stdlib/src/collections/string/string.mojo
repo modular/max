@@ -1387,11 +1387,8 @@ struct String(
         """Return the number of non-overlapping occurrences of substring
         `substr` in the string.
 
-        If sub is empty, returns the number of empty strings between characters
-        which is the length of the string plus one.
-
         Args:
-          substr: The substring to count.
+            substr: The substring to count.
 
         Returns:
           The number of occurrences of `substr`.
@@ -1546,6 +1543,10 @@ struct String(
 
         Returns:
             The string where all occurrences of `old` are replaced with `new`.
+
+        Notes:
+            If sub is empty, returns the number of empty strings between
+            characters which is the length of the string plus one.
         """
         return StringSlice(self).replace(old, new)
 
