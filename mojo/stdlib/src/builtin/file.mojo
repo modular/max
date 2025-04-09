@@ -80,9 +80,20 @@ struct FileHandle(Writer):
         """Construct the FileHandle using the file path and mode.
 
         Args:
-          path: The file path.
-          mode: The mode to open the file in (the mode can be "r" or "w" or "rw").
+            path: The file path.
+            mode: The mode to open the file in: {"r", "w", "rw"}.
         """
+        # FIXME(#3849): this should support the append flag
+        # TODO(MSTDL-1071):
+        #   Once Mojo supports parametric traits, implement EqualityComparable for
+        #   StringSlice such that string slices with different origin types can be
+        #   compared, then drop this horrible hack.
+        debug_assert(
+            mode == rebind[__type_of(mode)](StaticString("r"))
+            or mode == rebind[__type_of(mode)](StaticString("w"))
+            or mode == rebind[__type_of(mode)](StaticString("rw")),
+            'mode can only be one of: {"r", "w", "rw"}',
+        )
         var err_msg = _OwnedStringRef()
         var handle = external_call[
             "KGEN_CompilerRT_IO_FileOpen", OpaquePointer
@@ -478,13 +489,13 @@ fn open[
     FileHandle.
 
     Parameters:
-      PathLike: The a type conforming to the os.PathLike trait.
+        PathLike: The a type conforming to the os.PathLike trait.
 
     Args:
-      path: The path to the file to open.
-      mode: The mode to open the file in (the mode can be "r" or "w").
+        path: The path to the file to open.
+        mode: The mode to open the file in: {"r", "w", "rw"}.
 
     Returns:
-      A file handle.
+        A file handle.
     """
     return FileHandle(path.__fspath__(), mode)
