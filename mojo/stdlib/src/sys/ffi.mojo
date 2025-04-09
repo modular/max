@@ -16,7 +16,7 @@ from collections.string.string_slice import _get_kgen_string, get_static_string
 from os import abort
 from sys._libc import dlclose, dlerror, dlopen, dlsym
 
-from memory import UnsafePointer
+from memory import UnsafePointer, Span
 
 from .info import is_64bit, os_is_linux, os_is_macos, os_is_windows
 from .intrinsics import _mlirtype_is_eq
@@ -103,6 +103,49 @@ fn _c_long_long_dtype() -> DType:
         return abort[DType]()
 
 
+@always_inline
+fn c_str_ptr(
+    item: StringLiteral,
+) -> __type_of(item.unsafe_ptr().bitcast[c_char]()):
+    """Get the `c_char` pointer.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
+@always_inline
+fn c_str_ptr(item: Error) -> __type_of(item.unsafe_ptr().bitcast[c_char]()):
+    """Get the `c_char` pointer.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
+@always_inline
+fn c_str_ptr(
+    ref item: String,
+) -> __type_of(item.unsafe_ptr().bitcast[c_char]()):
+    """Get the `c_char` pointer.
+
+    Args:
+        item: The item.
+
+    Returns:
+        The pointer.
+    """
+    return item.unsafe_ptr().bitcast[c_char]()
+
+
 # ===-----------------------------------------------------------------------===#
 # Dynamic Library Loading
 # ===-----------------------------------------------------------------------===#
@@ -185,7 +228,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
 
         @parameter
         if not os_is_windows():
-            var handle = dlopen(path.unsafe_cstr_ptr(), flags)
+            var handle = dlopen(c_str_ptr(path), flags)
             if handle == OpaquePointer():
                 var error_message = dlerror()
                 abort(
@@ -223,8 +266,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
         ]()
 
         var opaque_function_ptr: OpaquePointer = dlsym(
-            self.handle,
-            name.unsafe_cstr_ptr(),
+            self.handle, c_str_ptr(name)
         )
 
         return Bool(opaque_function_ptr)
@@ -266,7 +308,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
             A handle to the function.
         """
 
-        return self._get_function[result_type](name.unsafe_cstr_ptr())
+        return self._get_function[result_type](c_str_ptr(name))
 
     @always_inline
     fn _get_function[
@@ -308,9 +350,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
         """
         # Force unique the func_name so we know that it is nul-terminated.
         alias func_name_literal = get_static_string[func_name]()
-        return self._get_function[result_type](
-            func_name_literal.unsafe_ptr().bitcast[c_char](),
-        )
+        return self._get_function[result_type](c_str_ptr(func_name_literal))
 
     fn get_symbol[
         result_type: AnyType,
@@ -333,7 +373,7 @@ struct DLHandle(CollectionElement, CollectionElementNew, Boolable):
         # StringSliceNulTerminated type.  Such a thing would carry an origin so
         # it can reference other string data, but would not be subslicable.
         name_copy = String(name)
-        return self.get_symbol[result_type](name_copy.unsafe_cstr_ptr())
+        return self.get_symbol[result_type](c_str_ptr(name))
 
     fn get_symbol[
         result_type: AnyType

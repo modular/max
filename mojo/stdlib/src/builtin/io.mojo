@@ -29,7 +29,7 @@ from sys import (
 )
 from sys._amdgpu import printf_append_args, printf_append_string_n, printf_begin
 from sys._libc import dup, fclose, fdopen, fflush
-from sys.ffi import OpaquePointer, c_char
+from sys.ffi import OpaquePointer, c_char, c_str_ptr
 from sys.intrinsics import _type_is_eq
 
 from builtin.dtype import _get_dtype_printf_format
@@ -58,7 +58,7 @@ struct _fdopen[mode: StaticString = "a"]:
         self.handle = fdopen(
             dup(stream_id.value),
             # Guarantee this is nul terminated.
-            get_static_string[mode]().unsafe_ptr().bitcast[c_char](),
+            c_str_ptr(get_static_string[mode]()),
         )
 
     fn __enter__(self) -> Self:
@@ -196,7 +196,7 @@ fn _printf_cpu[
         ](
             fd,
             # Guarantee this is nul terminated.
-            get_static_string[fmt]().unsafe_ptr().bitcast[c_char](),
+            c_str_ptr(get_static_string[fmt]()),
             args.get_loaded_kgen_pack(),
         )
 
@@ -218,7 +218,7 @@ fn _printf[
 
             _ = external_call["vprintf", Int32](
                 # Guarantee this is nul terminated.
-                get_static_string[fmt]().unsafe_ptr(),
+                c_str_ptr(get_static_string[fmt]()),
                 Pointer(to=loaded_pack),
             )
         elif is_amd_gpu():
@@ -345,7 +345,7 @@ fn _snprintf[
             str,
             size,
             # Guarantee this is nul terminated.
-            get_static_string[fmt]().unsafe_ptr(),
+            c_str_ptr(get_static_string[fmt]()),
             loaded_pack,
         )
     )

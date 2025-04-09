@@ -24,7 +24,7 @@ print(CompilationTarget.is_x86())
 from memory import UnsafePointer
 from collections.string.string_slice import _get_kgen_string
 
-from .ffi import OpaquePointer, _external_call_const, external_call
+from .ffi import OpaquePointer, _external_call_const, external_call, c_str_ptr
 
 alias _TargetType = __mlir_type.`!kgen.target`
 
@@ -934,7 +934,7 @@ fn _macos_version() raises -> Tuple[Int, Int, Int]:
     var buf_len = Int(INITIAL_CAPACITY)
 
     var err = external_call["sysctlbyname", Int32](
-        "kern.osproductversion".unsafe_cstr_ptr(),
+        c_str_ptr("kern.osproductversion"),
         buf.data,
         Pointer(to=buf_len),
         OpaquePointer(),

@@ -14,6 +14,7 @@
 
 from collections.string.string_slice import get_static_string
 from sys.info import alignof, sizeof
+from sys.ffi import c_str_ptr
 
 from memory import Span, UnsafePointer
 from testing import assert_equal, assert_false, assert_raises, assert_true
@@ -1037,9 +1038,7 @@ def test_string_slice_from_pointer():
     assert_equal(3, len(a))
     assert_equal(3, len(b))
     var c = String("ABCD")
-    var d = StringSlice[__origin_of(c)](
-        unsafe_from_utf8_cstr_ptr=c.unsafe_cstr_ptr()
-    )
+    var d = StringSlice[__origin_of(c)](unsafe_from_utf8_cstr_ptr=c_str_ptr(c))
     var e = StringSlice[__origin_of(c)](unsafe_from_utf8_ptr=c.unsafe_ptr())
     assert_equal(4, len(c))
     assert_equal(4, len(d))

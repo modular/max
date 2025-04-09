@@ -17,7 +17,7 @@ These are Mojo built-ins, so you don't need to import them.
 
 
 from sys import alignof, sizeof
-from sys.ffi import c_char
+from sys.ffi import c_char, c_str_ptr
 
 from memory import UnsafePointer, memcpy
 from memory.memory import _free
@@ -200,7 +200,7 @@ struct Error(
             return
         writer.write(
             StringSlice[__origin_of(self)](
-                unsafe_from_utf8_cstr_ptr=self.unsafe_cstr_ptr()
+                unsafe_from_utf8_cstr_ptr=c_str_ptr(self)
             )
         )
 
@@ -216,7 +216,7 @@ struct Error(
             repr(
                 String(
                     StringSlice[__origin_of(self)](
-                        unsafe_from_utf8_cstr_ptr=self.unsafe_cstr_ptr()
+                        unsafe_from_utf8_cstr_ptr=c_str_ptr(self)
                     )
                 )
             ),
@@ -227,15 +227,20 @@ struct Error(
     # Methods
     # ===-------------------------------------------------------------------===#
 
-    fn unsafe_cstr_ptr(self) -> UnsafePointer[c_char]:
-        """Retrieves a C-string-compatible pointer to the underlying memory.
-
-        The returned pointer is guaranteed to be NUL terminated, and not null.
+    @always_inline("nodebug")
+    fn unsafe_ptr(
+        self,
+    ) -> UnsafePointer[Byte, mut=False, origin=ImmutableAnyOrigin]:
+        """Get raw pointer to the underlying data.
 
         Returns:
-            The pointer to the underlying memory.
+            The raw pointer to the data.
+
+        Notes:
+            Since the Error owns the error string dynamically, the resulting
+            `UnsafePointer` has an `ImmutableAnyOrigin`.
         """
-        return self.data.bitcast[c_char]()
+        return self.data
 
 
 @doc_private

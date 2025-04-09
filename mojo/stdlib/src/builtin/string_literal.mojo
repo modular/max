@@ -434,19 +434,6 @@ struct StringLiteral(
         #   return type.
         return ptr.bitcast[Byte]().origin_cast[False, StaticConstantOrigin]()
 
-    @always_inline
-    fn unsafe_cstr_ptr(
-        self,
-    ) -> UnsafePointer[c_char, mut=False, origin=StaticConstantOrigin]:
-        """Retrieves a C-string-compatible pointer to the underlying memory.
-
-        The returned pointer is guaranteed to be NUL terminated, and not null.
-
-        Returns:
-            The pointer to the underlying memory.
-        """
-        return self.unsafe_ptr().bitcast[c_char]()
-
     @always_inline("nodebug")
     fn as_string_slice(self) -> StaticString:
         """Returns a string slice of this static string literal.
