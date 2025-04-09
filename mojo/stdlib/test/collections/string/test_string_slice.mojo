@@ -521,6 +521,9 @@ def test_is_codepoint_boundary():
 
 
 def test_split():
+    alias S = StaticString
+    alias L = List[String]
+
     # empty separators default to whitespace
     var d0 = StringSlice("hello world").split()
     assert_true(len(d0) == 2)
@@ -588,11 +591,9 @@ def test_split():
     assert_true(len(StringSlice(" ").split()) == 0)
     assert_true(len(StringSlice("").split(" ")) == 1)
     assert_true(len(StringSlice(" ").split(" ")) == 2)
+    assert_true(len(S("").split("")) == 2)
     assert_true(len(StringSlice("  ").split(" ")) == 3)
     assert_true(len(StringSlice("   ").split(" ")) == 4)
-
-    with assert_raises():
-        _ = StringSlice("").split("")
 
     # Split in middle
     var d1 = StringSlice("n")
@@ -667,8 +668,10 @@ def test_split():
     assert_equal(res6[3], "сит")
     assert_equal(res6[4], "амет")
 
-    with assert_raises(contains="Separator cannot be empty."):
-        _ = StringSlice("1, 2, 3").split("")
+    assert_equal(S("123").split(""), L("", "1", "2", "3", ""))
+    assert_equal(S("").join(S("123").split("")), "123")
+    assert_equal(S(",1,2,3,").split(","), S("123").split(""))
+    assert_equal(S(",").join(S("123").split("")), ",1,2,3,")
 
 
 def test_splitlines():
