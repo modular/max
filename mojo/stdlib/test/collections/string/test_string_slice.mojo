@@ -672,16 +672,8 @@ def test_split():
 
 
 def test_splitlines():
-    alias S = StringSlice[StaticConstantOrigin]
-    alias L = List[StringSlice[StaticConstantOrigin]]
-
-    # FIXME: remove once StringSlice conforms to TestableCollectionElement
-    fn _assert_equal[
-        O1: ImmutableOrigin
-    ](l1: List[StringSlice[O1]], l2: List[String]) raises:
-        assert_equal(len(l1), len(l2))
-        for i in range(len(l1)):
-            assert_equal(String(l1[i]), l2[i])
+    alias S = StaticString
+    alias L = List[StaticString]
 
     # Test with no line breaks
     assert_equal(S("hello world").splitlines(), L("hello world"))
@@ -728,11 +720,16 @@ def test_splitlines():
 
     for i in List(next_line, unicode_line_sep, unicode_paragraph_sep):
         u = i[]
-        item = String("").join("hello", u, "world", u, "mojo", u, "language", u)
-        s = StringSlice(item)
-        assert_equal(s.splitlines(), hello_mojo)
-        items = List("hello" + u, "world" + u, "mojo" + u, "language" + u)
-        _assert_equal(s.splitlines(keepends=True), items)
+        item = StaticString("").join(
+            "hello", u, "world", u, "mojo", u, "language", u
+        )
+        assert_equal(item.splitlines().__str__(), hello_mojo.__str__())
+        assert_equal(
+            item.splitlines(keepends=True).__str__(),
+            List(
+                "hello" + u, "world" + u, "mojo" + u, "language" + u
+            ).__str__(),
+        )
 
 
 def test_rstrip():
