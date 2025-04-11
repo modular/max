@@ -1941,8 +1941,10 @@ struct CPython:
         return r
 
     # ===-------------------------------------------------------------------===#
-    # Python Capsule API
+    # Capsules
+    # ref: https://docs.python.org/3/c-api/capsule.html
     # ===-------------------------------------------------------------------===#
+    
     fn PyCapsule_New(
         mut self,
         pointer: OpaquePointer,
