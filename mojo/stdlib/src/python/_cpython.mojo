@@ -1951,8 +1951,7 @@ struct CPython:
     ) -> PyObjectPtr:
         """Create a PyCapsule to communicate to another C extension the C API in `pointer`, identified by `name` and with the custom destructor in `destructor`.
 
-        [Reference](
-        https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_New).
+        [Reference](https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_New).
         """
         var new_capsule = self.lib.call["PyCapsule_New", PyObjectPtr](
             pointer, name.unsafe_ptr().bitcast[c_char](), destructor
