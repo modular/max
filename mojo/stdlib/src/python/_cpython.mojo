@@ -1949,21 +1949,27 @@ struct CPython:
         name: StringSlice,
         destructor: destructor,
     ) -> PyObjectPtr:
-        """[Reference](
+        """Create a PyCapsule to communicate to another C extension the C API in `pointer`, identified by `name` and with the custom destructor in `destructor`.
+
+        [Reference](
         https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_New).
         """
-        return self.lib.call["PyCapsule_New", PyObjectPtr](
-            pointer, name.unsafe_ptr(), destructor
+        var new_capsule = self.lib.call["PyCapsule_New", PyObjectPtr](
+            pointer, name.unsafe_ptr().bitcast[c_char](), destructor
         )
+        self._inc_total_rc()
+        return new_capsule
 
     fn PyCapsule_GetPointer(
         mut self,
         capsule: PyObjectPtr,
         name: StringSlice,
     ) -> OpaquePointer:
-        """[Reference](
+        """Extract the pointer to another C extension from a PyCapsule `capsule` with the given `name`.
+
+        [Reference](
         https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_GetPointer).
         """
         return self.lib.call["PyCapsule_GetPointer", OpaquePointer](
-            capsule, name.unsafe_ptr()
+            capsule, name.unsafe_ptr().bitcast[c_char]()
         )
