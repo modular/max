@@ -91,6 +91,11 @@ for i in range(iteration_range):
   `constrained[cond, "hello: ", String(n), ": world"]()` which is more comptime
   efficient and somewhat more ergonomic than using string concatenation.
 
+- `pathlib.Path.write_text` now accepts a `Writable` argument instead of a `Stringable`
+  argument. This makes the function more efficient by removing a String allocation.
+
+- Added `pathlib.Path.write_bytes` which enables writing raw bytes to a file.
+
 ### GPU changes
 
 - `debug_assert` in AMD GPU kernels now behaves the same as NVIDIA, printing the
