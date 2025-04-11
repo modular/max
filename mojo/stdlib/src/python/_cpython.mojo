@@ -1939,3 +1939,31 @@ struct CPython:
 
         self._inc_total_rc()
         return r
+
+    # ===-------------------------------------------------------------------===#
+    # Python Capsule API
+    # ===-------------------------------------------------------------------===#
+    fn PyCapsule_New(
+        mut self,
+        pointer: OpaquePointer,
+        name: StringSlice,
+        destructor: destructor,
+    ) -> PyObjectPtr:
+        """[Reference](
+        https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_New).
+        """
+        return self.lib.call["PyCapsule_New", PyObjectPtr](
+            pointer, name.unsafe_ptr(), destructor
+        )
+
+    fn PyCapsule_GetPointer(
+        mut self,
+        capsule: PyObjectPtr,
+        name: StringSlice,
+    ) -> OpaquePointer:
+        """[Reference](
+        https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_GetPointer).
+        """
+        return self.lib.call["PyCapsule_GetPointer", OpaquePointer](
+            capsule, name.unsafe_ptr()
+        )
