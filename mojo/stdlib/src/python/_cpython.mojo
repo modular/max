@@ -1969,6 +1969,7 @@ struct CPython:
 
         [Reference](https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_GetPointer).
         """
+        # void *PyCapsule_GetPointer(PyObject *capsule, const char *name)
         return self.lib.call["PyCapsule_GetPointer", OpaquePointer](
             capsule, name.unsafe_ptr().bitcast[c_char]()
         )
