@@ -1104,21 +1104,11 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         res.append(0)
         return String(res^)
 
-    fn split[
-        sep_mut: Bool,
-        sep_origin: Origin[sep_mut], //,
-    ](
-        self,
-        sep: StringSlice[sep_origin],
-        maxsplit: Int = -1,
-    ) raises -> List[
-        String
-    ]:
+    fn split(
+        self, sep: StringSlice, maxsplit: Int = -1
+    ) raises -> List[StringSlice[ImmutableOrigin.cast_from[origin].result]]:
         """Split the string by a separator.
 
-        Parameters:
-            sep_mut: Mutability of the `sep` string slice.
-            sep_origin: Origin of the `sep` string slice.
 
         Args:
             sep: The string to split on.
@@ -1143,8 +1133,8 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         ```
         .
         """
-        var output = List[String]()
-
+        alias S = StringSlice[ImmutableOrigin.cast_from[origin].result]
+        var output = List[S]()
         var str_byte_len = self.byte_length() - 1
         var lhs = 0
         var rhs = 0
@@ -1153,31 +1143,31 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         if sep_len == 0:
             raise Error("Separator cannot be empty.")
         if str_byte_len < 0:
-            output.append(String(""))
+            output.append(rebind[S](""))
 
         while lhs <= str_byte_len:
             rhs = self.find(sep, lhs)
             if rhs == -1:
-                output.append(String(self[lhs:]))
+                output.append(rebind[S](self[lhs:]))
                 break
 
             if maxsplit > -1:
                 if items == maxsplit:
-                    output.append(String(self[lhs:]))
+                    output.append(rebind[S](self[lhs:]))
                     break
                 items += 1
 
-            output.append(String(self[lhs:rhs]))
+            output.append(rebind[S](self[lhs:rhs]))
             lhs = rhs + sep_len
 
         if self.endswith(sep) and (len(output) <= maxsplit or maxsplit == -1):
-            output.append(String(""))
+            output.append(rebind[S](""))
 
         return output^
 
     fn split(
         self, sep: NoneType = None, maxsplit: Int = -1
-    ) -> List[StringSlice[origin]]:
+    ) -> List[StringSlice[ImmutableOrigin.cast_from[origin].result]]:
         """Split the string by every Whitespace separator.
 
         Args:
@@ -1207,12 +1197,15 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
 
         return self._split_whitespace()
 
-    fn _split_whitespace(self, maxsplit: Int = -1) -> List[StringSlice[origin]]:
+    fn _split_whitespace(
+        self, maxsplit: Int = -1
+    ) -> List[StringSlice[ImmutableOrigin.cast_from[origin].result]]:
         fn num_bytes(b: UInt8) -> Int:
             var flipped = ~b
             return Int(count_leading_zeros(flipped) + (flipped >> 7))
 
-        var output = List[StringSlice[origin]]()
+        alias S = StringSlice[ImmutableOrigin.cast_from[origin].result]
+        var output = List[S]()
         var str_byte_len = self.byte_length() - 1
         var lhs = 0
         var rhs = 0
@@ -1232,7 +1225,7 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
                     break
                 elif lhs == str_byte_len:
                     # if the last char is not whitespace
-                    output.append(self[str_byte_len:])
+                    output.append(rebind[S](self[str_byte_len:]))
                     break
                 rhs = lhs + num_bytes(self.unsafe_ptr()[lhs])
                 for s in self[
@@ -1244,16 +1237,14 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
 
                 if maxsplit > -1:
                     if items == maxsplit:
-                        output.append(self[lhs:])
+                        output.append(rebind[S](self[lhs:]))
                         break
                     items += 1
 
-                output.append(self[lhs:rhs])
+                output.append(rebind[S](self[lhs:rhs]))
                 lhs = rhs
             except e:
-                return abort[List[StringSlice[origin]]](
-                    "unexpected exception during split()"
-                )
+                return abort[List[S]]("unexpected exception during split()")
 
         return output
 
@@ -2252,9 +2243,7 @@ fn _to_string_list[
 
 
 @always_inline
-fn _to_string_list[
-    O: ImmutableOrigin, //
-](items: List[StringSlice[O]]) -> List[String]:
+fn to_string_list[O: Origin, //](items: List[StringSlice[O]]) -> List[String]:
     """Create a list of Strings **copying** the existing data.
 
     Parameters:
@@ -2277,9 +2266,7 @@ fn _to_string_list[
 
 
 @always_inline
-fn _to_string_list[
-    O: ImmutableOrigin, //
-](items: List[Span[Byte, O]]) -> List[String]:
+fn to_string_list[O: Origin, //](items: List[Span[Byte, O]]) -> List[String]:
     """Create a list of Strings **copying** the existing data.
 
     Parameters:
