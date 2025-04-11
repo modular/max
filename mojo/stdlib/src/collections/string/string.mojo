@@ -1456,8 +1456,7 @@ struct String(
         """
         return self.as_string_slice().isspace()
 
-    # TODO(MSTDL-590): String.split() should return `StringSlice`s.
-    fn split(self, sep: StringSlice, maxsplit: Int = -1) raises -> List[String]:
+    fn split(self, sep: StringSlice, maxsplit: Int = -1) -> List[String]:
         """Split the string by a separator.
 
         Args:
@@ -1467,9 +1466,6 @@ struct String(
 
         Returns:
             A List of Strings containing the input split by the separator.
-
-        Raises:
-            If the separator is empty.
 
         Examples:
 
@@ -1483,9 +1479,7 @@ struct String(
         ```
         .
         """
-        return self.as_string_slice().split[sep.mut, sep.origin](
-            sep, maxsplit=maxsplit
-        )
+        return self.as_string_slice().split(sep, maxsplit=maxsplit)
 
     fn split(self, sep: NoneType = None, maxsplit: Int = -1) -> List[String]:
         """Split the string by every Whitespace separator.
@@ -1514,19 +1508,7 @@ struct String(
         ```
         .
         """
-
-        # TODO(MSTDL-590): Avoid the need to loop to convert `StringSlice` to
-        #   `String` by making `String.split()` return `StringSlice`s.
-        var str_slices = self.as_string_slice()._split_whitespace(
-            maxsplit=maxsplit
-        )
-
-        var output = List[String](capacity=len(str_slices))
-
-        for str_slice in str_slices:
-            output.append(String(str_slice[]))
-
-        return output^
+        return self.as_string_slice().split(sep, maxsplit=maxsplit)
 
     fn splitlines(self, keepends: Bool = False) -> List[String]:
         """Split the string at line boundaries. This corresponds to Python's
