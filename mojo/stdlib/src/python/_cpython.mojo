@@ -1953,6 +1953,7 @@ struct CPython:
 
         [Reference](https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_New).
         """
+        # PyObject *PyCapsule_New(void *pointer, const char *name, PyCapsule_Destructor destructor)
         var new_capsule = self.lib.call["PyCapsule_New", PyObjectPtr](
             pointer, name.unsafe_ptr().bitcast[c_char](), destructor
         )
