@@ -1944,7 +1944,7 @@ struct CPython:
     # Capsules
     # ref: https://docs.python.org/3/c-api/capsule.html
     # ===-------------------------------------------------------------------===#
-    
+
     fn PyCapsule_New(
         mut self,
         pointer: OpaquePointer,
