@@ -49,6 +49,7 @@ Example:
 """
 
 from collections import List, Optional
+from collections._index_normalization import normalize_index
 from collections.string.format import _CurlyEntryFormattable, _FormatCurlyEntry
 from collections.string._utf8 import (
     _is_valid_utf8,
@@ -932,7 +933,13 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         """
         return CodepointSliceIter[origin, forward=False](self)
 
-    fn __getitem__[I: Indexer](self, idx: I) -> String:
+    fn __getitem__[
+        I: Indexer
+    ](
+        self,
+        idx: I,
+        out result: StringSlice[ImmutableOrigin.cast_from[origin].result],
+    ):
         """Gets the character at the specified position.
 
         Parameters:
@@ -944,11 +951,11 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         Returns:
             A new string containing the character at the specified position.
         """
-        # TODO(#933): implement this for unicode when we support llvm intrinsic evaluation at compile time
-        var buf = String._buffer_type(capacity=1)
-        buf.append(self._slice[idx])
-        buf.append(0)
-        return String(buf^)
+        # TODO(#3526): implement this for unicode
+        var normalized_index = normalize_index["StringSlice"](idx, len(self))
+        return __type_of(result)(
+            ptr=self.unsafe_ptr() + normalized_index, length=1
+        )
 
     fn __contains__(self, substr: StringSlice) -> Bool:
         """Returns True if the substring is contained within the current string.
