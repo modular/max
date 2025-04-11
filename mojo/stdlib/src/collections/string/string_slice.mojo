@@ -1045,64 +1045,49 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
 
         Returns:
             The string where all occurrences of `old` are replaced with `new`.
+
+        Notes:
+            If sub is empty, returns the number of empty strings between
+            characters which is the length of the string plus one.
         """
-        if not old:
-            return self._interleave(new)
+        var s_bytes = self.as_bytes()
+        var new_bytes = new.as_bytes()
 
-        var occurrences = self.count(old)
-        if occurrences == -1:
-            return String(self)
-
-        var self_start = self.unsafe_ptr()
-        var self_ptr = self.unsafe_ptr()
-        var new_ptr = new.unsafe_ptr()
-
-        var self_len = self.byte_length()
+        var s_len = self.byte_length()
         var old_len = old.byte_length()
         var new_len = new.byte_length()
 
-        var res = String._buffer_type()
-        res.reserve(self_len + (old_len - new_len) * occurrences + 1)
+        if old_len == 0:
+            var capacity = s_len + new_len * self.byte_length() + 1
+            var res = List[Byte](capacity=capacity)
+            for s in self.codepoint_slices():
+                res.extend(new_bytes)
+                res.extend(s.as_bytes())
+            res.append(0)
+            return String(buffer=res^)
 
-        for _ in range(occurrences):
-            var curr_offset = Int(self_ptr) - Int(self_start)
+        # FIXME(#3792): this should use self.as_bytes().count(old) which will be
+        # faster because returning unicode offsets has overhead and will return
+        # less bytes than necessary and cause a segfault
+        var occurrences = self.count(old)
+        if occurrences == 0:
+            return String(self)
 
-            var idx = self.find(old, curr_offset)
+        var capacity = s_len + (new_len - old_len) * occurrences + 1
+        var res = List[Byte](capacity=capacity)
+        var offset = 0
 
-            debug_assert(idx >= 0, "expected to find occurrence during find")
-
-            # Copy preceding unchanged chars
-            for _ in range(curr_offset, idx):
-                res.append(self_ptr[])
-                self_ptr += 1
-
-            # Insert a copy of the new replacement string
-            for i in range(new_len):
-                res.append(new_ptr[i])
-
-            self_ptr += old_len
-
-        while True:
-            var val = self_ptr[]
-            if val == 0:
+        while offset < s_len:
+            # FIXME(#3548): this should use raw bytes self.as_bytes().find(...)
+            var idx = self.find(old, offset)
+            if idx == -1:
+                res.extend(s_bytes[offset:])  # copy remainder
                 break
-            res.append(self_ptr[])
-            self_ptr += 1
-
-        res.append(0)
-        return String(res^)
-
-    fn _interleave(self, val: StringSlice) -> String:
-        var res = String._buffer_type()
-        var val_ptr = val.unsafe_ptr()
-        var self_ptr = self.unsafe_ptr()
-        res.reserve(val.byte_length() * self.byte_length() + 1)
-        for i in range(self.byte_length()):
-            for j in range(val.byte_length()):
-                res.append(val_ptr[j])
-            res.append(self_ptr[i])
-        res.append(0)
-        return String(res^)
+            res.extend(s_bytes[offset:idx])  # Copy preceding unchanged chars
+            res.extend(new_bytes)  # Insert a copy of the new replacement string
+            offset = idx + old_len
+        res.append(0)  # null terminator
+        return String(buffer=res^)
 
     fn split[
         sep_mut: Bool,
