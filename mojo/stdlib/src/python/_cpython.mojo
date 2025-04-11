@@ -1967,8 +1967,7 @@ struct CPython:
     ) -> OpaquePointer:
         """Extract the pointer to another C extension from a PyCapsule `capsule` with the given `name`.
 
-        [Reference](
-        https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_GetPointer).
+        [Reference](https://docs.python.org/3/c-api/capsule.html#c.PyCapsule_GetPointer).
         """
         return self.lib.call["PyCapsule_GetPointer", OpaquePointer](
             capsule, name.unsafe_ptr().bitcast[c_char]()
