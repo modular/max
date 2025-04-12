@@ -399,7 +399,12 @@ struct SIMD[dtype: DType, size: Int](
         Args:
             value: The input value.
         """
-        self = Self(value.value)
+
+        @parameter
+        if bitwidthof[dtype]() > bitwidthof[DType.index]():
+            self = Self(rebind[UInt64](value))
+        else:
+            self = Self(value.value)
 
     @always_inline("nodebug")
     @implicit
