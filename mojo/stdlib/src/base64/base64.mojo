@@ -83,8 +83,8 @@ fn b64encode(input_bytes: Span[Byte, _], mut result: List[Byte, _]):
         result: The buffer in which to store the values.
 
     Notes:
-        This method reserves the necessary buffer capacity. `result` can be a 0
-        capacity buffer.
+        This method reserves the necessary buffer capacity including a null
+        terminator which is not appended. `result` can be a 0 capacity buffer.
     """
     # 4 character bytes for each 3 bytes (or less) block + null terminator
     result.reserve(Int(4 * ((len(input_bytes) + 3 - 1) / 3)) + 1)
@@ -115,7 +115,7 @@ fn b64encode(input_bytes: Span[Byte, _]) -> String:
     """
     var result = List[UInt8, True]()
     b64encode(input_bytes, result)
-    result.append(0)  # null-terminate the result
+    result.append[unsafe_no_checks=True](0)  # null-terminate the result
     return String(buffer=result^)
 
 
@@ -157,18 +157,18 @@ fn b64decode[validate: Bool = False](str: StringSlice) raises -> String:
         var c = _ascii_to_value[validate](str[i + 2])
         var d = _ascii_to_value[validate](str[i + 3])
 
-        p.append((a << 2) | (b >> 4))
+        p.append[unsafe_no_checks=True]((a << 2) | (b >> 4))
         if str[i + 2] == "=":
             break
 
-        p.append(((b & 0x0F) << 4) | (c >> 2))
+        p.append[unsafe_no_checks=True](((b & 0x0F) << 4) | (c >> 2))
 
         if str[i + 3] == "=":
             break
 
-        p.append(((c & 0x03) << 6) | d)
+        p.append[unsafe_no_checks=True](((c & 0x03) << 6) | d)
 
-    p.append(0)  # null-terminate the result
+    p.append[unsafe_no_checks=True](0)  # null-terminate the result
     return String(buffer=p^)
 
 
@@ -201,10 +201,10 @@ fn b16encode(str: StringSlice) -> String:
         var str_byte = str_bytes(i)
         var hi = str_byte >> 4
         var lo = str_byte & 0b1111
-        out.append(b16chars[Int(hi)])
-        out.append(b16chars[Int(lo)])
+        out.append[unsafe_no_checks=True](b16chars[Int(hi)])
+        out.append[unsafe_no_checks=True](b16chars[Int(lo)])
 
-    out.append(0)  # null-terminate the result
+    out.append[unsafe_no_checks=True](0)  # null-terminate the result
     return String(buffer=out^)
 
 
@@ -247,7 +247,7 @@ fn b16decode(str: StringSlice) -> String:
     for i in range(0, n, 2):
         var hi = str[i]
         var lo = str[i + 1]
-        p.append(decode(hi) << 4 | decode(lo))
+        p.append[unsafe_no_checks=True](decode(hi) << 4 | decode(lo))
 
-    p.append(0)  # null-terminate the result
+    p.append[unsafe_no_checks=True](0)  # null-terminate the result
     return String(buffer=p^)
