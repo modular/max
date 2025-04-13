@@ -402,7 +402,8 @@ struct SIMD[dtype: DType, size: Int](
 
         @parameter
         if bitwidthof[dtype]() > bitwidthof[DType.index]():
-            self = Self(rebind[UInt64](value))
+            alias dt = _unsigned_integral_type_of[DType.index]()
+            self = Self(bitcast[dt](Scalar[DType.index](value)))
         else:
             self = Self(value.value)
 
