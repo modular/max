@@ -16,7 +16,7 @@ from math import sqrt
 from testing import assert_equal
 
 
-def main():
+def test_sqrt():
     assert_equal(sqrt(-1), 0)
     assert_equal(sqrt(0), 0)
     assert_equal(sqrt(1), 1)
@@ -24,3 +24,7 @@ def main():
     assert_equal(sqrt(2**34), 2**17)
     assert_equal(sqrt(10**16), 10**8)
     assert_equal(sqrt(Int.MAX), 3037000499)
+
+
+def main():
+    test_sqrt()
