@@ -830,7 +830,7 @@ fn _scientific_notation_digits[dtype: DType]() -> StaticString:
 
 @parameter
 @always_inline
-fn _int_type_of_width[width: Int]() -> DType:
+fn _int_type_of_width[width: UInt]() -> DType:
     constrained[
         width == 8
         or width == 16
@@ -863,7 +863,7 @@ fn _int_type_of_width[width: Int]() -> DType:
 
 @parameter
 @always_inline
-fn _uint_type_of_width[width: Int]() -> DType:
+fn _uint_type_of_width[width: UInt]() -> DType:
     constrained[
         width == 8
         or width == 16
