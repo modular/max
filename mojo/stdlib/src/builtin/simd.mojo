@@ -2426,13 +2426,41 @@ struct SIMD[dtype: DType, size: Int](
     # Reduce operations
     # ===------------------------------------------------------------------=== #
 
+    alias _T = SIMD[dtype, _]
+
+    # TODO: remove when non-capturing can be converted to capturing.
     @always_inline
     fn reduce[
-        func: fn[dtype: DType, width: Int] (
-            SIMD[dtype, width], SIMD[dtype, width]
-        ) capturing -> SIMD[dtype, width],
+        func: fn[width: Int] (Self._T[width], Self._T[width]) -> Self._T[width],
         size_out: Int = 1,
-    ](self) -> SIMD[dtype, size_out]:
+    ](self) -> Self._T[size_out]:
+        """Reduces the vector using a provided reduce operator.
+
+        Parameters:
+            func: The reduce function to apply to elements in this SIMD.
+            size_out: The width of the reduction.
+
+        Constraints:
+            `size_out` must not exceed width of the vector.
+
+        Returns:
+            A new scalar which is the reduction of all vector elements.
+        """
+
+        @always_inline
+        @parameter
+        fn body[w: Int](lhs: Self._T[w], rhs: Self._T[w]) -> Self._T[w]:
+            return func(lhs, rhs)
+
+        return self.reduce[body, size_out]()
+
+    @always_inline
+    fn reduce[
+        func: fn[width: Int] (
+            Self._T[width], Self._T[width]
+        ) capturing -> Self._T[width],
+        size_out: Int = 1,
+    ](self) -> Self._T[size_out]:
         """Reduces the vector using a provided reduce operator.
 
         Parameters:
@@ -2449,7 +2477,7 @@ struct SIMD[dtype: DType, size: Int](
 
         @parameter
         if size == size_out:
-            return rebind[SIMD[dtype, size_out]](self)
+            return rebind[Self._T[size_out]](self)
         else:
             var lhs: Self._SIMDHalfType
             var rhs: Self._SIMDHalfType
@@ -2457,7 +2485,7 @@ struct SIMD[dtype: DType, size: Int](
             return func(lhs, rhs).reduce[func, size_out]()
 
     @always_inline("nodebug")
-    fn reduce_max[size_out: Int = 1](self) -> SIMD[dtype, size_out]:
+    fn reduce_max[size_out: Int = 1](self) -> Self._T[size_out]:
         """Reduces the vector using the `max` operator.
 
         Parameters:
@@ -2477,17 +2505,7 @@ struct SIMD[dtype: DType, size: Int](
 
         @parameter
         if CompilationTarget.is_x86() or size_out > 1:
-
-            @always_inline
-            @parameter
-            fn max_reduce_body[
-                dtype: DType, width: Int
-            ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[
-                dtype, width
-            ]:
-                return max(v1, v2)
-
-            return self.reduce[max_reduce_body, size_out]()
+            return self.reduce[max[dtype=dtype], size_out]()
 
         @parameter
         if dtype.is_floating_point():
@@ -2535,17 +2553,7 @@ struct SIMD[dtype: DType, size: Int](
 
         @parameter
         if CompilationTarget.is_x86() or size_out > 1:
-
-            @always_inline
-            @parameter
-            fn min_reduce_body[
-                dtype: DType, width: Int
-            ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[
-                dtype, width
-            ]:
-                return min(v1, v2)
-
-            return self.reduce[min_reduce_body, size_out]()
+            return self.reduce[min[dtype=dtype], size_out]()
 
         @parameter
         if dtype.is_floating_point():
@@ -2586,15 +2594,7 @@ struct SIMD[dtype: DType, size: Int](
             The sum of all vector elements.
 
         """
-
-        @always_inline
-        @parameter
-        fn add_reduce_body[
-            dtype: DType, width: Int
-        ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[dtype, width]:
-            return v1 + v2
-
-        return self.reduce[add_reduce_body, size_out]()
+        return self.reduce[Self._T.__add__, size_out]()
 
     @always_inline
     fn reduce_mul[size_out: Int = 1](self) -> SIMD[dtype, size_out]:
@@ -2610,15 +2610,7 @@ struct SIMD[dtype: DType, size: Int](
         Returns:
             The product of all vector elements.
         """
-
-        @always_inline
-        @parameter
-        fn mul_reduce_body[
-            dtype: DType, width: Int
-        ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[dtype, width]:
-            return v1 * v2
-
-        return self.reduce[mul_reduce_body, size_out]()
+        return self.reduce[Self._T.__mul__, size_out]()
 
     @always_inline
     fn reduce_and[size_out: Int = 1](self) -> SIMD[dtype, size_out]:
@@ -2644,17 +2636,7 @@ struct SIMD[dtype: DType, size: Int](
 
         @parameter
         if size_out > 1:
-
-            @always_inline
-            @parameter
-            fn and_reduce_body[
-                dtype: DType, width: Int
-            ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[
-                dtype, width
-            ]:
-                return v1 & v2
-
-            return self.reduce[and_reduce_body, size_out]()
+            return self.reduce[Self._T.__and__, size_out]()
 
         @parameter
         if size == 1:
@@ -2690,17 +2672,7 @@ struct SIMD[dtype: DType, size: Int](
 
         @parameter
         if size_out > 1:
-
-            @always_inline
-            @parameter
-            fn or_reduce_body[
-                dtype: DType, width: Int
-            ](v1: SIMD[dtype, width], v2: SIMD[dtype, width]) -> SIMD[
-                dtype, width
-            ]:
-                return v1 | v2
-
-            return self.reduce[or_reduce_body, size_out]()
+            return self.reduce[Self._T.__or__, size_out]()
 
         @parameter
         if size == 1:
