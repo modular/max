@@ -67,7 +67,7 @@ from collections.string._unicode import (
 from collections.string.format import _CurlyEntryFormattable, _FormatCurlyEntry
 from collections.string.string_slice import (
     CodepointSliceIter,
-    _to_string_list,
+    to_string_list,
     _utf8_byte_type,
 )
 from hashlib._hasher import _HashableWithHasher, _Hasher
@@ -1291,7 +1291,9 @@ struct String(
         return self.as_string_slice().isspace()
 
     # TODO(MSTDL-590): String.split() should return `StringSlice`s.
-    fn split(self, sep: StringSlice, maxsplit: Int = -1) raises -> List[String]:
+    fn split(
+        self, sep: StringSlice, maxsplit: Int = -1
+    ) raises -> List[StringSlice[__origin_of(self)]]:
         """Split the string by a separator.
 
         Args:
@@ -1317,11 +1319,11 @@ struct String(
         ```
         .
         """
-        return _to_string_list(
-            self.as_string_slice().split(sep, maxsplit=maxsplit)
-        )
+        return self.as_string_slice().split(sep, maxsplit=maxsplit)
 
-    fn split(self, sep: NoneType = None, maxsplit: Int = -1) -> List[String]:
+    fn split(
+        self, sep: NoneType = None, maxsplit: Int = -1
+    ) -> List[StringSlice[__origin_of(self)]]:
         """Split the string by every Whitespace separator.
 
         Args:
@@ -1348,9 +1350,7 @@ struct String(
         ```
         .
         """
-        return _to_string_list(
-            self.as_string_slice().split(sep, maxsplit=maxsplit)
-        )
+        return self.as_string_slice().split(sep, maxsplit=maxsplit)
 
     fn splitlines(self, keepends: Bool = False) -> List[String]:
         """Split the string at line boundaries. This corresponds to Python's
@@ -1364,7 +1364,7 @@ struct String(
         Returns:
             A List of Strings containing the input split by line boundaries.
         """
-        return _to_string_list(self.as_string_slice().splitlines(keepends))
+        return to_string_list(self.as_string_slice().splitlines(keepends))
 
     fn replace(self, old: StringSlice, new: StringSlice) -> String:
         """Return a copy of the string with all occurrences of substring `old`
