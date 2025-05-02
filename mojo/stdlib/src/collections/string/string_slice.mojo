@@ -1799,16 +1799,11 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         var haystack_str = self._from_start(start)
 
         var loc = _memmem(
-            haystack_str.unsafe_ptr(),
-            haystack_str.byte_length(),
-            substr.unsafe_ptr(),
-            substr.byte_length(),
+            haystack_str.as_bytes().get_immutable(),
+            substr.as_bytes().get_immutable(),
         )
 
-        if not loc:
-            return -1
-
-        return Int(loc) - Int(self.unsafe_ptr())
+        return ((Int(loc) - Int(self.unsafe_ptr()) + 1) & -Int(Bool(loc))) - 1
 
     fn rfind(self, substr: StringSlice, start: Int = 0) -> Int:
         """Finds the offset in bytes of the last occurrence of `substr` starting at
@@ -2325,14 +2320,14 @@ fn _unsafe_strlen(owned ptr: UnsafePointer[Byte]) -> Int:
 
 @always_inline
 fn _memchr[
-    dtype: DType, //
-](
-    source: UnsafePointer[Scalar[dtype]], char: Scalar[dtype], len: Int
-) -> UnsafePointer[Scalar[dtype]]:
-    if is_compile_time() or len < simdwidthof[dtype]():
-        return _memchr_simple(source, char, len)
+    O: ImmutableOrigin, dtype: DType, //
+](source: Span[Scalar[dtype], O], char: Scalar[dtype]) -> UnsafePointer[
+    Scalar[dtype]
+]:
+    if is_compile_time() or len(source) < simdwidthof[Scalar[dtype]]():
+        return _memchr_simple(source.unsafe_ptr(), char, len(source))
     else:
-        return _memchr_impl(source, char, len)
+        return _memchr_impl(source, char)
 
 
 @always_inline
@@ -2349,48 +2344,48 @@ fn _memchr_simple[
 
 @always_inline
 fn _memchr_impl[
-    dtype: DType, //
+    O: ImmutableOrigin, dtype: DType, //
 ](
-    source: UnsafePointer[Scalar[dtype]], char: Scalar[dtype], len: Int
-) -> UnsafePointer[Scalar[dtype]]:
-    if not len:
-        return UnsafePointer[Scalar[dtype]]()
+    span: Span[Scalar[dtype], O],
+    char: Scalar[dtype],
+    out output: UnsafePointer[Scalar[dtype]],
+):
+    var haystack = span.unsafe_ptr()
+    var length = len(span)
     alias bool_mask_width = simdwidthof[DType.bool]()
     var first_needle = SIMD[dtype, bool_mask_width](char)
-    var vectorized_end = align_down(len, bool_mask_width)
+    var vectorized_end = align_down(length, bool_mask_width)
 
     for i in range(0, vectorized_end, bool_mask_width):
-        var bool_mask = source.load[width=bool_mask_width](i) == first_needle
+        var bool_mask = haystack.load[width=bool_mask_width](i) == first_needle
         var mask = pack_bits(bool_mask)
         if mask:
-            return source + Int(i + count_trailing_zeros(mask))
+            output = haystack + Int(i + count_trailing_zeros(mask))
+            return
 
-    for i in range(vectorized_end, len):
-        if source[i] == char:
-            return source + i
-    return UnsafePointer[Scalar[dtype]]()
+    for i in range(vectorized_end, length):
+        if haystack[i] == char:
+            output = haystack + i
+            return
+
+    output = UnsafePointer[Scalar[dtype]]()
 
 
 @always_inline
 fn _memmem[
-    dtype: DType, //
+    O1: ImmutableOrigin, O2: ImmutableOrigin, dtype: DType, //
 ](
-    haystack: UnsafePointer[Scalar[dtype]],
-    haystack_len: Int,
-    needle: UnsafePointer[Scalar[dtype]],
-    needle_len: Int,
+    haystack_span: Span[Scalar[dtype], O1], needle_span: Span[Scalar[dtype], O2]
 ) -> UnsafePointer[Scalar[dtype]]:
-    if not needle_len:
-        return haystack
-    if needle_len > haystack_len:
-        return UnsafePointer[Scalar[dtype]]()
-    if needle_len == 1:
-        return _memchr(haystack, needle[0], haystack_len)
-
-    if is_compile_time() or haystack_len < simdwidthof[dtype]():
-        return _memmem_impl_simple(haystack, haystack_len, needle, needle_len)
+    if is_compile_time() or len(haystack_span) < simdwidthof[Scalar[dtype]]():
+        return _memmem_impl_simple(
+            haystack_span.unsafe_ptr(),
+            len(haystack_span),
+            needle_span.unsafe_ptr(),
+            len(needle_span),
+        )
     else:
-        return _memmem_impl(haystack, haystack_len, needle, needle_len)
+        return _memmem_impl(haystack_span, needle_span)
 
 
 @always_inline
@@ -2414,13 +2409,24 @@ fn _memmem_impl_simple[
 
 @always_inline
 fn _memmem_impl[
-    dtype: DType, //
+    O1: ImmutableOrigin, O2: ImmutableOrigin, dtype: DType, //
 ](
-    haystack: UnsafePointer[Scalar[dtype]],
-    haystack_len: Int,
-    needle: UnsafePointer[Scalar[dtype]],
-    needle_len: Int,
-) -> UnsafePointer[Scalar[dtype]]:
+    haystack_span: Span[Scalar[dtype], O1],
+    needle_span: Span[Scalar[dtype], O2],
+    out output: UnsafePointer[Scalar[dtype]],
+):
+    var haystack = haystack_span.unsafe_ptr()
+    var haystack_len = len(haystack_span)
+    var needle = needle_span.unsafe_ptr()
+    var needle_len = len(needle_span)
+    debug_assert(needle_len > 0, "needle_len must be > 0")
+    if needle_len == 1:
+        output = _memchr(haystack_span, needle[0])
+        return
+    elif needle_len > haystack_len:
+        output = UnsafePointer[Scalar[dtype]]()
+        return
+
     alias bool_mask_width = simdwidthof[DType.bool]()
     var vectorized_end = align_down(
         haystack_len - needle_len + 1, bool_mask_width
@@ -2435,28 +2441,26 @@ fn _memmem_impl[
             i + needle_len - 1
         )
 
-        var eq_first = first_needle == first_block
-        var eq_last = last_needle == last_block
-
-        var bool_mask = eq_first & eq_last
+        var bool_mask = (first_needle == first_block) & (
+            last_needle == last_block
+        )
         var mask = pack_bits(bool_mask)
 
         while mask:
             var offset = Int(i + count_trailing_zeros(mask))
             if memcmp(haystack + offset + 1, needle + 1, needle_len - 1) == 0:
-                return haystack + offset
+                output = haystack + offset
+                return
             mask = mask & (mask - 1)
 
-    # remaining partial block compare using byte-by-byte
-    #
     for i in range(vectorized_end, haystack_len - needle_len + 1):
         if haystack[i] != needle[0]:
             continue
 
         if memcmp(haystack + i + 1, needle + 1, needle_len - 1) == 0:
-            return haystack + i
-
-    return UnsafePointer[Scalar[dtype]]()
+            output = haystack + i
+            return
+    output = UnsafePointer[Scalar[dtype]]()
 
 
 @always_inline
