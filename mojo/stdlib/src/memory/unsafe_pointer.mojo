@@ -146,16 +146,23 @@ struct UnsafePointer[
     @always_inline("builtin")
     @implicit
     fn __init__(
-        out self, other: UnsafePointer[type, address_space=address_space, **_]
+        other: UnsafePointer[type, mut=True, **_],
+        out self: UnsafePointer[
+            type,
+            address_space = other.address_space,
+            alignment = other.alignment,
+            mut=False,
+            origin = ImmutableOrigin.cast_from[other.origin].result,
+        ],
     ):
         """Exclusivity parameter cast a pointer.
 
         Args:
             other: Pointer to cast.
         """
-        self.address = __mlir_op.`pop.pointer.bitcast`[_type = Self._mlir_type](
-            other.address
-        )
+        self.address = __mlir_op.`pop.pointer.bitcast`[
+            _type = __type_of(self)._mlir_type
+        ](other.address)
 
     @always_inline
     fn copy(self) -> Self:
@@ -217,7 +224,9 @@ struct UnsafePointer[
         """
         alias sizeof_t = sizeof[type]()
         constrained[sizeof_t > 0, "size must be greater than zero"]()
-        return _malloc[type, alignment=alignment](sizeof_t * count)
+        return _malloc[type, alignment=alignment](sizeof_t * count).origin_cast[
+            origin = MutableOrigin.empty
+        ]()
 
     # ===-------------------------------------------------------------------===#
     # Operator dunders

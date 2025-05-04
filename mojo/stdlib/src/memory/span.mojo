@@ -141,9 +141,19 @@ struct Span[
 
     @always_inline("builtin")
     fn __init__(
-        out self,
+        out self: Span[
+            mut = ptr.mut,
+            origin = ptr.origin,
+            T=T,
+            address_space=address_space,
+            alignment=alignment,
+        ],
         *,
-        ptr: UnsafePointer[T, address_space=address_space, alignment=alignment],
+        ptr: UnsafePointer[
+            T,
+            address_space=address_space,
+            alignment=alignment, **_,
+        ],
         length: UInt,
     ):
         """Unsafe construction from a pointer and length.
@@ -172,7 +182,11 @@ struct Span[
         Args:
             list: The list to which the span refers.
         """
-        self._data = list.data.address_space_cast[address_space]()
+        self._data = (
+            list.data.address_space_cast[address_space]()
+            .static_alignment_cast[alignment]()
+            .origin_cast[mut, origin]()
+        )
         self._len = list._len
 
     @always_inline
@@ -193,6 +207,8 @@ struct Span[
             UnsafePointer(to=array)
             .bitcast[T]()
             .address_space_cast[address_space]()
+            .static_alignment_cast[alignment]()
+            .origin_cast[mut, origin]()
         )
         self._len = size
 
