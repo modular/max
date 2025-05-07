@@ -788,7 +788,7 @@ fn sizeof[
 @always_inline("nodebug")
 fn alignof[
     type: AnyType, target: __mlir_type.`!kgen.target` = _current_target()
-]() -> Int:
+]() -> UInt:
     """Returns the align of (in bytes) of the type.
 
     Parameters:
@@ -805,7 +805,7 @@ fn alignof[
         AnyType,
         `> : !kgen.type`,
     ]
-    return Int(
+    return UInt(
         __mlir_attr[
             `#kgen.param.expr<get_alignof, #kgen.type<`,
             +mlir_type,
@@ -819,7 +819,7 @@ fn alignof[
 @always_inline("nodebug")
 fn alignof[
     dtype: DType, target: __mlir_type.`!kgen.target` = _current_target()
-]() -> Int:
+]() -> UInt:
     """Returns the align of (in bytes) of the dtype.
 
     Parameters:
@@ -829,7 +829,7 @@ fn alignof[
     Returns:
         The alignment of the dtype in bytes.
     """
-    return Int(
+    return UInt(
         __mlir_attr[
             `#kgen.param.expr<get_alignof, #kgen.type<`,
             `!pop.scalar<`,
