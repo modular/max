@@ -82,9 +82,20 @@ struct FileHandle(Writer):
         """Construct the FileHandle using the file path and mode.
 
         Args:
-          path: The file path.
-          mode: The mode to open the file in (the mode can be "r" or "w" or "rw").
+            path: The file path.
+            mode: The mode to open the file in: {"r", "w", "rw"}.
+
+        Raises:
+            If file open mode is not one of the supported modes.
+            If there is an error when opening the file.
         """
+        # TODO(#3849): this should support the append flag
+        if not (mode == "r" or mode == "w" or mode == "rw"):
+            raise Error(
+                'ValueError: invalid mode: "',
+                mode,
+                '". Can only be one of: {"r", "w", "rw"}',
+            )
         var err_msg = _OwnedStringRef()
         var handle = external_call[
             "KGEN_CompilerRT_IO_FileOpen", OpaquePointer
@@ -404,13 +415,17 @@ fn open[
     FileHandle.
 
     Parameters:
-      PathLike: The a type conforming to the os.PathLike trait.
+        PathLike: The a type conforming to the os.PathLike trait.
 
     Args:
-      path: The path to the file to open.
-      mode: The mode to open the file in (the mode can be "r" or "w").
+        path: The path to the file to open.
+        mode: The mode to open the file in: {"r", "w", "rw"}.
 
     Returns:
-      A file handle.
+        A file handle.
+
+    Raises:
+        If file open mode is not one of the supported modes.
+        If there is an error when opening the file.
     """
     return FileHandle(path.__fspath__(), mode)
