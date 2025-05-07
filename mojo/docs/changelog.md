@@ -74,6 +74,15 @@ Changes to Python-Mojo interoperability:
   expressions. This is a simple implementation that supports basic regex
   operations.
 
+- Add `repr` support for `List[T]` of `T: RepresentableCollectionElement`.
+  ([PR #4267](https://github.com/modular/max/pull/4267))
+  Example:
+
+  ```mojo
+    print(repr(List[UInt8](0, 1)))
+    # [SIMD[DType.uint8, 1](0), SIMD[DType.uint8, 1](1)]
+  ```
+
 ### Tooling changes
 
 - Added support for emitting LLVM Intermediate Representation (.ll) using `--emit=llvm`.

@@ -874,6 +874,14 @@ def test_list_repr():
     assert_equal(empty.__repr__(), "[]")
 
 
+def test_list_repr_wrap():
+    assert_equal(repr(List("Hello", "World")), "['Hello', 'World']")
+    assert_equal(
+        repr(List[UInt8](0, 1)),
+        "[SIMD[DType.uint8, 1](0), SIMD[DType.uint8, 1](1)]",
+    )
+
+
 def test_list_fill_constructor():
     var l = List[Int32](length=10, fill=3)
     assert_equal(len(l), 10)
@@ -943,5 +951,6 @@ def main():
     test_list_dtor()
     test_destructor_trivial_elements()
     test_list_repr()
+    test_list_repr_wrap()
     test_list_fill_constructor()
     test_uninit_ctor()
