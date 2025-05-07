@@ -540,6 +540,25 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         #   Ensure StringLiteral _actually_ always uses UTF-8 encoding.
         self = StaticString(lit.value)
 
+    fn __init__(out self, *, from_utf8: Span[Byte, origin]) raises:
+        """Construct a new `StringSlice` from a buffer containing UTF-8 encoded
+        data.
+
+        Args:
+            from_utf8: A span of bytes containing UTF-8 encoded data.
+
+        Returns:
+            A new validated `StringSlice` pointing to the provided buffer.
+
+        Raises:
+            An exception is raised if the provided buffer byte values do not
+            form valid UTF-8 encoded codepoints.
+        """
+        if not _is_valid_utf8(from_utf8):
+            raise Error("StringSlice: buffer is not valid UTF-8")
+
+        return Self(unsafe_from_utf8=from_utf8)
+
     @always_inline("builtin")
     fn __init__(out self, *, unsafe_from_utf8: Span[Byte, origin]):
         """Construct a new `StringSlice` from a sequence of UTF-8 encoded bytes.
@@ -638,33 +657,6 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
             value: The string value.
         """
         self = value.as_string_slice()
-
-    # ===-------------------------------------------------------------------===#
-    # Factory methods
-    # ===-------------------------------------------------------------------===#
-
-    # TODO: Change to `__init__(out self, *, from_utf8: Span[..])` once ambiguity
-    #   with existing `unsafe_from_utf8` overload is fixed. Would require
-    #   signature comparision to take into account required named arguments.
-    @staticmethod
-    fn from_utf8(from_utf8: Span[Byte, origin]) raises -> StringSlice[origin]:
-        """Construct a new `StringSlice` from a buffer containing UTF-8 encoded
-        data.
-
-        Args:
-            from_utf8: A span of bytes containing UTF-8 encoded data.
-
-        Returns:
-            A new validated `StringSlice` pointing to the provided buffer.
-
-        Raises:
-            An exception is raised if the provided buffer byte values do not
-            form valid UTF-8 encoded codepoints.
-        """
-        if not _is_valid_utf8(from_utf8):
-            raise Error("StringSlice: buffer is not valid UTF-8")
-
-        return StringSlice[origin](unsafe_from_utf8=from_utf8)
 
     # ===------------------------------------------------------------------===#
     # Trait implementations
