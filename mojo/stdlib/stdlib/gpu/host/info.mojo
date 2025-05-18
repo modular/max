@@ -746,7 +746,6 @@ alias RTX3090 = Info(
 )
 
 
-
 # ===-----------------------------------------------------------------------===#
 # RTX2060
 # ===-----------------------------------------------------------------------===#
@@ -949,6 +948,8 @@ struct Info(Writable):
         """
         if self.name == "RTX2060":
             return _get_rtx2060_target()
+        if self.name == "NVIDIA GeForce RTX 3090":
+            return _get_rtx3090_target()
         if self.name == "A100":
             return _get_a100_target()
         if self.name == "A10":
