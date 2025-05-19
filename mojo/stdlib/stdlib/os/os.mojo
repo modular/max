@@ -81,7 +81,7 @@ struct _dirent_macos(Copyable, Movable):
     """Name of entry."""
 
 
-fn _strnlen(ptr: UnsafePointer[c_char], max: Int) -> Int:
+fn _strnlen(ptr: UnsafePointer[c_char, **_], max: Int) -> Int:
     var offset = 0
     while offset < max and ptr[offset]:
         offset += 1
