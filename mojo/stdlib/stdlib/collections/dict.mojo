@@ -37,7 +37,7 @@ value types must always be Movable so we can resize the dictionary as it grows.
 See the `Dict` docs for more details.
 """
 from sys.ffi import OpaquePointer
-
+from sys.intrinsics import likely
 from memory import UnsafePointer, bitcast, memcpy
 
 from .optional import Optional
@@ -634,9 +634,9 @@ struct Dict[K: KeyElement, V: Copyable & Movable](
             key: The key to check.
 
         Returns:
-            True if there key exists in the dictionary, False otherwise.
+            True if the key exists in the dictionary, False otherwise.
         """
-        return self.find(key).__bool__()
+        return self._find_index(hash(key), key)[0]
 
     fn __iter__(ref self) -> _DictKeyIter[K, V, __origin_of(self)]:
         """Iterate over the dict's keys as immutable references.
@@ -1041,8 +1041,9 @@ struct Dict[K: KeyElement, V: Copyable & Movable](
             else:
                 var entry = Pointer(to=self._entries[index])
                 debug_assert(entry[].__bool__(), "entry in index must be full")
-                if hash == entry[].value().hash and key == entry[].value().key:
-                    return (True, slot, index)
+                if hash == entry[].unsafe_value().hash:
+                    if likely(key == entry[].unsafe_value().key):
+                        return (True, slot, index)
             self._next_index_slot(slot, perturb)
 
     fn _over_load_factor(self) -> Bool:
