@@ -35,6 +35,9 @@ what we publish.
 
 ### Language changes
 
+- The type [`Dict`](/mojo/stdlib/collections/dict/Dict/) is now part of the
+  prelude, so there is no need to import them anymore.
+
 - The Mojo compiler will now synthesize `__moveinit__` and `__copyinit__` and
   `copy()` methods for structs that conform to `Movable`, `Copyable`, and
   `ExplicitlyCopyable` (respectively) but that do not implement the methods
@@ -49,11 +52,26 @@ what we publish.
 
 - `try` and `raise` now work at comptime.
 
+- "Initializer lists" are now supported for creating struct instances with an
+  inferred type based on context, for example:
+
+  ```mojo
+  fn foo(x: SomeComplicatedType): ...
+
+  # Example with normal initializer.
+  foo(SomeComplicatedType(1, kwarg=42))
+  # Example with initializer list.
+  foo({1, kwarg=42})
+  ```
+
 - List literals have been redesigned to work better.  They produce homogenous
   sequences by invoking the `T(<elements>, __list_literal__: ())` constructor
   of a type `T` that is inferred by context, or otherwise defaulting to the
   standard library `List[Elt]` type.  The `ListLiteral` type has been removed
   from the standard library.
+
+- Dictionary and set literals now work and default to creating instances of the
+  `Dict` and `Set` types in the collections library.
 
 ### Standard library changes
 
@@ -67,10 +85,20 @@ what we publish.
   fixed `bitset` that simplifies working with a set of bits and perform bit
   operations.
 
-- A new `json` module was added the provides a way to deserialize JSON objects
-  into Mojo.
+- Fixed GPU `sum` and `prefix_sum` implementations in `gpu.warp` and `gpu.block`
+  modules. Previously, the implementations have been incorrect and would either
+  return wrong results or hang the kernel (due to the deadlock). [PR
+  4508](https://github.com/modular/modular/pull/4508) and [PR
+  4553](https://github.com/modular/modular/pull/4553) by [Kirill
+  Bobyrev](https://github.com/kirillbobyrev) mitigate the found issues and add
+  tests to ensure correctness going forward.
 
 Changes to Python-Mojo interoperability:
+
+- Python objects are now constructible with list/set/dict literal syntax, e.g.:
+  `var list: PythonObject = [1, "foo", 2.0]` will produce a Python list
+  containing other Python objects and `var d: PythonObject = {}` will construct
+  an empty dictionary.
 
 - `Python.{unsafe_get_python_exception, throw_python_exception_if_error_state}`
   have been removed in favor of `CPython.{unsafe_get_error, get_error}`.

@@ -12,12 +12,7 @@
 # ===----------------------------------------------------------------------=== #
 """Implements the  Set datatype."""
 
-from .dict import (
-    Dict,
-    KeyElement,
-    _DictEntryIter,
-    _DictKeyIter,
-)
+from .dict import Dict, KeyElement, _DictEntryIter, _DictKeyIter
 
 
 struct Set[T: KeyElement](
@@ -30,7 +25,7 @@ struct Set[T: KeyElement](
     ```mojo
     from collections import Set
 
-    var set = Set[Int](1, 2, 3)
+    var set = { 1, 2, 3 }
     print(len(set))  # 3
     set.add(4)
 
@@ -56,26 +51,18 @@ struct Set[T: KeyElement](
     # ===-------------------------------------------------------------------===#
 
     @implicit
-    fn __init__(out self, *ts: T):
+    fn __init__(out self, *ts: T, __set_literal__: () = ()):
         """Construct a set from initial elements.
 
         Args:
             ts: Variadic of elements to add to the set.
+            __set_literal__: Tell Mojo to use this method for set literals.
         """
+        # TODO: Reserve space in this set. Also, take the elements as 'owned'
+        # and transfer them into the set to eliminate copyability.
         self._data = Dict[T, NoneType]()
         for t in ts:
             self.add(t[])
-
-    @implicit
-    fn __init__(out self, elements: Self):
-        """Explicitly copy another Set instance.
-
-        Args:
-            elements: An existing set to copy.
-        """
-        self = Self()
-        for e in elements:
-            self.add(e[])
 
     @implicit
     fn __init__(out self, elements: List[T, *_]):
@@ -418,7 +405,7 @@ struct Set[T: KeyElement](
             A new set containing any elements which appear in either
             this set or the `other` set.
         """
-        var result = Set(self)
+        var result = self
         for o in other:
             result.add(o[])
 

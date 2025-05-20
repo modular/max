@@ -29,16 +29,17 @@ from sys import (
     llvm_intrinsic,
     simdwidthof,
     sizeof,
+    is_compile_time,
 )
 from sys._assembly import inlined_assembly
 from sys.ffi import _external_call_const
 from sys.info import _is_sm_9x_or_newer
 
+from algorithm import vectorize
 from bit import count_leading_zeros, count_trailing_zeros
 from builtin.dtype import _integral_type_of
 from builtin.simd import _modf, _simd_apply
 from memory import Span, UnsafePointer
-from algorithm import vectorize
 
 from utils.index import IndexList
 from utils.numerics import FPUtils, isnan, nan
@@ -1091,18 +1092,6 @@ fn isclose[
 # ===----------------------------------------------------------------------=== #
 
 
-# TODO: Remove this when `iota` works at compile-time
-fn _compile_time_iota[dtype: DType, width: Int]() -> SIMD[dtype, width]:
-    constrained[
-        dtype.is_integral(),
-        "_compile_time_iota can only be used with integer dtypes.",
-    ]()
-    var a = SIMD[dtype, width](0)
-    for i in range(width):
-        a[i] = i
-    return a
-
-
 @always_inline
 fn iota[
     dtype: DType, width: Int
@@ -1122,34 +1111,25 @@ fn iota[
     """
 
     @parameter
-    if is_amd_gpu():
-        # We can't use llvm.stepvector on AMD GPUs, because of a bug in the
-        # amd backend. See https://github.com/llvm/llvm-project/issues/139317
-        var out = SIMD[dtype, width]()
+    if width == 1:
+        return offset
+
+    alias step_dtype = dtype if dtype.is_integral() else DType.index
+    var step: SIMD[step_dtype, width]
+    alias is_amd = is_amd_gpu()
+    # We can't use llvm.stepvector on AMD GPUs, because of a bug in the
+    # amd backend. See https://github.com/llvm/llvm-project/issues/139317
+    if is_amd or is_compile_time():
+        step = 0
 
         @parameter
         for i in range(width):
-            out[i] = i
-        return out + offset
+            step[i] = i
     else:
-
-        @parameter
-        if width == 1:
-            return offset
-        elif dtype.is_integral():
-            var step = llvm_intrinsic[
-                "llvm.stepvector",
-                SIMD[dtype, width],
-                has_side_effect=False,
-            ]()
-            return step + offset
-        else:
-            var it = llvm_intrinsic[
-                "llvm.stepvector",
-                SIMD[DType.index, width],
-                has_side_effect=False,
-            ]()
-            return it.cast[dtype]() + offset
+        step = llvm_intrinsic[
+            "llvm.stepvector", SIMD[step_dtype, width], has_side_effect=False
+        ]()
+    return step.cast[dtype]() + offset
 
 
 fn iota[

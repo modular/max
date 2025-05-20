@@ -19,7 +19,8 @@ from gpu.cluster import block_rank_in_cluster, cluster_sync
 from gpu.host import DeviceContext, Dim
 from gpu.host._compile import _compile_code_asm, _get_gpu_target
 from gpu.host._nvidia_cuda import TensorMapSwizzle
-from gpu.id import block_idx, thread_idx, warp_id as get_warp_id
+from gpu.id import block_idx, thread_idx
+from gpu.id import warp_id as get_warp_id
 from gpu.intrinsics import threadfence
 from gpu.memory import AddressSpace, fence_mbarrier_init
 from gpu.mma import (
@@ -277,7 +278,7 @@ fn multicast_tma_wgmma_kernel[
             c_frag = c_reg_tile.tile[1, c_frag_size](mma_id, 0)
 
             # A warp is organized as row_major(8, 4) and each thread owns 2 contiguous
-            # elementwise. This pattern repeates to fill the warp tile.
+            # elementwise. This pattern repeats to fill the warp tile.
             copy_local_to_dram[Layout.row_major(8, 4)](
                 warp_tile.vectorize[1, 2](), c_frag.vectorize[1, 2]()
             )

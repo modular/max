@@ -11,6 +11,7 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
+from collections import OptionalReg
 from math import ceildiv, isclose, isqrt
 from random import rand
 from sys import env_get_dtype, env_get_int, env_get_string, is_defined
@@ -75,7 +76,7 @@ fn run_mha[
     var output_ptr = UnsafePointer[Scalar[qkv_type]].alloc(o_size)
     var flash_output_ptr = UnsafePointer[Scalar[qkv_type]].alloc(o_size)
 
-    # Q, K, V are randomly initalized.
+    # Q, K, V are randomly initialized.
     rand[qkv_type](q_ptr, q_size)
     rand[qkv_type](k_ptr, k_size)
     rand[qkv_type](v_ptr, v_size)

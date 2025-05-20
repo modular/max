@@ -116,7 +116,7 @@ struct Optional[T: Copyable & Movable](
 
     # TODO(MSTDL-715):
     #   This initializer should not be necessary, we should need
-    #   only the initilaizer from a `NoneType`.
+    #   only the initializer from a `NoneType`.
     @doc_private
     @implicit
     fn __init__(out self, value: NoneType._mlir_type):
@@ -255,6 +255,20 @@ struct Optional[T: Copyable & Movable](
             False if the optional has a value and True otherwise.
         """
         return not self
+
+    @always_inline
+    fn __getitem__(ref self) raises -> ref [self._value] T:
+        """Retrieve a reference to the value inside the `Optional`.
+
+        Returns:
+            A reference to the value inside the `Optional`.
+
+        Raises:
+            On empty `Optional`.
+        """
+        if not self:
+            raise Error(".value() on empty Optional")
+        return self.value()
 
     fn __str__[
         U: Copyable & Movable & Representable, //
@@ -479,7 +493,7 @@ struct OptionalReg[T: AnyTrivialRegType](Boolable):
 
     # TODO(MSTDL-715):
     #   This initializer should not be necessary, we should need
-    #   only the initilaizer from a `NoneType`.
+    #   only the initializer from a `NoneType`.
     @doc_private
     @always_inline("builtin")
     @implicit

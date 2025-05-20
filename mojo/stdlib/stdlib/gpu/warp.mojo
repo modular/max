@@ -32,14 +32,15 @@ integers, floats, and half-precision floats, with SIMD vectorization.
 """
 
 from collections.string import StringSlice
-from sys import is_nvidia_gpu, llvm_intrinsic
-from sys.info import _is_sm_100x_or_newer
+from sys import bitwidthof, is_nvidia_gpu, llvm_intrinsic, sizeof
 from sys._assembly import inlined_assembly
+from sys.info import _is_sm_100x_or_newer
 
 from bit import log2_floor
 from builtin.math import max as _max
 from builtin.math import min as _min
 from gpu import lane_id
+from gpu.globals import WARP_SIZE
 from memory import bitcast
 
 from .tensor_ops import tc_reduce
@@ -736,9 +737,9 @@ fn sum[
 ](val: SIMD[val_type, simd_width]) -> SIMD[val_type, simd_width]:
     """Computes the sum of values across all lanes in a warp.
 
-    This is a convenience wrapper around lane_group_sum that operates on the entire warp.
-    It performs a parallel reduction using warp shuffle operations to find the global sum
-    across all lanes in the warp.
+    This is a convenience wrapper around lane_group_sum_and_broadcast that
+    operates on the entire warp.  It performs a parallel reduction using warp
+    shuffle operations to find the global sum across all lanes in the warp.
 
     Parameters:
         val_type: The data type of the SIMD elements (e.g. float32, int32).
@@ -751,7 +752,7 @@ fn sum[
         A SIMD value where all lanes contain the sum found across the entire warp.
         The sum is broadcast to all lanes.
     """
-    return lane_group_sum[num_lanes=WARP_SIZE](val)
+    return lane_group_sum_and_broadcast[num_lanes=WARP_SIZE](val)
 
 
 @fieldwise_init

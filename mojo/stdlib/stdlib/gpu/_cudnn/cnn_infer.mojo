@@ -13,15 +13,42 @@
 
 from os import abort
 from pathlib import Path
+from sys.ffi import _find_dylib
 from sys.ffi import _get_dylib_function as _ffi_get_dylib_function
-from sys.ffi import _Global, _OwnedDLHandle, _find_dylib
+from sys.ffi import _Global, _OwnedDLHandle
 
 from memory import UnsafePointer
 
 from utils import StaticTuple
 
-from .backend import *
-from .infer import *
+from .infer import (
+    # Types
+    cudnnMathType_t,
+    cudnnDeterminism_t,
+    cudnnTensorTransformStruct,
+    cudnnConvolutionFwdAlgo_t,
+    cudnnTensorFormat_t,
+    cudnnStatus_t,
+    cudnnConvolutionBwdDataAlgo_t,
+    cudnnDataType_t,
+    cudnnNanPropagation_t,
+    cudnnOpTensorOp_t,
+    cudnnReduceTensorOp_t,
+    cudnnReduceTensorIndices_t,
+    cudnnIndicesType_t,
+    cudnnConvolutionBwdFilterAlgo_t,
+    cudnnOpTensorStruct,
+    cudnnReduceTensorStruct,
+    cudnnContext,
+    cudnnPoolingStruct,
+    cudnnActivationDescriptor_t,
+    cudnnPoolingMode_t,
+    cudnnLRNMode_t,
+    cudnnDivNormMode_t,
+    cudnnErrQueryMode_t,
+    # Functions needed by downstream code
+    cudnnDestroyFilterDescriptor,
+)
 
 # ===-----------------------------------------------------------------------===#
 # Library Load

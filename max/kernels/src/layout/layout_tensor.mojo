@@ -44,15 +44,15 @@ from utils.index import Index
 from ._utils import get_amd_buffer_descriptor
 from .int_tuple import (
     _get_index_type,
-    _get_unsigned_type,
     _get_layout_type,
+    _get_unsigned_type,
+    congruent,
     depth,
     fill_like,
-    to_nest,
     flatten,
     idx2crd,
     product,
-    congruent,
+    to_nest,
 )
 from .layout import *
 from .runtime_layout import RuntimeLayout
@@ -1869,6 +1869,47 @@ struct LayoutTensor[
             val, self.runtime_element_layout
         ).store(self.ptr.offset(offset))
 
+    fn __setitem__(
+        self,
+        d0: Int,
+        d1: Int,
+        d2: Int,
+        d3: Int,
+        d4: Int,
+        val: Self.element_type,
+    ):
+        """Sets a single element in a rank-5 tensor at the specified indices.
+
+        This method provides array-like element assignment for rank-5 tensors.
+
+        Args:
+            d0: The index along the first dimension.
+            d1: The index along the second dimension.
+            d2: The index along the third dimension.
+            d3: The index along the fourth dimension.
+            d4: The index along the fifth dimension.
+            val: The value to write to the tensor at the specified position.
+
+        Performance:
+
+        - Direct memory access with minimal overhead.
+        - Memory access pattern follows the tensor's stride configuration.
+
+        Notes:
+
+        - No bounds checking is performed. Accessing out-of-bounds indices
+            will result in undefined behavior.
+        """
+
+        var strides = self.runtime_layout.stride.value
+        var offset = Self._get_offset(
+            strides, VariadicList[Int](d0, d1, d2, d3, d4)
+        )
+
+        Element[index_type=linear_idx_type](
+            val, self.runtime_element_layout
+        ).store(self.ptr.offset(offset))
+
     @always_inline("nodebug")
     fn load[width: Int](self, m: Int, n: Int) -> SIMD[dtype, width]:
         """Load a SIMD vector from the tensor at the specified 2D coordinates.
@@ -3531,10 +3572,10 @@ struct LayoutTensor[
             "Only rank-2 tensors slices are supported for now!",
         ]()
         return Layout(
-            IntTuple(
+            [
                 _get_slice_size(Self.layout, d0_slice, 0),
                 _get_slice_size(Self.layout, d1_slice, 1),
-            ),
+            ],
             layout.stride,
         )
 
@@ -3548,10 +3589,10 @@ struct LayoutTensor[
         ]()
         var sliced_layout = sublayout(Self.layout, slice_0_axis, slice_1_axis)
         return Layout(
-            IntTuple(
+            [
                 _get_slice_size(sliced_layout, slice_0, 0),
                 _get_slice_size(sliced_layout, slice_1, 1),
-            ),
+            ],
             sliced_layout.stride,
         )
 
@@ -3563,9 +3604,7 @@ struct LayoutTensor[
         ]()
         var sliced_layout = sublayout(Self.layout, slice_0_axis)
         return Layout(
-            IntTuple(
-                _get_slice_size(sliced_layout, slice_0, 0),
-            ),
+            [_get_slice_size(sliced_layout, slice_0, 0)],
             sliced_layout.stride[0],
         )
 
@@ -3872,10 +3911,7 @@ struct LayoutTensor[
         self,
         out result: LayoutTensor[
             dtype,
-            composition(
-                layout,
-                Layout(IntTuple(N, M), IntTuple(M, 1)),
-            ),
+            composition(layout, Layout([N, M], [M, 1])),
             origin,
             address_space=address_space,
             element_layout=element_layout,
@@ -6472,8 +6508,8 @@ fn copy_dram_to_local[
 
             @parameter
             for j in range(N):
-                alias dst_idx = Layout.col_major(M, N)(IntTuple(i, j))
-                alias src_static_idx = src_fragments.layout(IntTuple(i, j))
+                alias dst_idx = Layout.col_major(M, N)([i, j])
+                alias src_static_idx = src_fragments.layout([i, j])
                 var src_idx = Int32(src_frag_offset) + src_static_idx
                 dst[dst_idx] = rebind[dst.element_type](
                     buffer_load[src.dtype, simd_width](
@@ -6804,7 +6840,7 @@ fn copy[
             @parameter
             for j in range(N):
                 # The order here needs to match the order of the loads in copy_dram_to_local
-                alias idx = Layout.col_major(M, N)(IntTuple(i, j))
+                alias idx = Layout.col_major(M, N)([i, j])
                 var src_idx = src._get_element_idx[idx]()
                 var dst_idx = dst_frag._get_element_idx[idx]()
 

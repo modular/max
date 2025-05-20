@@ -36,7 +36,7 @@ from sys.ffi import (
 )
 
 from memory import UnsafePointer
-from python._bindings import PyMojoObject, Typed_initproc
+from python._bindings import PyMojoObject, Typed_initproc, Typed_newfunc
 
 # ===-----------------------------------------------------------------------===#
 # Raw Bindings
@@ -72,7 +72,9 @@ alias destructor = fn (PyObjectPtr) -> None
 alias reprfunc = fn (PyObjectPtr) -> PyObjectPtr
 
 alias initproc = fn (PyObjectPtr, PyObjectPtr, PyObjectPtr) -> c_int
-alias newfunc = fn (PyObjectPtr, PyObjectPtr, PyObjectPtr) -> PyObjectPtr
+alias newfunc = fn (
+    UnsafePointer[PyTypeObject], PyObjectPtr, PyObjectPtr
+) -> PyObjectPtr
 
 
 # GIL
@@ -435,7 +437,7 @@ struct PyType_Slot(Copyable, Movable):
     var pfunc: OpaquePointer
 
     @staticmethod
-    fn tp_new(func: newfunc) -> Self:
+    fn tp_new(func: Typed_newfunc) -> Self:
         return PyType_Slot(Py_tp_new, rebind[OpaquePointer](func))
 
     @staticmethod
@@ -1066,6 +1068,40 @@ struct CPython(Copyable, Movable):
         self.lib.call["PyEval_RestoreThread"](state)
 
     # ===-------------------------------------------------------------------===#
+    # Python Set operations
+    # ===-------------------------------------------------------------------===#
+
+    fn PySet_New(self) -> PyObjectPtr:
+        """[Reference](
+        https://docs.python.org/3/c-api/set.html#c.PySet_New).
+        """
+
+        var r = self.lib.call["PySet_New", PyObjectPtr](PyObjectPtr())
+
+        self.log(
+            r._get_ptr_as_int(),
+            " NEWREF PySet_New, refcnt:",
+            self._Py_REFCNT(r),
+        )
+
+        self._inc_total_rc()
+        return r
+
+    # int PySet_Add(PyObject *set, PyObject *key)
+    fn PySet_Add(self, set: PyObjectPtr, element: PyObjectPtr) -> c_int:
+        """[Reference](
+        https://docs.python.org/3/c-api/set.html#c.PySet_Add).
+        """
+
+        var r = self.lib.call["PySet_Add", c_int](set, element)
+        self.log(
+            set._get_ptr_as_int(),
+            " PySet_Add, element: ",
+            element._get_ptr_as_int(),
+        )
+        return r
+
+    # ===-------------------------------------------------------------------===#
     # Python Dict operations
     # ===-------------------------------------------------------------------===#
 
@@ -1417,6 +1453,12 @@ struct CPython(Copyable, Movable):
         var p = self.lib.call["PyObject_Type", PyObjectPtr](obj)
         self._inc_total_rc()
         return p
+
+    fn PyObject_Free(self, p: OpaquePointer):
+        """[Reference](
+        https://docs.python.org/3/c-api/memory.html#c.PyObject_Free).
+        """
+        self.lib.call["PyObject_Free"](p)
 
     fn PyObject_Str(self, obj: PyObjectPtr) -> PyObjectPtr:
         """[Reference](

@@ -20,10 +20,10 @@ from python import Python
 """
 
 from collections import Dict
+from collections.dict import OwnedKwargsDict
 from os import abort, getenv
 from sys import external_call, sizeof
 from sys.ffi import _Global
-from collections.dict import OwnedKwargsDict
 
 from memory import UnsafePointer
 
@@ -35,7 +35,7 @@ from ._cpython import (
     PyMethodDef,
     PyObjectPtr,
 )
-from .python_object import PythonObject, TypedPythonObject, PythonModule
+from .python_object import PythonModule, PythonObject, TypedPythonObject
 
 alias _PYTHON_GLOBAL = _Global["Python", _PythonGlobal, _init_python_global]
 
@@ -227,7 +227,7 @@ struct Python:
 
         # This is equivalent to Python's `import numpy as np`
         np = Python.import_module("numpy")
-        a = np.array(Python.list(1, 2, 3))
+        a = np.array([1, 2, 3])
         ```
 
         Args:
@@ -387,8 +387,8 @@ struct Python:
             var result = cpython.PyDict_SetItem(
                 dict_obj_ptr, key_ptr, val_obj.py_object
             )
-            if result != 0:
-                raise Error("internal error: PyDict_SetItem failed")
+            if result == -1:
+                raise cpython.get_error()
 
         return dict_obj_ptr
 
@@ -450,8 +450,8 @@ struct Python:
             var result = cpython.PyDict_SetItem(
                 dict_obj_ptr, key_obj.py_object, val_obj.py_object
             )
-            if result != 0:
-                raise Error("internal error: PyDict_SetItem failed")
+            if result == -1:
+                raise cpython.get_error()
 
         return PythonObject(from_owned_ptr=dict_obj_ptr)
 

@@ -11,6 +11,7 @@
 # limitations under the License.
 # ===----------------------------------------------------------------------=== #
 
+from collections import OptionalReg
 from math import ceildiv, isclose, isqrt
 from random import rand, randn
 from sys import argv
@@ -28,14 +29,12 @@ from nn.mha_mask import CausalMask, MaterializedMask
 from nn.mha_operand import NDBufferMHAOperand
 from nn.mha_score_mod import IdentityScoreMod
 from nn.mla import flare_mla_decoding, flare_mla_prefill
+from tensor_internal import IOUnknown, ManagedTensorSlice
+from tensor_internal.managed_tensor_slice import StaticTensorSpec
 from testing import assert_almost_equal
 
 from utils.index import Index
 from utils.numerics import get_accum_type
-
-from tensor_internal import ManagedTensorSlice
-from tensor_internal import IOUnknown
-from tensor_internal.managed_tensor_slice import StaticTensorSpec
 
 
 fn is_benchmark() -> Bool:
@@ -107,7 +106,7 @@ fn test[
     var output_ptr = UnsafePointer[Scalar[qkv_type]].alloc(o_size)
     var flash_output_ptr = UnsafePointer[Scalar[qkv_type]].alloc(o_size)
 
-    # Q, K, V are randomly initalized.
+    # Q, K, V are randomly initialized.
     if use_index_input:
         debug_assert(batch_size == 1)
         for i in range(seq_len):
@@ -415,7 +414,7 @@ fn test_prefill[
     var cache_ptr = UnsafePointer[Scalar[qkv_type]].alloc(cache_size)
     var output_ptr = UnsafePointer[Scalar[qkv_type]].alloc(o_size)
 
-    # Q, K, V, cache are randomly initalized.
+    # Q, K, V, cache are randomly initialized.
     randn[qkv_type](q_ptr, q_size)
     randn[qkv_type](k_ptr, k_size)
     randn[qkv_type](v_ptr, v_size)
@@ -756,7 +755,7 @@ fn test_cascade_prefill[
     var output_ptr = UnsafePointer[Scalar[qkv_type]].alloc(o_size)
     var cache_ptr = UnsafePointer[Scalar[qkv_type]].alloc(cache_size)
 
-    # Q, K, V, cache are randomly initalized.
+    # Q, K, V, cache are randomly initialized.
     randn[qkv_type](q_ptr, q_size)
     randn[qkv_type](k_ptr, k_size)
     randn[qkv_type](v_ptr, v_size)

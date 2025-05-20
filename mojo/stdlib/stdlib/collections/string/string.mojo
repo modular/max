@@ -76,6 +76,7 @@ var ascii_str = ascii("Hello")  # ASCII-only string
 from collections import KeyElement, List, Optional
 from collections._index_normalization import normalize_index
 from collections.string import CodepointsIter
+from collections.string._parsing_numbers.parsing_floats import _atof
 from collections.string._unicode import (
     is_lowercase,
     is_uppercase,
@@ -88,20 +89,20 @@ from collections.string.string_slice import (
     _to_string_list,
     _utf8_byte_type,
 )
-from collections.string._parsing_numbers.parsing_floats import _atof
 from hashlib._hasher import _HashableWithHasher, _Hasher
 from os import PathLike, abort
+from os.atomic import Atomic
 from sys import bitwidthof, is_compile_time, sizeof
 from sys.ffi import c_char
 from sys.intrinsics import _type_is_eq
+
 from bit import count_leading_zeros
 from memory import Span, UnsafePointer, memcpy, memset
-from python import PythonObject, PythonConvertible
+from python import PythonConvertible, PythonObject
 from python._bindings import ConvertibleFromPython
 
 from utils import IndexList, Variant, Writable, Writer, write_args
 from utils.write import write_buffered
-from os.atomic import Atomic
 
 # ===----------------------------------------------------------------------=== #
 # String Implementation Details
@@ -278,6 +279,7 @@ struct _StringOutOfLineHeader:
 
 struct String(
     Sized,
+    Defaultable,
     Stringable,
     Representable,
     IntableRaising,
@@ -1555,17 +1557,11 @@ struct String(
         """
         return self.as_string_slice().endswith(suffix, start, end)
 
-    fn removeprefix(self, prefix: StringSlice, /) -> String:
+    @always_inline
+    fn removeprefix(
+        self, prefix: StringSlice, /
+    ) -> StringSlice[__origin_of(self)]:
         """Returns a new string with the prefix removed if it was present.
-
-        For example:
-
-        ```mojo
-        print(String('TestHook').removeprefix('Test'))
-        # 'Hook'
-        print(String('BaseTestCase').removeprefix('Test'))
-        # 'BaseTestCase'
-        ```
 
         Args:
             prefix: The prefix to remove from the string.
@@ -1573,22 +1569,21 @@ struct String(
         Returns:
             `string[len(prefix):]` if the string starts with the prefix string,
             or a copy of the original string otherwise.
-        """
-        if self.startswith(prefix):
-            return self[prefix.byte_length() :]
-        return self
 
-    fn removesuffix(self, suffix: StringSlice, /) -> String:
-        """Returns a new string with the suffix removed if it was present.
-
-        For example:
+        Examples:
 
         ```mojo
-        print(String('TestHook').removesuffix('Hook'))
-        # 'Test'
-        print(String('BaseTestCase').removesuffix('Test'))
-        # 'BaseTestCase'
+        print(String('TestHook').removeprefix('Test')) # 'Hook'
+        print(String('BaseTestCase').removeprefix('Test')) # 'BaseTestCase'
         ```
+        """
+        return self.as_string_slice().removeprefix(prefix)
+
+    @always_inline
+    fn removesuffix(
+        self, suffix: StringSlice, /
+    ) -> StringSlice[__origin_of(self)]:
+        """Returns a new string with the suffix removed if it was present.
 
         Args:
             suffix: The suffix to remove from the string.
@@ -1596,10 +1591,15 @@ struct String(
         Returns:
             `string[:-len(suffix)]` if the string ends with the suffix string,
             or a copy of the original string otherwise.
+
+        Examples:
+
+        ```mojo
+        print(String('TestHook').removesuffix('Hook')) # 'Test'
+        print(String('BaseTestCase').removesuffix('Test')) # 'BaseTestCase'
+        ```
         """
-        if suffix and self.endswith(suffix):
-            return self[: -suffix.byte_length()]
-        return self
+        return self.as_string_slice().removesuffix(suffix)
 
     @always_inline
     fn __int__(self) raises -> Int:

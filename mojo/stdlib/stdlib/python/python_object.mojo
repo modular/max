@@ -19,9 +19,9 @@ from python import PythonObject
 ```
 """
 
-from os import abort
 from collections import Dict
 from hashlib._hasher import _HashableWithHasher, _Hasher
+from os import abort
 from sys.ffi import c_ssize_t
 from sys.intrinsics import _unsafe_aliasing_address_to_pointer
 
@@ -278,9 +278,11 @@ struct TypedPythonObject[type_hint: StaticString](
 
 @register_passable
 struct PythonObject(
+    Boolable,
     Copyable,
-    Movable,
     EqualityComparable,
+    Floatable,
+    Movable,
     SizedRaising,
     Writable,
     PythonConvertible,
@@ -374,7 +376,7 @@ struct PythonObject(
 
     # TODO(MSTDL-715):
     #   This initializer should not be necessary, we should need
-    #   only the initilaizer from a `NoneType`.
+    #   only the initializer from a `NoneType`.
     @doc_private
     @implicit
     fn __init__(out self, none: NoneType._mlir_type):
@@ -479,6 +481,84 @@ struct PythonObject(
             slice: The dictionary value.
         """
         self.py_object = _slice_to_py_object_ptr(slice)
+
+    @always_inline
+    fn __init__[
+        *Ts: PythonConvertible
+    ](out self, owned *values: *Ts, __list_literal__: ()):
+        """Construct an Python list of objects.
+
+        Parameters:
+            Ts: The types of the input values.
+
+        Args:
+            values: The values to initialize the list with.
+            __list_literal__: Tell Mojo to use this method for list literals.
+
+        Returns:
+            The constructed Python list.
+        """
+        return Python._list(values)
+
+    @always_inline
+    fn __init__[
+        *Ts: PythonConvertible
+    ](out self, owned *values: *Ts, __set_literal__: ()) raises:
+        """Construct an Python set of objects.
+
+        Parameters:
+            Ts: The types of the input values.
+
+        Args:
+            values: The values to initialize the set with.
+            __set_literal__: Tell Mojo to use this method for set literals.
+
+        Returns:
+            The constructed Python set.
+        """
+        var cpython = Python().cpython()
+        var obj_ptr = cpython.PySet_New()
+        if obj_ptr.is_null():
+            raise cpython.get_error()
+
+        @parameter
+        for i in range(len(VariadicList(Ts))):
+            var obj = values[i].to_python_object()
+            cpython.Py_IncRef(obj.py_object)
+            var result = cpython.PySet_Add(obj_ptr, obj.py_object)
+            if result == -1:
+                raise cpython.get_error()
+
+        return PythonObject(from_owned_ptr=obj_ptr)
+
+    fn __init__(
+        out self,
+        owned keys: List[PythonObject],
+        owned values: List[PythonObject],
+        __dict_literal__: (),
+    ) raises:
+        """Construct a Python dictionary from a list of keys and a list of values.
+
+        Args:
+            keys: The keys of the dictionary.
+            values: The values of the dictionary.
+            __dict_literal__: Tell Mojo to use this method for dict literals.
+        """
+        var cpython = Python().cpython()
+        var dict_obj_ptr = cpython.PyDict_New()
+        if dict_obj_ptr.is_null():
+            raise Error("internal error: PyDict_New failed")
+
+        for i in range(len(keys)):
+            var key_obj = keys[i].to_python_object()
+            var val_obj = values[i].to_python_object()
+            var result = cpython.PyDict_SetItem(
+                dict_obj_ptr, key_obj.py_object, val_obj.py_object
+            )
+            if result != 0:
+                raise Error("internal error: PyDict_SetItem failed")
+
+        return PythonObject(from_owned_ptr=dict_obj_ptr)
 
     fn __copyinit__(out self, existing: Self):
         """Copy the object.

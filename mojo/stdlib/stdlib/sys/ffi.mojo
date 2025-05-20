@@ -14,7 +14,7 @@
 
 from collections.string.string_slice import _get_kgen_string, get_static_string
 from os import PathLike, abort
-from pathlib import Path, DIR_SEPARATOR
+from pathlib import DIR_SEPARATOR, Path
 from sys._libc import dlclose, dlerror, dlopen, dlsym
 
 from memory import UnsafePointer
@@ -162,7 +162,7 @@ struct _OwnedDLHandle(Movable):
         return self._handle
 
 
-@value
+@fieldwise_init
 @register_passable("trivial")
 struct DLHandle(Copyable, Movable, ExplicitlyCopyable, Boolable):
     """Represents a dynamically linked library that can be loaded and unloaded.

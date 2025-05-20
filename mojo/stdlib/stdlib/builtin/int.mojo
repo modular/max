@@ -22,12 +22,13 @@ from collections.string.string import (
 from hashlib._hasher import _HashableWithHasher, _Hasher
 from hashlib.hash import _hash_simd
 from math import CeilDivable
-from memory import UnsafePointer
 from sys import bitwidthof
 
 from builtin.device_passable import DevicePassable
 from builtin.math import Absable, Powable
-from python import Python, PythonObject, PythonConvertible
+from memory import UnsafePointer
+from python import Python, PythonConvertible, PythonObject
+from python._bindings import ConvertibleFromPython
 
 from utils import Writable, Writer
 from utils._select import _select_register_value as select
@@ -38,9 +39,7 @@ from utils._visualizers import lldb_formatter_wrapping_type
 # ===----------------------------------------------------------------------=== #
 
 
-trait Indexer(
-    Intable,
-):
+trait Indexer(Intable):
     """
     The `Indexer` trait is used for types that can index into a collection or
     pointer. The type returned is the underlying __mlir_type.index, enabling
@@ -175,8 +174,12 @@ trait ImplicitlyIntable(Intable):
     struct Foo(ImplicitlyIntable):
         var i: Int
 
-        fn __as_int__(self) -> Int:
+        fn __int__(self) -> Int:
             return self.i
+
+        fn __as_int__(self) -> Int:
+            return self.__int__()
+
     ```
 
     Now you can use `Foo` anywhere that an `Int` is expected, e.g. equality
@@ -185,7 +188,7 @@ trait ImplicitlyIntable(Intable):
     ```mojo
     %# from testing import assert_equal
     foo = Foo(42)
-    assert_equal(foo, 42)
+    assert_equal(Int(42), foo)
     ```
     """
 
@@ -203,6 +206,7 @@ trait ImplicitlyIntable(Intable):
 @register_passable("trivial")
 struct Int(
     Absable,
+    Defaultable,
     CeilDivable,
     Copyable,
     Movable,
@@ -220,6 +224,7 @@ struct Int(
     Roundable,
     Stringable,
     Writable,
+    ConvertibleFromPython,
 ):
     """This type represents an integer value."""
 
@@ -256,7 +261,7 @@ struct Int(
         """
         return Self.get_type_name()
 
-    alias BITWIDTH: Int = bitwidthof[DType.index]()
+    alias BITWIDTH = Int(bitwidthof[DType.index]())
     """The bit width of the integer type."""
 
     alias MAX = Int(Scalar[DType.index].MAX)
@@ -276,14 +281,6 @@ struct Int(
     fn __init__(out self):
         """Default constructor that produces zero."""
         self.value = __mlir_attr.`0 : index`
-
-    fn copy(self) -> Self:
-        """Explicitly copy the provided value.
-
-        Returns:
-            A copy of the value.
-        """
-        return self
 
     @doc_private
     @always_inline("builtin")

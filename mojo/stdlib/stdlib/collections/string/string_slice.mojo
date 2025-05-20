@@ -73,7 +73,7 @@ from sys.intrinsics import likely, unlikely
 from bit import count_leading_zeros, count_trailing_zeros
 from memory import Span, UnsafePointer, memcmp, memcpy, pack_bits
 from memory.memory import _memcmp_impl_unconstrained
-from python import Python, PythonObject, PythonConvertible
+from python import Python, PythonConvertible, PythonObject
 
 from utils.write import _WriteBufferStack
 
@@ -1721,6 +1721,48 @@ struct StringSlice[mut: Bool, //, origin: Origin[mut]](
         return StringSlice[origin](
             ptr=self.unsafe_ptr() + start, length=end - start
         ).endswith(suffix)
+
+    fn removeprefix(self, prefix: StringSlice, /) -> Self:
+        """Returns a new string with the prefix removed if it was present.
+
+        Args:
+            prefix: The prefix to remove from the string.
+
+        Returns:
+            `string[len(prefix):]` if the string starts with the prefix string,
+            or a copy of the original string otherwise.
+
+        Examples:
+
+        ```mojo
+        print(StringSlice('TestHook').removeprefix('Test')) # 'Hook'
+        print(StringSlice('BaseTestCase').removeprefix('Test')) # 'BaseTestCase'
+        ```
+        """
+        if self.startswith(prefix):
+            return self[len(prefix) :]
+        return self
+
+    fn removesuffix(self, suffix: StringSlice, /) -> Self:
+        """Returns a new string with the suffix removed if it was present.
+
+        Args:
+            suffix: The suffix to remove from the string.
+
+        Returns:
+            `string[:-len(suffix)]` if the string ends with the suffix string,
+            or a copy of the original string otherwise.
+
+        Examples:
+
+        ```mojo
+        print(StringSlice('TestHook').removesuffix('Hook')) # 'Test'
+        print(StringSlice('BaseTestCase').removesuffix('Test')) # 'BaseTestCase'
+        ```
+        """
+        if suffix and self.endswith(suffix):
+            return self[: -len(suffix)]
+        return self
 
     fn _from_start(self, start: Int) -> Self:
         """Gets the `StringSlice` pointing to the substring after the specified

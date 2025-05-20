@@ -28,8 +28,8 @@ follow optimal patterns defined by the layout system.
 
 from sys import alignof, bitwidthof
 
-from memory import AddressSpace, UnsafePointer
 from layout.layout import coalesce, is_contiguous_dim
+from memory import AddressSpace, UnsafePointer
 
 from utils import IndexList
 
@@ -80,7 +80,7 @@ fn _get_offset[
 
     @parameter
     if runtime_layout.layout.all_dims_known():
-        alias offset = runtime_layout.layout(IntTuple(i, j))
+        alias offset = runtime_layout.layout([i, j])
         return offset
     else:
         return runtime_layout(

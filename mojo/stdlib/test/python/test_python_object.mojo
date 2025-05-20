@@ -256,9 +256,9 @@ def test_dunder_methods(mut python: Python):
 
 def test_inplace_dunder_methods(mut python: Python):
     # test dunder methods that don't fall back to their non-inplace counterparts
-    var list_obj = Python.list(1, 2)
+    var list_obj: PythonObject = [1, 2]
 
-    list_obj += Python.list(3, 4)
+    list_obj += [3, 4]
     assert_equal(String(list_obj), "[1, 2, 3, 4]")
 
     list_obj *= 2
@@ -317,7 +317,7 @@ fn test_string_conversions() raises -> None:
 
 
 def test_len():
-    var empty_list = Python.list()
+    var empty_list: PythonObject = []
     assert_equal(len(empty_list), 0)
 
     var l1 = Python.evaluate("[1,2,3]")
@@ -352,9 +352,9 @@ def test_is():
 
 
 def test_nested_object():
-    var a = Python.list(1, 2, 3)
-    var b = Python.list(4, 5, 6)
-    var nested_list = Python.list(a, b)
+    var a: PythonObject = [1, 2, 3]
+    var b: PythonObject = [4, 5, 6]
+    var nested_list: PythonObject = [a, b]
     var nested_tuple = Python.tuple(a, b)
 
     assert_equal(String(nested_list), "[[1, 2, 3], [4, 5, 6]]")
@@ -362,7 +362,7 @@ def test_nested_object():
 
 
 fn test_iter() raises:
-    var list_obj = Python.list("apple", "orange", "banana")
+    var list_obj: PythonObject = ["apple", "orange", "banana"]
     var i = 0
     for fruit in list_obj:
         if i == 0:
@@ -373,7 +373,7 @@ fn test_iter() raises:
             assert_equal(fruit, "banana")
         i += 1
 
-    var list2 = Python.list()
+    var list2: PythonObject = []
     for _ in list2:
         raise Error("This should not be reachable as the list is empty.")
 
@@ -390,7 +390,7 @@ fn test_iter() raises:
 
 
 fn test_setitem() raises:
-    var ll = Python.list(1, 2, 3, "food")
+    var ll: PythonObject = [1, 2, 3, "food"]
     assert_equal(String(ll), "[1, 2, 3, 'food']")
     ll[1] = "nomnomnom"
     assert_equal(String(ll), "[1, 'nomnomnom', 3, 'food']")
@@ -400,6 +400,9 @@ fn test_dict() raises:
     # Test Python.dict from keyword arguments.
     var dd = Python.dict(food=123, fries="yes")
     assert_equal(String(dd), "{'food': 123, 'fries': 'yes'}")
+
+    var dd2: PythonObject = {"food": 123, "fries": "yes"}
+    assert_equal(String(dd2), "{'food': 123, 'fries': 'yes'}")
 
     dd["food"] = "salad"
     dd[42] = Python.list(4, 2)
@@ -413,6 +416,21 @@ fn test_dict() raises:
     # Also test that Python.dict() creates the right object.
     var empty = Python.dict()
     assert_equal(String(empty), "{}")
+
+    var empty2: PythonObject = {}
+    assert_equal(String(empty2), "{}")
+
+
+fn test_set() raises:
+    # Test Python set literals.
+    var dd: PythonObject = {123, "yes"}
+    var dd2 = Python.evaluate("{123, 'yes'}")
+    # Be care about instability of set ordering across platforms.
+    assert_equal(String(dd), String(dd2))
+
+    assert_true(123 in dd)
+    assert_true("yes" in dd)
+    assert_false(42 in dd)
 
 
 fn test_none() raises:
@@ -505,12 +523,12 @@ def test_setitem_raises():
 
     d = Python.evaluate("{}")
     with assert_raises(contains="unhashable type: 'list'"):
-        d[Python.list(1, 2, 3)] = 5
+        d[[1, 2, 3]] = 5
 
 
 fn test_py_slice() raises:
     custom_indexable = Python.import_module("custom_indexable")
-    var a = Python.list(1, 2, 3, 4, 5)
+    var a: PythonObject = [1, 2, 3, 4, 5]
     assert_equal("[2, 3]", String(a[1:3]))
     assert_equal("[1, 2, 3, 4, 5]", String(a[:]))
     assert_equal("[1, 2, 3]", String(a[:3]))
@@ -545,7 +563,7 @@ fn test_py_slice() raises:
     assert_equal("(2, 3, 4)", String(t[1:4]))
     assert_equal("(4, 3, 2)", String(t[3:0:-1]))
 
-    var empty = Python.list()
+    var empty: PythonObject = []
     assert_equal("[]", String(empty[:]))
     assert_equal("[]", String(empty[1:2:3]))
 
@@ -592,7 +610,7 @@ def test_contains_dunder():
         var z = PythonObject(0)
         _ = 5 in z
 
-    var x = Python.list(1.1, 2.2)
+    var x: PythonObject = [1.1, 2.2]
     assert_true(1.1 in x)
     assert_false(3.3 in x)
 
@@ -623,6 +641,7 @@ def main():
     test_iter()
     test_setitem()
     test_dict()
+    test_set()
     test_none()
     test_nested_object()
     test_getitem_raises()
