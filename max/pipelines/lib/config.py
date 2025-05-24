@@ -246,9 +246,10 @@ class PipelineConfig(MAXConfig):
                 raise ValueError(msg)
             elif len(module_parts) == 2:
                 module_path, module_name = module_parts
-                sys.path.append(module_path)
             else:
-                module_name = module_parts[0]
+                module_path = os.path.dirname(module_parts[0])
+                module_name = os.path.basename(module_parts[0])
+            sys.path.append(module_path)
             try:
                 module = importlib.import_module(module_name)
             except Exception as e:
@@ -521,3 +522,33 @@ class PipelineConfig(MAXConfig):
     @property
     def profiling_config(self) -> ProfilingConfig:
         return self._profiling_config
+
+
+@dataclass
+class AudioGenerationConfig(PipelineConfig):
+    audio_decoder: str = ""
+    """The name of the audio decoder model architecture."""
+    audio_prompt_speakers: str = ""
+    """The path to the audio prompt speakers file."""
+    audio_decoder_weights: str = ""
+    """The path to the audio decoder weights file."""
+
+    def __init__(self, audio_config: dict[str, str], **kwargs: Any) -> None:
+        PipelineConfig.__init__(self, **kwargs)
+
+        self.audio_decoder = audio_config.pop("audio_decoder", "")
+        if not self.audio_decoder:
+            raise ValueError(
+                "When running the audio generation task, --audio-decoder must be specified"
+            )
+        self.audio_prompt_speakers = audio_config.pop(
+            "audio_prompt_speakers", ""
+        )
+        self.audio_decoder_weights = audio_config.pop(
+            "audio_decoder_weights", ""
+        )
+
+        if audio_config:
+            raise ValueError(
+                f"Unknown audio generation option(s): {audio_config}"
+            )
