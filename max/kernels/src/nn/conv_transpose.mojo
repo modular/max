@@ -1186,7 +1186,11 @@ fn pack_filter_shape(
 
 
 @always_inline
-fn pack_filter(filter: NDBuffer, packed_filter: NDBuffer, num_groups: Int):
+fn pack_filter(
+    filter: NDBuffer,
+    packed_filter: NDBuffer[mut=True, *_, **_],
+    num_groups: Int,
+):
     """This packs the filter form RSFC to FRSCf."""
 
     alias simd_size = simdwidthof[filter.type]()
